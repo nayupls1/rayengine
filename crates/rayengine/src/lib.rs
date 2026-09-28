@@ -32,7 +32,7 @@ pub mod guides {
 
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
-    pub use crate::assets::{ModelId, SoundId, TextureId};
+    pub use crate::assets::{MeshId, ModelId, SoundId, TextureId};
     pub use crate::input::{Bindings, Button};
     pub use crate::render::Frame;
     pub use crate::{App, Config, CursorMode, Error, Game, InitContext, RunOptions, Update};

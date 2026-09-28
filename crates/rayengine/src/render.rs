@@ -1,10 +1,15 @@
 //! Immediate drawing with corresponding 2D/3D passes and shared logical UI.
 
-use crate::assets::{Assets, ModelId, TextureId};
+use crate::{
+    Error,
+    assets::{Assets, MeshId, ModelId, TextureId},
+};
 use rayengine_core::{
     camera::{Camera2D, Camera3D},
     collision::{Aabb2, Aabb3},
-    glam::{Vec2, Vec3},
+    glam::{Mat4, Vec2, Vec3},
+    mesh::MeshData,
+    transform::Transform3D,
     viewport::Viewport,
 };
 use raylib::prelude::*;
@@ -17,8 +22,8 @@ pub struct Frame<'frame, 'audio> {
     pub(crate) raylib: &'frame mut RaylibHandle,
     pub(crate) thread: &'frame RaylibThread,
     pub(crate) target: &'frame mut RenderTexture2D,
-    /// Asset handles loaded during initialization.
-    pub assets: &'frame Assets<'audio>,
+    /// Assets available on the render thread, including explicit unloading.
+    pub assets: &'frame mut Assets<'audio>,
     /// Current viewport in logical window coordinates.
     pub viewport: Viewport,
     /// Interpolation fraction between previous/current simulation state.
@@ -28,6 +33,22 @@ pub struct Frame<'frame, 'audio> {
 }
 
 impl Frame<'_, '_> {
+    /// Validates and uploads CPU geometry before entering a drawing pass.
+    ///
+    /// Upload only when geometry changes. This allocates GPU resources and copies
+    /// vertex data; it is not a per-frame drawing operation.
+    pub fn mesh(&mut self, data: &MeshData) -> Result<MeshId, Error> {
+        self.assets.upload_mesh(self.raylib, self.thread, data)
+    }
+
+    /// Uploads a complete replacement while keeping the same handle.
+    ///
+    /// Failure leaves the previous geometry intact. The new and old GPU buffers
+    /// temporarily coexist. Partial buffer updates are not implemented.
+    pub fn replace_mesh(&mut self, id: MeshId, data: &MeshData) -> Result<(), Error> {
+        self.assets.replace_mesh(self.thread, id, data)
+    }
+
     /// Clears color and depth at the start of the game frame.
     pub fn clear(&mut self, color: Color) {
         self.raylib
@@ -155,19 +176,44 @@ impl<D: RaylibDraw> Canvas2D<'_, D> {
 pub struct Canvas3D<'draw, D: RaylibDraw> {
     /// Raylib guard for advanced drawing within this camera pass.
     pub raw: &'draw mut D,
-    models: &'draw dyn ModelSource,
+    models: &'draw mut dyn ModelSource,
 }
 
 trait ModelSource {
     fn model(&self, id: ModelId) -> Option<&Model>;
+    fn mesh(&mut self, id: MeshId, tint: Color) -> Option<(&Mesh, WeakMaterial)>;
 }
 impl ModelSource for Assets<'_> {
     fn model(&self, id: ModelId) -> Option<&Model> {
         self.model(id)
     }
+    fn mesh(&mut self, id: MeshId, tint: Color) -> Option<(&Mesh, WeakMaterial)> {
+        self.mesh_for_draw(id, tint)
+    }
 }
 
 impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
+    /// Draws generated geometry with translation, rotation, scale, and tint.
+    ///
+    /// Uses the default unlit material and multiplies tint by vertex colors.
+    /// Returns false for an unloaded handle. Draw opaque meshes here; custom
+    /// textures, lighting, and transparency policies are separate features.
+    pub fn mesh(&mut self, id: MeshId, transform: Transform3D, tint: Color) -> bool {
+        self.mesh_matrix(id, transform.matrix(), tint)
+    }
+
+    /// Draws generated geometry with an affine matrix, including scene transforms.
+    ///
+    /// Pass `GlobalTransform3D.0` to include scene ancestors. No allocation occurs.
+    pub fn mesh_matrix(&mut self, id: MeshId, transform: Mat4, tint: Color) -> bool {
+        if let Some((mesh, material)) = self.models.mesh(id, tint) {
+            self.raw.draw_mesh(mesh, material, matrix(transform));
+            true
+        } else {
+            false
+        }
+    }
+
     /// Filled world-space box.
     pub fn cube(&mut self, bounds: Aabb3, color: Color) {
         self.raw
@@ -245,6 +291,50 @@ pub(crate) fn v2(v: Vec2) -> Vector2 {
 pub(crate) fn v3(v: Vec3) -> Vector3 {
     Vector3::new(v.x, v.y, v.z)
 }
+
+fn matrix(matrix: Mat4) -> Matrix {
+    let a = matrix.to_cols_array();
+    Matrix {
+        m0: a[0],
+        m1: a[1],
+        m2: a[2],
+        m3: a[3],
+        m4: a[4],
+        m5: a[5],
+        m6: a[6],
+        m7: a[7],
+        m8: a[8],
+        m9: a[9],
+        m10: a[10],
+        m11: a[11],
+        m12: a[12],
+        m13: a[13],
+        m14: a[14],
+        m15: a[15],
+    }
+}
 pub(crate) fn rect(bounds: Aabb2) -> Rectangle {
     Rectangle::new(bounds.min.x, bounds.min.y, bounds.size().x, bounds.size().y)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rayengine_core::glam::Quat;
+
+    #[test]
+    fn mesh_matrix_preserves_translation_rotation_and_nonuniform_scale() {
+        let transform = Transform3D {
+            position: Vec3::new(4.0, -2.0, 7.0),
+            rotation: Quat::from_rotation_y(0.7) * Quat::from_rotation_z(-0.3),
+            scale: Vec3::new(2.0, 3.0, 0.5),
+        };
+        let world = Mat4::from_translation(Vec3::new(-5.0, 1.0, 2.0)) * transform.matrix();
+        let raylib_matrix = matrix(world);
+        for point in [Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::Z, Vec3::ONE] {
+            let actual = v3(point).transform(raylib_matrix);
+            let expected = world.transform_point3(point);
+            assert!((Vec3::new(actual.x, actual.y, actual.z) - expected).length() < 0.00001);
+        }
+    }
 }
