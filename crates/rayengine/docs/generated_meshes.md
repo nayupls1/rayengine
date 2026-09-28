@@ -76,8 +76,9 @@ and tint. `Canvas3D::mesh_matrix` accepts a `glam::Mat4`; pass a scene entity's
 `GlobalTransform3D.0` to include its ancestors. Drawing borrows the uploaded
 resource and performs no SDK heap allocation or CPU vertex conversion. The
 default material is unlit, uses a white texture, and multiplies vertex colors
-by tint. UVs and normals are uploaded for future material/shader use; they do
-not introduce textures or lighting on this default path.
+by tint. UVs and normals are uploaded for material/shader use; this default path
+does not introduce textures or lighting. Use `mesh_material` to apply a reusable
+textured surface or custom shader; see [materials](crate::guides::materials).
 
 ## Data rules
 
@@ -140,9 +141,7 @@ Mutable frame access also prevents unloading/replacing a resource while its
 camera pass borrows it. Game code can keep `MeshData` only as long as it needs
 it: uploads copy the data and do not retain a borrow.
 
-Custom materials/shaders and transparent rendering policies are tracked in
-[issue #3](https://github.com/nayupls1/rayengine/issues/3); bounded background
-work and upload budgets are tracked in
+Bounded background work and upload budgets are tracked in
 [issue #5](https://github.com/nayupls1/rayengine/issues/5). Voxel/chunk storage,
 face selection, meshing algorithms, and world streaming policy remain game code.
 

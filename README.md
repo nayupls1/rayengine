@@ -7,7 +7,8 @@ Games are ordinary Cargo projects, with a shared lifecycle and conventions for
 The SDK includes dense typed entities/components, optional scene parenting,
 fixed simulation updates, action input, timers, typed events, interpolated rendering, fitted cameras,
 high-DPI viewports, anchored UI, swept character collision, and cached
-texture/model/sound handles. Raylib is available directly for specialized work.
+texture/model/sound handles, generated meshes, and materials with typed shader
+parameters and explicit alpha policies. Raylib is available directly for specialized work.
 
 Try the games:
 
@@ -60,6 +61,8 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
+- [Generated meshes](crates/rayengine/docs/generated_meshes.md)
+- [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Tests and performance comparisons](crates/rayengine/docs/testing_performance.md)
 - [Agent workflow and JSON contract](crates/rayengine/docs/agent_workflow.md)
 - [Architecture](docs/architecture.md)
@@ -72,11 +75,14 @@ python3 scripts/template_smoke.py
 scripts/native_smoke.sh                  # requires a display/OpenGL context
 scripts/benchmark.sh save before-change
 scripts/benchmark.sh compare before-change
+scripts/render_benchmark.sh save materials-v1 # optional native draw benchmark
 ```
 
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
-They measure CPU primitives and gameplay simulation; graphics probes check
-rendering separately. Shared CI runs correctness checks, native render probes,
+The CPU suite measures primitives and gameplay simulation; the opt-in native
+suite measures draw submission wall time, including driver stalls. Neither is a
+GPU timer or a game's FPS. Graphics probes check rendering separately.
+Shared CI runs correctness checks, native render probes,
 template checks, minimum-Rust checks and benchmark compilation.
 
 The first release keeps physics and rendering small: axis-aligned static
