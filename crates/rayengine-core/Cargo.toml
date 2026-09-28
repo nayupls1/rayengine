@@ -11,5 +11,12 @@ repository.workspace = true
 glam.workspace = true
 hecs.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "primitives"
+harness = false
+
 [lints]
 workspace = true

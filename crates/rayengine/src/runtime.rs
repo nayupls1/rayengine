@@ -541,4 +541,142 @@ mod tests {
             assert!(parse(args).is_err());
         }
     }
+
+    #[test]
+    #[ignore = "requires a native display and OpenGL context; scripts/native_smoke.sh"]
+    fn native_render_smoke() {
+        use rayengine_core::{
+            camera::{Camera2D as EngineCamera2D, Camera3D as EngineCamera3D},
+            collision::{Aabb2, Aabb3},
+            glam::Vec3,
+        };
+        let directory =
+            std::env::temp_dir().join(format!("rayengine-render-smoke-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let png = Image::gen_image_color(8, 8, Color::GREEN)
+            .export_image_to_memory(".png")
+            .unwrap();
+        std::fs::write(directory.join("green.png"), &*png).unwrap();
+        std::fs::write(
+            directory.join("triangle.obj"),
+            "v -1 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n",
+        )
+        .unwrap();
+
+        struct Probe {
+            directory: PathBuf,
+            texture: Option<TextureId>,
+            model: Option<ModelId>,
+        }
+        impl Game for Probe {
+            fn init(&mut self, context: &mut InitContext<'_, '_>) -> Result<(), Error> {
+                let path = self.directory.join("green.png");
+                let first = context.texture(&path)?;
+                assert_eq!(first, context.texture(&path)?);
+                context.assets.unload_texture(first);
+                let fresh = context.texture(&path)?;
+                assert_ne!(fresh, first);
+                assert!(context.assets.texture(first).is_none());
+                self.texture = Some(fresh);
+                let path = self.directory.join("triangle.obj");
+                let model = context.model(&path)?;
+                assert_eq!(model, context.model(&path)?);
+                context.assets.unload_model(model);
+                let fresh_model = context.model(&path)?;
+                assert_ne!(fresh_model, model);
+                assert!(context.assets.model(model).is_none());
+                self.model = Some(fresh_model);
+                assert!(context.texture(self.directory.join("missing.png")).is_err());
+                assert!(context.sound(self.directory.join("missing.wav")).is_err());
+                Ok(())
+            }
+            fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+            fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+                frame.clear(Color::WHITE);
+                assert!((frame.viewport.aspect() - 16.0 / 9.0).abs() < 0.0001);
+                if frame.index == 0 {
+                    frame.world_2d(EngineCamera2D::default(), |canvas| {
+                        assert!(canvas.texture(
+                            self.texture.unwrap(),
+                            Aabb2::from_center(Vec2::ZERO, Vec2::splat(100.0)),
+                            Color::WHITE
+                        ));
+                    });
+                } else {
+                    frame.world_3d(EngineCamera3D::default(), |canvas| {
+                        canvas.cube(
+                            Aabb3::from_center(Vec3::ZERO, Vec3::splat(2.0)),
+                            Color::BLUE,
+                        );
+                        assert!(canvas.model(
+                            self.model.unwrap(),
+                            Vec3::new(3.0, 0.0, 0.0),
+                            1.0,
+                            Color::RED
+                        ));
+                    });
+                }
+                frame.ui(|ui| {
+                    ui.rectangle(
+                        Aabb2 {
+                            min: Vec2::splat(10.0),
+                            max: Vec2::splat(60.0),
+                        },
+                        Color::RED,
+                    )
+                });
+                let mut image = frame.target.texture().load_image().unwrap();
+                image.flip_vertical();
+                let center = image.get_color(image.width / 2, image.height / 2);
+                if frame.index == 0 {
+                    assert_eq!(center, Color::GREEN, "2D texture probe");
+                } else {
+                    assert!(
+                        center.b > center.r.saturating_add(40),
+                        "3D cube probe: {center:?}"
+                    );
+                }
+                let ui_pixel = image.get_color(
+                    (image.width as f32 * 30.0 / frame.viewport.logical_size.x) as i32,
+                    (image.height as f32 * 30.0 / frame.viewport.logical_size.y) as i32,
+                );
+                assert!(
+                    ui_pixel.r > 180 && ui_pixel.g < 100,
+                    "scaled UI probe: {ui_pixel:?}"
+                );
+                if frame.index == 0 {
+                    frame.raylib.set_window_size(800, 1000);
+                }
+                if frame.index == 2 {
+                    assert_eq!(frame.raylib.get_screen_width(), 800);
+                    assert_eq!(frame.raylib.get_screen_height(), 1000);
+                    assert!(frame.viewport.origin.y > 200.0);
+                }
+            }
+        }
+        let mut config = Config::new("rayengine native render probe");
+        config.window_size = (960, 540);
+        config.vsync = false;
+        let screenshot = directory.join("absolute-path.png");
+        let report = App::new(config)
+            .with_options(RunOptions {
+                frames: Some(3),
+                hidden: true,
+                screenshot: Some(screenshot.clone()),
+                ..RunOptions::default()
+            })
+            .run(Probe {
+                directory: directory.clone(),
+                texture: None,
+                model: None,
+            })
+            .unwrap();
+        assert_eq!(report.frames, 3);
+        assert!(
+            std::fs::read(&screenshot)
+                .unwrap()
+                .starts_with(b"\x89PNG\r\n\x1a\n")
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }

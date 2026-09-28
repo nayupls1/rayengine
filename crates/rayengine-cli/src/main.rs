@@ -87,7 +87,33 @@ impl Failure {
 type Result<T> = std::result::Result<T, Failure>;
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let args: Vec<_> = std::env::args_os().collect();
+    let json_requested = args
+        .iter()
+        .take_while(|arg| *arg != "--")
+        .any(|arg| arg == "--json");
+    let cli = match Cli::try_parse_from(args) {
+        Ok(cli) => cli,
+        Err(error) => {
+            if matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+            ) {
+                let _ = error.print();
+                return ExitCode::SUCCESS;
+            }
+            if json_requested {
+                println!(
+                    "{}",
+                    json!({ "schema_version": 1, "ok": false, "command": null,
+                    "error": { "code": "invalid_arguments", "message": error.to_string(), "details": null } })
+                );
+            } else {
+                let _ = error.print();
+            }
+            return ExitCode::from(2);
+        }
+    };
     let command = match &cli.command {
         Action::New { .. } => "new",
         Action::Info { .. } => "info",

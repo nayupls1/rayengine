@@ -1,0 +1,51 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: CPU-only primitives require no raylib toolchain
+        run: cargo test --locked -p rayengine-core
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native raylib build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libclang-dev pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev wayland-protocols libegl1-mesa-dev xvfb
+      - name: SDK, gameplay, CLI and docs
+        run: scripts/check.sh
+      - name: Generated projects compile
+        run: python3 scripts/template_smoke.py
+      - name: Native Wayland build
+        run: cargo check --locked -p rayengine --features wayland
+      - name: Native renderer, resize and asset probes
+        run: xvfb-run -a scripts/native_smoke.sh
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+      - name: Benchmark harnesses compile
+        run: cargo bench --locked --workspace --no-run
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libclang-dev pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+      - name: Minimum Rust version
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          cargo +1.88.0 check --locked --workspace --all-targets

@@ -11,5 +11,12 @@ publish = false
 [dependencies]
 rayengine.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "gameplay"
+harness = false
+
 [lints]
 workspace = true

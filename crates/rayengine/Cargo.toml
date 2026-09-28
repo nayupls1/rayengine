@@ -13,7 +13,7 @@ wayland = ["raylib/wayland"]
 
 [dependencies]
 rayengine-core.workspace = true
-raylib.workspace = true
+raylib = { workspace = true, features = ["SUPPORT_IMAGE_GENERATION"] }
 
 [lints]
 workspace = true
