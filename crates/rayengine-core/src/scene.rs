@@ -141,6 +141,23 @@ impl Scene {
     /// Entities spawned directly into `world` need their own global component.
     /// Invalid parent chains return an error before any globals are changed.
     pub fn propagate(&mut self) -> Result<(), HierarchyError> {
+        // Most small scenes have no parent links. Dense iteration avoids hashing
+        // every entity when its global transform is just its local transform.
+        if self.world.query::<&Parent>().iter().next().is_none() {
+            for (local, global) in self
+                .world
+                .query_mut::<(&Transform2D, &mut GlobalTransform2D)>()
+            {
+                global.0 = local.matrix();
+            }
+            for (local, global) in self
+                .world
+                .query_mut::<(&Transform3D, &mut GlobalTransform3D)>()
+            {
+                global.0 = local.matrix();
+            }
+            return Ok(());
+        }
         self.nodes_2d.clear();
         self.nodes_3d.clear();
         for (entity, transform, parent) in self
@@ -364,6 +381,38 @@ mod tests {
                 .transform_point3(Vec3::ZERO)
                 .x,
             5001.0
+        );
+    }
+
+    #[test]
+    fn removing_the_last_parent_keeps_both_dimensions_current() {
+        let mut scene = Scene::new();
+        let root = scene.spawn_2d(Transform2D::at(Vec2::splat(20.0)), ());
+        let child = scene.spawn_2d(Transform2D::at(Vec2::ONE), ());
+        let three = scene.spawn_3d(Transform3D::at(Vec3::ONE), ());
+        scene.set_parent(child, Some(root)).unwrap();
+        scene.propagate().unwrap();
+        scene.set_parent(child, None).unwrap();
+        scene.world.get::<&mut Transform2D>(child).unwrap().position = Vec2::splat(3.0);
+        scene.world.get::<&mut Transform3D>(three).unwrap().position = Vec3::splat(4.0);
+        scene.propagate().unwrap();
+        assert_eq!(
+            scene
+                .world
+                .get::<&GlobalTransform2D>(child)
+                .unwrap()
+                .0
+                .transform_point2(Vec2::ZERO),
+            Vec2::splat(3.0)
+        );
+        assert_eq!(
+            scene
+                .world
+                .get::<&GlobalTransform3D>(three)
+                .unwrap()
+                .0
+                .transform_point3(Vec3::ZERO),
+            Vec3::splat(4.0)
         );
     }
 }
