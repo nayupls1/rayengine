@@ -24,6 +24,8 @@ pub mod guides {
     pub mod timing_input {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
+    #[doc = include_str!("../docs/generated_meshes.md")]
+    pub mod generated_meshes {}
     #[doc = include_str!("../docs/testing_performance.md")]
     pub mod testing_performance {}
     #[doc = include_str!("../docs/agent_workflow.md")]

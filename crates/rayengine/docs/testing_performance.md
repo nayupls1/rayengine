@@ -26,8 +26,11 @@ RAYENGINE_BACKEND=wayland scripts/native_smoke.sh
 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a scripts/native_smoke.sh
 ```
 
-The native probe checks texture cache/unload behavior, model loading, 2D and 3D
+The native renderer probe checks texture cache/unload behavior, model loading, 2D and 3D
 pixel results, UI scaling, portrait resizing and an absolute screenshot path.
+The generated mesh probe also verifies indexed/unindexed uploads, replacement,
+transforms, tint, failure preserving the old geometry, stale handles, slot reuse,
+and resource teardown after both normal exit and initialization failure.
 The script also runs both demos at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;
@@ -46,7 +49,8 @@ scripts/benchmark.sh compare before-change
 
 The suite measures dense component updates (1K, 10K and 100K entities), flat and
 parented transform propagation, 2D/3D character collision (1 and 100 boxes),
-viewport/pointer/DPI math, fixed timing, 64 actions, timers, event queues and
+viewport/pointer/DPI math, fixed timing, 64 actions, timers, event queues,
+mesh validation (1K/10K triangles, positions-only or indexed with attributes), and
 scripted 240-tick arena/meadow simulation batches. Gameplay fixture creation
 and destruction are outside the measured region; every sample starts from
 the same state. **These are CPU workloads; no window or GPU is initialized.**
