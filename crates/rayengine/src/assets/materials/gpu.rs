@@ -167,6 +167,10 @@ impl SurfaceGuard {
         }
         // SAFETY: Private guard cannot outlive the active camera pass/context.
         unsafe {
+            // Raylib primitives are batched, while DrawMesh is immediate. Submit
+            // preceding primitives with their original depth/blend state before
+            // changing it, preserving SDK call order across the two paths.
+            ffi::rlDrawRenderBatchActive();
             (self.state.depth)(u8::from(!blend));
             if blend {
                 (self.state.enable)(0x0BE2);

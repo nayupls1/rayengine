@@ -334,8 +334,8 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
     /// Draws generated geometry with translation, rotation, scale, and tint.
     ///
     /// Uses the default unlit material and multiplies tint by vertex colors.
-    /// Returns false for an unloaded handle. Draw opaque meshes here; custom
-    /// textures, lighting, and transparency policies are separate features.
+    /// Returns false for an unloaded handle. Use mesh_material for custom
+    /// textures, shader parameters, and explicit alpha/depth policies.
     pub fn mesh(&mut self, id: MeshId, transform: Transform3D, tint: Color) -> bool {
         self.mesh_matrix(id, transform.matrix(), tint)
     }

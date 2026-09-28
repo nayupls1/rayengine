@@ -255,6 +255,26 @@ fn native_material_smoke() {
                     );
                     frame.clear(Color::BLACK);
                     frame.world_3d(camera(), |canvas| {
+                        // Batched primitives must be submitted before a material
+                        // changes depth/blend state and draws an immediate mesh.
+                        canvas.cube(
+                            Aabb3::from_center(Vec3::ZERO, Vec3::new(2.0, 2.0, 0.1)),
+                            Color::BLUE,
+                        );
+                        assert!(canvas.mesh_material(
+                            mesh,
+                            self.blend.unwrap(),
+                            Transform3D::at(Vec3::new(0.0, 0.0, 0.5)),
+                            Color::WHITE
+                        ));
+                    });
+                    let color = pixel(frame, 0.0);
+                    assert!(
+                        color.r.abs_diff(128) < 2 && color.b.abs_diff(127) < 2 && color.g == 0,
+                        "blend after batched primitive {color:?}"
+                    );
+                    frame.clear(Color::BLACK);
+                    frame.world_3d(camera(), |canvas| {
                         // A later far opaque surface remains visible: blend never writes depth.
                         assert!(canvas.mesh_material(
                             mesh,
