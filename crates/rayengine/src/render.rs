@@ -2,7 +2,11 @@
 
 use crate::{
     Error,
-    assets::{Assets, MeshId, ModelId, TextureId},
+    assets::{
+        Assets, MaterialId, MeshId, ModelId, ShaderId, TextureId,
+        materials::{Prepared, SurfaceGuard},
+    },
+    material::{MaterialDesc, UniformId, UniformValue},
 };
 use rayengine_core::{
     camera::{Camera2D, Camera3D},
@@ -33,6 +37,38 @@ pub struct Frame<'frame, 'audio> {
 }
 
 impl Frame<'_, '_> {
+    /// Creates a material before entering a drawing pass.
+    pub fn material(&mut self, desc: MaterialDesc) -> Result<MaterialId, Error> {
+        self.assets.create_material(self.raylib, self.thread, desc)
+    }
+    /// Compiles shader source before entering a drawing pass; errors never use a fallback.
+    pub fn shader_from_source(
+        &mut self,
+        vertex: Option<&str>,
+        fragment: &str,
+    ) -> Result<ShaderId, Error> {
+        self.assets
+            .shader_source(self.raylib, self.thread, vertex, fragment)
+    }
+
+    /// Loads/caches shader files before a pass; None uses the standard vertex shader.
+    pub fn shader(
+        &mut self,
+        vertex: Option<&std::path::Path>,
+        fragment: impl AsRef<std::path::Path>,
+    ) -> Result<ShaderId, Error> {
+        self.assets
+            .load_shader(self.raylib, self.thread, vertex, fragment.as_ref())
+    }
+    /// Registers a cached uniform binding and its shader-wide default value.
+    pub fn uniform(
+        &mut self,
+        shader: ShaderId,
+        name: &str,
+        initial: UniformValue,
+    ) -> Result<UniformId, Error> {
+        self.assets.uniform(shader, name, initial)
+    }
     /// Validates and uploads CPU geometry before entering a drawing pass.
     ///
     /// Upload only when geometry changes. This allocates GPU resources and copies
@@ -95,9 +131,11 @@ impl Frame<'_, '_> {
         };
         let mut target = self.raylib.begin_texture_mode(self.thread, self.target);
         let mut raw = target.begin_mode3D(camera);
+        let surface = self.assets.material_pass();
         draw(&mut Canvas3D {
             raw: &mut raw,
             models: self.assets,
+            surface,
         });
     }
 
@@ -177,11 +215,24 @@ pub struct Canvas3D<'draw, D: RaylibDraw> {
     /// Raylib guard for advanced drawing within this camera pass.
     pub raw: &'draw mut D,
     models: &'draw mut dyn ModelSource,
+    surface: Option<SurfaceGuard>,
 }
 
 trait ModelSource {
     fn model(&self, id: ModelId) -> Option<&Model>;
     fn mesh(&mut self, id: MeshId, tint: Color) -> Option<(&Mesh, WeakMaterial)>;
+    fn mesh_material(
+        &mut self,
+        mesh: MeshId,
+        material: MaterialId,
+        tint: Color,
+    ) -> Option<(&Mesh, Prepared<'_>)>;
+    fn model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        tint: Color,
+    ) -> Option<(&Model, Prepared<'_>)>;
 }
 impl ModelSource for Assets<'_> {
     fn model(&self, id: ModelId) -> Option<&Model> {
@@ -190,9 +241,96 @@ impl ModelSource for Assets<'_> {
     fn mesh(&mut self, id: MeshId, tint: Color) -> Option<(&Mesh, WeakMaterial)> {
         self.mesh_for_draw(id, tint)
     }
+    fn mesh_material(
+        &mut self,
+        mesh: MeshId,
+        material: MaterialId,
+        tint: Color,
+    ) -> Option<(&Mesh, Prepared<'_>)> {
+        self.mesh_material(mesh, material, tint)
+    }
+    fn model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        tint: Color,
+    ) -> Option<(&Model, Prepared<'_>)> {
+        self.model_material(model, material, tint)
+    }
 }
 
 impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
+    fn legacy(&mut self) {
+        if let Some(surface) = &mut self.surface {
+            surface.legacy();
+        }
+    }
+    /// Draws generated geometry with a reusable material; false for stale dependencies.
+    /// Draw opaque/cutout surfaces first, then blended surfaces from far to near.
+    pub fn mesh_material(
+        &mut self,
+        mesh: MeshId,
+        material: MaterialId,
+        transform: Transform3D,
+        tint: Color,
+    ) -> bool {
+        self.mesh_material_matrix(mesh, material, transform.matrix(), tint)
+    }
+    /// Material drawing with an affine scene/world matrix. No command buffer or heap allocation.
+    pub fn mesh_material_matrix(
+        &mut self,
+        mesh: MeshId,
+        material: MaterialId,
+        transform: Mat4,
+        tint: Color,
+    ) -> bool {
+        if let Some((mesh, material)) = self.models.mesh_material(mesh, material, tint) {
+            if let Some(surface) = &mut self.surface {
+                surface.apply(material.alpha);
+            }
+            material.draw(self.raw, mesh, matrix(transform));
+            true
+        } else {
+            false
+        }
+    }
+    /// Overrides every mesh of an imported model with this material, applying its native transform.
+    /// Returns false for an unloaded model, material, shader, or texture.
+    pub fn model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        transform: Transform3D,
+        tint: Color,
+    ) -> bool {
+        self.model_material_matrix(model, material, transform.matrix(), tint)
+    }
+    /// Model material override with an affine scene/world matrix.
+    pub fn model_material_matrix(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        transform: Mat4,
+        tint: Color,
+    ) -> bool {
+        if let Some((model, material)) = self.models.model_material(model, material, tint) {
+            if let Some(surface) = &mut self.surface {
+                surface.apply(material.alpha);
+            }
+            let m = model.transform;
+            let local = Mat4::from_cols_array(&[
+                m.m0, m.m1, m.m2, m.m3, m.m4, m.m5, m.m6, m.m7, m.m8, m.m9, m.m10, m.m11, m.m12,
+                m.m13, m.m14, m.m15,
+            ]);
+            let transform = matrix(transform * local);
+            for mesh in model.meshes() {
+                material.draw(self.raw, mesh, transform);
+            }
+            true
+        } else {
+            false
+        }
+    }
     /// Draws generated geometry with translation, rotation, scale, and tint.
     ///
     /// Uses the default unlit material and multiplies tint by vertex colors.
@@ -206,6 +344,7 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
     ///
     /// Pass `GlobalTransform3D.0` to include scene ancestors. No allocation occurs.
     pub fn mesh_matrix(&mut self, id: MeshId, transform: Mat4, tint: Color) -> bool {
+        self.legacy();
         if let Some((mesh, material)) = self.models.mesh(id, tint) {
             self.raw.draw_mesh(mesh, material, matrix(transform));
             true
@@ -216,24 +355,29 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
 
     /// Filled world-space box.
     pub fn cube(&mut self, bounds: Aabb3, color: Color) {
+        self.legacy();
         self.raw
             .draw_cube_v(v3(bounds.center()), v3(bounds.size()), color);
     }
     /// Box wireframe.
     pub fn wire_cube(&mut self, bounds: Aabb3, color: Color) {
+        self.legacy();
         self.raw
             .draw_cube_wires_v(v3(bounds.center()), v3(bounds.size()), color);
     }
     /// Filled sphere with fixed low polygon count.
     pub fn sphere(&mut self, center: Vec3, radius: f32, color: Color) {
+        self.legacy();
         self.raw.draw_sphere_ex(v3(center), radius, 12, 16, color);
     }
     /// World-space line.
     pub fn line(&mut self, start: Vec3, end: Vec3, color: Color) {
+        self.legacy();
         self.raw.draw_line3D(v3(start), v3(end), color);
     }
     /// Draws a model with uniform scale; false for an unloaded handle.
     pub fn model(&mut self, id: ModelId, position: Vec3, scale: f32, tint: Color) -> bool {
+        self.legacy();
         if let Some(model) = self.models.model(id) {
             self.raw.draw_model(model, v3(position), scale, tint);
             true
@@ -292,7 +436,7 @@ pub(crate) fn v3(v: Vec3) -> Vector3 {
     Vector3::new(v.x, v.y, v.z)
 }
 
-fn matrix(matrix: Mat4) -> Matrix {
+pub(crate) fn matrix(matrix: Mat4) -> Matrix {
     let a = matrix.to_cols_array();
     Matrix {
         m0: a[0],

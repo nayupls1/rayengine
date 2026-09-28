@@ -5,6 +5,7 @@
 //! Render resources are dropped before the window and sounds before audio closes.
 
 use crate::Error;
+use crate::material::{MaterialDesc, UniformId, UniformValue};
 use rayengine_core::mesh::MeshData;
 use raylib::prelude::*;
 use std::{
@@ -12,6 +13,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub(crate) mod materials;
 mod mesh;
 use mesh::MeshAssets;
 
@@ -47,6 +49,8 @@ pub struct Assets<'audio> {
     models: Vec<Option<Model>>,
     sounds: Vec<Option<Sound<'audio>>>,
     meshes: MeshAssets,
+    surfaces: materials::MaterialAssets,
+    shader_paths: HashMap<(Option<PathBuf>, PathBuf), ShaderId>,
     texture_paths: HashMap<PathBuf, TextureId>,
     model_paths: HashMap<PathBuf, ModelId>,
     sound_paths: HashMap<PathBuf, SoundId>,
@@ -60,6 +64,8 @@ impl<'audio> Assets<'audio> {
             models: Vec::new(),
             sounds: Vec::new(),
             meshes: MeshAssets::new(),
+            surfaces: materials::MaterialAssets::new(),
+            shader_paths: HashMap::new(),
             texture_paths: HashMap::new(),
             model_paths: HashMap::new(),
             sound_paths: HashMap::new(),
@@ -80,6 +86,136 @@ impl<'audio> Assets<'audio> {
     /// Borrows an uploaded generated mesh, or `None` for an unloaded handle.
     pub fn mesh(&self, id: MeshId) -> Option<&Mesh> {
         self.meshes.get(id)
+    }
+
+    /// Borrows a material description, or None after unloading.
+    pub fn material(&self, id: MaterialId) -> Option<&MaterialDesc> {
+        self.surfaces.descriptor(id)
+    }
+
+    /// Unloads only this description; shared shaders/textures stay alive.
+    pub fn unload_material(&mut self, id: MaterialId) -> bool {
+        self.surfaces
+            .materials
+            .get_mut(id.0)
+            .and_then(Option::take)
+            .is_some()
+    }
+
+    /// Unloads an owned shader. Materials/bindings referencing it become invalid.
+    pub fn unload_shader(&mut self, id: ShaderId) -> bool {
+        let unloaded = self
+            .surfaces
+            .shaders
+            .get_mut(id.0)
+            .and_then(Option::take)
+            .is_some();
+        self.shader_paths.retain(|_, handle| *handle != id);
+        unloaded
+    }
+
+    /// Replaces CPU material data atomically; failure preserves the old description.
+    pub fn replace_material(&mut self, id: MaterialId, desc: MaterialDesc) -> Result<(), Error> {
+        if self.material(id).is_none() {
+            return Err(Error::Asset("material is unloaded".into()));
+        }
+        self.surfaces.validate(&desc, &self.textures)?;
+        self.surfaces.materials[id.0] = Some(desc);
+        Ok(())
+    }
+
+    /// Updates a registered shader default, applied before overrides on each draw.
+    /// This edits CPU data; actual GPU uniforms are submitted while drawing.
+    pub fn set_uniform(&mut self, binding: UniformId, value: UniformValue) -> Result<(), Error> {
+        self.surfaces
+            .shaders
+            .get_mut(binding.shader.0)
+            .and_then(Option::as_mut)
+            .ok_or_else(|| Error::Asset("uniform shader is unloaded".into()))?
+            .set(binding, value)
+    }
+
+    pub(crate) fn create_material(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        desc: MaterialDesc,
+    ) -> Result<MaterialId, Error> {
+        self.surfaces.initialize(raylib, thread)?;
+        self.surfaces.validate(&desc, &self.textures)?;
+        let id = MaterialId(self.surfaces.materials.len());
+        self.surfaces.materials.push(Some(desc));
+        Ok(id)
+    }
+
+    pub(crate) fn shader_source(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        vertex: Option<&str>,
+        fragment: &str,
+    ) -> Result<ShaderId, Error> {
+        self.surfaces.shader(raylib, thread, vertex, fragment)
+    }
+
+    pub(crate) fn load_shader(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        vertex: Option<&Path>,
+        fragment: &Path,
+    ) -> Result<ShaderId, Error> {
+        let fragment = asset_path(fragment)?;
+        let vertex = vertex.map(asset_path).transpose()?;
+        let key = (vertex, fragment);
+        if let Some(&id) = self.shader_paths.get(&key) {
+            return Ok(id);
+        }
+        let vertex_source = key.0.as_ref().map(std::fs::read_to_string).transpose()?;
+        let fragment_source = std::fs::read_to_string(&key.1)?;
+        let id = self.shader_source(raylib, thread, vertex_source.as_deref(), &fragment_source)?;
+        self.shader_paths.insert(key, id);
+        Ok(id)
+    }
+
+    pub(crate) fn uniform(
+        &mut self,
+        id: ShaderId,
+        name: &str,
+        value: UniformValue,
+    ) -> Result<UniformId, Error> {
+        self.surfaces
+            .shaders
+            .get_mut(id.0)
+            .and_then(Option::as_mut)
+            .ok_or_else(|| Error::Asset("shader is unloaded".into()))?
+            .register(id, name, value)
+    }
+
+    pub(crate) fn material_pass(&self) -> Option<materials::SurfaceGuard> {
+        self.surfaces.pass()
+    }
+
+    pub(crate) fn mesh_material(
+        &mut self,
+        mesh: MeshId,
+        material: MaterialId,
+        tint: Color,
+    ) -> Option<(&Mesh, materials::Prepared<'_>)> {
+        let mesh = self.meshes.get(mesh)?;
+        let material = self.surfaces.prepare(material, &self.textures, tint)?;
+        Some((mesh, material))
+    }
+
+    pub(crate) fn model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        tint: Color,
+    ) -> Option<(&Model, materials::Prepared<'_>)> {
+        let model = self.models.get(model.0)?.as_ref()?;
+        let material = self.surfaces.prepare(material, &self.textures, tint)?;
+        Some((model, material))
     }
 
     /// Frees a generated mesh on the render thread; false if already unloaded.
