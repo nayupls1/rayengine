@@ -550,6 +550,45 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a native display and OpenGL context; scripts/native_smoke.sh"]
+    fn native_gameplay_character_is_visible_above_first_stone() {
+        let mut meadow = Meadow::default();
+        {
+            let sim = &mut meadow.simulation;
+            let stone = sim.platforms[0];
+            let mut explorer = sim.scene.world.get::<&mut Explorer>(sim.player).unwrap();
+            explorer.body.position = stone.center().with_y(stone.max.y + 3.0);
+        }
+        settle(&mut meadow.simulation);
+        let body = meadow.simulation.explorer().body;
+        assert!(body.grounded);
+        assert!(body.bounds().min.y >= meadow.simulation.platforms[0].max.y);
+        meadow.camera.target = body.position + Vec3::Y * 0.7;
+        meadow.camera.position = meadow.camera.target + Vec3::new(0.0, 9.0, 16.0);
+        meadow.previous_camera = meadow.camera;
+        let view = Viewport::new(
+            Vec2::new(960.0, 540.0),
+            Vec2::new(960.0, 540.0),
+            ScaleMode::Fit,
+        )
+        .unwrap();
+        // Probe the lower torso's front face, which the stone hides when the
+        // character sinks. Project through the camera used by the actual draw.
+        let point = body.position + Vec3::new(0.0, -0.4, 0.275);
+        let clip = meadow.camera.projection(&view, 0.01, 1000.0)
+            * meadow.camera.view_matrix()
+            * point.extend(1.0);
+        let pixel =
+            Vec2::new(clip.x / clip.w + 1.0, 1.0 - clip.y / clip.w) * view.logical_size * 0.5;
+        let image = crate::render_tests::screenshot(meadow, "meadow-first-stone.png");
+        assert_eq!(
+            image.get_color(pixel.x.round() as i32, pixel.y.round() as i32),
+            Color::new(224, 132, 108, 255),
+            "lower torso should remain visible above the stone"
+        );
+    }
+
+    #[test]
     fn pickup_is_collected_once_and_reset_uses_checkpoint() {
         let mut sim = MeadowSimulation::new();
         sim.scene

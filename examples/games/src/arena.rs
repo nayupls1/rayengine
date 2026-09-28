@@ -603,6 +603,32 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a native display and OpenGL context; scripts/native_smoke.sh"]
+    fn native_gameplay_shadow_is_on_upper_platform() {
+        let mut arena = Arena::default();
+        {
+            let sim = &mut arena.simulation;
+            let platform = sim.solids[1];
+            let mut fighter = sim
+                .scene
+                .world
+                .get::<&mut Fighter>(sim.fighters[0])
+                .unwrap();
+            fighter.body.position = Vec2::new(
+                platform.center().x,
+                platform.min.y - fighter.body.half_size.y - 1.0,
+            );
+        }
+        settle(&mut arena.simulation);
+        let image = crate::render_tests::screenshot(arena, "arena-platform-shadow.png");
+        // At the reference resolution, these pixels lie between the player's
+        // feet on the left platform, and directly below on the main floor.
+        let shadow = Color::new(13, 23, 38, 255);
+        assert_eq!(image.get_color(275, 335), shadow, "upper platform shadow");
+        assert_ne!(image.get_color(275, 438), shadow, "stale ground shadow");
+    }
+
+    #[test]
     fn fighter_lands_and_has_two_airborne_jumps() {
         let mut sim = ArenaSimulation::new();
         settle(&mut sim);
