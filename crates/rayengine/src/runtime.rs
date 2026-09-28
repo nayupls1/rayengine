@@ -1,13 +1,14 @@
 //! Window lifecycle: initialize once, sample input, fixed-update, draw, present.
 
 use crate::{
-    assets::{Assets, ModelId, SoundId, TextureId, path_string},
+    assets::{Assets, MeshId, ModelId, SoundId, TextureId, path_string},
     input::Bindings,
     render::{Frame, rect},
 };
 use rayengine_core::{
     glam::Vec2,
     input::Input,
+    mesh::MeshData,
     time::{FixedClock, Tick},
     viewport::{ScaleMode, Viewport},
 };
@@ -229,6 +230,16 @@ pub struct InitContext<'context, 'audio> {
 }
 
 impl InitContext<'_, '_> {
+    /// Validates and uploads generated geometry with the default material.
+    pub fn mesh(&mut self, data: &MeshData) -> Result<MeshId, Error> {
+        self.assets.upload_mesh(self.raylib, self.thread, data)
+    }
+
+    /// Replaces generated geometry, preserving its handle and the old mesh on error.
+    pub fn replace_mesh(&mut self, id: MeshId, data: &MeshData) -> Result<(), Error> {
+        self.assets.replace_mesh(self.thread, id, data)
+    }
+
     /// Loads/caches a texture by canonical path.
     pub fn texture(&mut self, path: impl AsRef<Path>) -> Result<TextureId, Error> {
         self.assets
@@ -501,7 +512,7 @@ impl App {
                 raylib: &mut raylib,
                 thread: &thread,
                 target,
-                assets: &assets,
+                assets: &mut assets,
                 viewport: view,
                 alpha: plan.alpha,
                 index: report.frames,

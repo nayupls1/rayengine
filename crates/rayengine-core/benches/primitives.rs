@@ -7,6 +7,26 @@ use std::{hint::black_box, time::Duration};
 struct Velocity(Vec3);
 
 fn primitives(c: &mut Criterion) {
+    let mut group = c.benchmark_group("mesh_validation");
+    for triangles in [1_000, 10_000] {
+        let positions = vec![Vec3::ZERO; triangles * 3];
+        let plain = MeshData::new(positions.clone());
+        let indexed = MeshData {
+            positions,
+            normals: Some(vec![Vec3::Y; triangles * 3]),
+            texcoords: Some(vec![Vec2::ZERO; triangles * 3]),
+            colors: Some(vec![[255; 4]; triangles * 3]),
+            indices: Some((0..triangles * 3).map(|i| i as u16).collect()),
+        };
+        group.throughput(Throughput::Elements(triangles as u64));
+        for (name, mesh) in [("positions", plain), ("indexed_attributes", indexed)] {
+            group.bench_with_input(BenchmarkId::new(name, triangles), &mesh, |b, mesh| {
+                b.iter(|| black_box(black_box(mesh).validate().unwrap()));
+            });
+        }
+    }
+    group.finish();
+
     let mut group = c.benchmark_group("ecs_update");
     for count in [1_000, 10_000, 100_000] {
         let mut world = World::new();

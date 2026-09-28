@@ -7,7 +7,8 @@ are optional targets; browser and mobile are outside the current scope.
 
 - `rayengine-core`: CPU-only entities/components, transforms and hierarchy,
   fixed simulation timing, action input, viewport math, cameras, collision,
-  and UI layout. No window, audio device, C toolchain, or GPU required.
+  UI layout, and validated CPU mesh data. No window, audio device, C toolchain,
+  or GPU required.
 - `rayengine`: raylib runtime, rendering and asset ownership. One shared
   lifecycle for 2D and 3D. Rendering stays on raylib's owning thread.
 - `rayengine-cli`: create, inspect and check ordinary Cargo game projects.
@@ -37,7 +38,10 @@ Games can interpolate between simulation states during rendering.
 
 The first release includes basic collision queries and character movement,
 not a rigid-body physics engine. Demos use geometric art so they need no
-external assets. Texture/model/audio ownership is part of the SDK.
+external assets. Texture/model/audio and generated mesh ownership are part of
+the SDK. Generated mesh upload/replacement occurs on the render thread;
+CPU geometry can be produced independently. Custom materials and asynchronous
+upload scheduling are separate follow-ups.
 
 Tests cover behavior without a display; rendering smoke checks exercise raylib
 separately. Benchmarks retain named baselines and record toolchain and machine

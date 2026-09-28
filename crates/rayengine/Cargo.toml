@@ -17,5 +17,11 @@ wayland = ["raylib/GLFW_BUILD_WAYLAND"]
 rayengine-core.workspace = true
 raylib = { workspace = true, features = ["SUPPORT_IMAGE_GENERATION"] }
 
-[lints]
-workspace = true
+# Deny unsafe except private, documented render-thread ownership/allocation bridges.
+# Other workspace crates continue to inherit unsafe_code = "forbid".
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+all = "warn"

@@ -24,6 +24,8 @@ pub mod guides {
     pub mod timing_input {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
+    #[doc = include_str!("../docs/generated_meshes.md")]
+    pub mod generated_meshes {}
     #[doc = include_str!("../docs/testing_performance.md")]
     pub mod testing_performance {}
     #[doc = include_str!("../docs/agent_workflow.md")]
@@ -32,7 +34,7 @@ pub mod guides {
 
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
-    pub use crate::assets::{ModelId, SoundId, TextureId};
+    pub use crate::assets::{MeshId, ModelId, SoundId, TextureId};
     pub use crate::input::{Bindings, Button};
     pub use crate::render::Frame;
     pub use crate::{App, Config, CursorMode, Error, Game, InitContext, RunOptions, Update};

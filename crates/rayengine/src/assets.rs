@@ -1,15 +1,19 @@
 //! Cached asset ownership with typed stable handles and explicit unloading.
 //!
-//! Handles are append-only indices and are never recycled within a run. Unloaded
-//! handles return `None`; loading another asset cannot accidentally revive them.
+//! File handles use append-only indices; generated meshes use versioned slots.
+//! Unloaded handles return `None`; creating another asset cannot revive them.
 //! Render resources are dropped before the window and sounds before audio closes.
 
 use crate::Error;
+use rayengine_core::mesh::MeshData;
 use raylib::prelude::*;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
+
+mod mesh;
+use mesh::MeshAssets;
 
 /// Stable handle for a texture owned by the current game run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -21,11 +25,22 @@ pub struct ModelId(pub(crate) usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SoundId(pub(crate) usize);
 
+/// Versioned handle for a generated mesh owned by the current game run.
+///
+/// Replacement keeps the handle. Unloading invalidates it permanently, even
+/// when its storage slot is reused. Handles must not be shared between runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MeshId {
+    slot: usize,
+    generation: u64,
+}
+
 /// Runtime asset collection. Load during initialization; draw using typed handles.
 pub struct Assets<'audio> {
     textures: Vec<Option<Texture2D>>,
     models: Vec<Option<Model>>,
     sounds: Vec<Option<Sound<'audio>>>,
+    meshes: MeshAssets,
     texture_paths: HashMap<PathBuf, TextureId>,
     model_paths: HashMap<PathBuf, ModelId>,
     sound_paths: HashMap<PathBuf, SoundId>,
@@ -38,6 +53,7 @@ impl<'audio> Assets<'audio> {
             textures: Vec::new(),
             models: Vec::new(),
             sounds: Vec::new(),
+            meshes: MeshAssets::new(),
             texture_paths: HashMap::new(),
             model_paths: HashMap::new(),
             sound_paths: HashMap::new(),
@@ -53,6 +69,44 @@ impl<'audio> Assets<'audio> {
     /// Borrow a loaded model, or `None` after it has been unloaded.
     pub fn model(&self, id: ModelId) -> Option<&Model> {
         self.models.get(id.0).and_then(Option::as_ref)
+    }
+
+    /// Borrows an uploaded generated mesh, or `None` for an unloaded handle.
+    pub fn mesh(&self, id: MeshId) -> Option<&Mesh> {
+        self.meshes.get(id)
+    }
+
+    /// Frees a generated mesh on the render thread; false if already unloaded.
+    ///
+    /// The default material is released when the last generated mesh unloads.
+    pub fn unload_mesh(&mut self, id: MeshId) -> bool {
+        self.meshes.unload(id)
+    }
+
+    pub(crate) fn upload_mesh(
+        &mut self,
+        raylib: &RaylibHandle,
+        thread: &RaylibThread,
+        data: &MeshData,
+    ) -> Result<MeshId, Error> {
+        self.meshes.upload(raylib, thread, data)
+    }
+
+    pub(crate) fn replace_mesh(
+        &mut self,
+        thread: &RaylibThread,
+        id: MeshId,
+        data: &MeshData,
+    ) -> Result<(), Error> {
+        self.meshes.replace(thread, id, data)
+    }
+
+    pub(crate) fn mesh_for_draw(
+        &mut self,
+        id: MeshId,
+        tint: Color,
+    ) -> Option<(&Mesh, WeakMaterial)> {
+        self.meshes.for_draw(id, tint)
     }
 
     /// Borrow a loaded sound, or `None` after it has been unloaded.

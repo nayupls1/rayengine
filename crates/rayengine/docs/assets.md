@@ -37,6 +37,12 @@ reused during a run. `assets.texture/model/sound` return `None` after unload;
 drawing an unloaded handle returns `false`. Handles belong to one run and should
 not be retained for another `App::run`.
 
+Generated geometry uses `MeshData` and a versioned `MeshId`. Upload with
+`InitContext::mesh` or `Frame::mesh`, draw with `Canvas3D::mesh`, and replace or
+unload explicitly on the render thread. Mesh slots can be reused without reviving
+old handles. See [generated meshes](crate::guides::generated_meshes) for the
+complete lifecycle, validation rules, and a compiled example.
+
 Audio is opt-in:
 
 ```no_run
@@ -61,7 +67,7 @@ GPU work and raylib resource creation stay on the owning thread. Use worker
 threads for independent CPU work and pass results back explicitly. Do not send
 the raylib thread token or GPU resources to workers.
 
-For custom shaders, fonts or generated resources, use `InitContext::raylib` and
+For custom shaders, fonts or other native resources, use `InitContext::raylib` and
 `InitContext::thread`. For specialized drawing, use a canvas's `raw` guard or
 `Frame::with_raylib`. These APIs keep the basic SDK small while preserving
 raylib access. Asynchronous asset pipelines and hot reload are outside 0.0.1.
