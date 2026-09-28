@@ -49,6 +49,18 @@ rebinding persistence and more elaborate input schemes can be added when needed.
 Focus loss releases held actions. Escape uses raylib's normal window-exit behavior;
 games can request their own exit through `context.quit()`.
 
+For first-person mouse look, return `CursorMode::Captured` from
+`Game::cursor_mode`. The runner hides and captures the focused window's cursor,
+releases it on focus loss, and ignores motion during focus/capture transitions.
+Free cursors remain the default, including for Arena.
+
+`context.input.pointer_delta()` supplies relative motion in logical window units.
+Motion accumulates across render frames with no update, is consumed on the first
+fixed tick, and is zero on subsequent catch-up ticks. Apply mouse sensitivity
+directly to this displacement; multiplying by `dt` makes sensitivity depend on
+frame timing. Absolute `context.pointer` coordinates remain available for UI
+and aimed clicks.
+
 For smooth presentation, record the position before each tick:
 
 ```rust

@@ -269,6 +269,10 @@ impl Update<'_, '_> {
 
 /// Shared game lifecycle for 2D, 3D, or mixed games.
 pub trait Game {
+    /// Chooses the cursor policy at startup. Capture is suspended on focus loss.
+    fn cursor_mode(&self) -> CursorMode {
+        CursorMode::Free
+    }
     /// Declares actions and physical buttons before entering the loop.
     fn bindings(&self) -> Bindings {
         Bindings::new()
@@ -281,6 +285,33 @@ pub trait Game {
     fn fixed_update(&mut self, context: &mut Update<'_, '_>);
     /// Draws world passes and UI. Interpolate state using `frame.alpha`.
     fn draw(&mut self, frame: &mut Frame<'_, '_>);
+}
+
+/// Game-owned cursor policy, applied by the runner while the window is focused.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CursorMode {
+    /// Visible cursor that can leave the window.
+    #[default]
+    Free,
+    /// Hidden cursor with unbounded relative motion for first-person look.
+    Captured,
+}
+
+#[derive(Default)]
+struct CursorState {
+    focused: bool,
+    captured: bool,
+}
+
+impl CursorState {
+    fn update(&mut self, mode: CursorMode, focused: bool) -> (bool, bool) {
+        let capture = focused && mode == CursorMode::Captured;
+        let changed = capture != self.captured;
+        let accept_motion = focused && self.focused && !changed;
+        self.focused = focused;
+        self.captured = capture;
+        (changed, accept_motion)
+    }
 }
 
 /// Owns game configuration and executes the prescribed lifecycle.
@@ -364,6 +395,8 @@ impl App {
             thread: &thread,
             assets: &mut assets,
         })?;
+        let cursor_mode = game.cursor_mode();
+        let mut cursor = CursorState::default();
         let mut target: Option<RenderTexture2D> = None;
         let mut target_size = (0, 0);
         let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
@@ -384,6 +417,9 @@ impl App {
             );
             let view = Viewport::new(window, config.reference_size, config.scale_mode);
             if raylib.is_window_minimized() || view.is_none() {
+                if cursor.update(cursor_mode, false).0 {
+                    raylib.enable_cursor();
+                }
                 input.release_all();
                 // Keep backend event polling alive, but pause simulation while minimized.
                 raylib
@@ -393,7 +429,20 @@ impl App {
                 continue;
             }
             let view = view.expect("non-minimized viewport");
+            let (cursor_changed, accept_motion) =
+                cursor.update(cursor_mode, raylib.is_window_focused());
+            if cursor_changed {
+                if cursor.captured {
+                    raylib.disable_cursor();
+                } else {
+                    raylib.enable_cursor();
+                }
+            }
             bindings.sample(&raylib, &mut input);
+            if accept_motion {
+                let delta = raylib.get_mouse_delta();
+                input.add_pointer_delta(Vec2::new(delta.x, delta.y));
+            }
             let mouse = raylib.get_mouse_position();
             let pointer = raylib
                 .is_window_focused()
@@ -501,6 +550,23 @@ fn validate_size(size: (u32, u32)) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_releases_on_focus_loss_and_ignores_motion_at_focus_transitions() {
+        let mut state = CursorState::default();
+        assert_eq!(state.update(CursorMode::Captured, false), (false, false));
+        assert_eq!(state.update(CursorMode::Captured, true), (true, false));
+        assert!(state.captured);
+        assert_eq!(state.update(CursorMode::Captured, true), (false, true));
+        assert_eq!(state.update(CursorMode::Captured, false), (true, false));
+        assert!(!state.captured);
+        assert_eq!(state.update(CursorMode::Captured, true), (true, false));
+        assert_eq!(state.update(CursorMode::Captured, true), (false, true));
+        let mut free = CursorState::default();
+        assert_eq!(free.update(CursorMode::Free, true), (false, false));
+        assert_eq!(free.update(CursorMode::Free, true), (false, true));
+        assert!(!free.captured);
+    }
 
     #[test]
     fn bad_configuration_is_rejected_before_opening_window() {

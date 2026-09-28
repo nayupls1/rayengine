@@ -1,5 +1,7 @@
 //! Action input whose edges survive render frames and are consumed per tick.
 
+use glam::Vec2;
+
 /// Small numeric action key, normally declared as a game-level constant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Action(pub u16);
@@ -29,6 +31,7 @@ struct State {
 #[derive(Debug, Default)]
 pub struct Input {
     states: Vec<State>,
+    pointer_delta: Vec2,
 }
 
 impl Input {
@@ -36,6 +39,7 @@ impl Input {
     pub fn with_capacity(actions: usize) -> Self {
         Self {
             states: vec![State::default(); actions],
+            pointer_delta: Vec2::ZERO,
         }
     }
 
@@ -77,12 +81,27 @@ impl Input {
         f32::from(self.down(positive)) - f32::from(self.down(negative))
     }
 
-    /// Clears transitions after one fixed update, preserving held actions.
+    /// Accumulates relative pointer motion sampled between fixed updates.
+    /// The SDK supplies logical window units, independent of viewport scaling.
+    /// Panics for nonfinite motion.
+    pub fn add_pointer_delta(&mut self, delta: Vec2) {
+        assert!(delta.is_finite());
+        self.pointer_delta += delta;
+    }
+
+    /// Relative pointer motion since the previous consumed tick.
+    /// Apply sensitivity directly; this is displacement, not velocity.
+    pub fn pointer_delta(&self) -> Vec2 {
+        self.pointer_delta
+    }
+
+    /// Clears transitions and pointer motion after one fixed update, preserving held actions.
     pub fn consume_edges(&mut self) {
         for state in &mut self.states {
             state.pressed = false;
             state.released = false;
         }
+        self.pointer_delta = Vec2::ZERO;
     }
 
     /// Releases every held action, e.g. on focus loss. Releases are observable.
@@ -91,6 +110,7 @@ impl Input {
             state.released |= state.down;
             state.down = false;
         }
+        self.pointer_delta = Vec2::ZERO;
     }
 }
 
@@ -128,5 +148,22 @@ mod tests {
         input.release_all();
         assert!(!input.down(Action(1)));
         assert!(input.released(Action(1)));
+    }
+
+    #[test]
+    fn relative_motion_accumulates_until_one_tick_and_is_not_repeated_during_catch_up() {
+        let mut input = Input::with_capacity(1);
+        input.set(Action(0), true);
+        input.add_pointer_delta(Vec2::new(4.0, -2.0));
+        input.add_pointer_delta(Vec2::new(3.0, 1.0));
+        assert_eq!(input.pointer_delta(), Vec2::new(7.0, -1.0));
+        input.consume_edges();
+        assert_eq!(input.pointer_delta(), Vec2::ZERO);
+        assert!(input.down(Action(0)));
+        input.consume_edges();
+        assert_eq!(input.pointer_delta(), Vec2::ZERO);
+        input.add_pointer_delta(Vec2::new(-2.0, 3.0));
+        input.release_all();
+        assert_eq!(input.pointer_delta(), Vec2::ZERO);
     }
 }

@@ -8,7 +8,9 @@ pub mod input;
 pub mod render;
 pub mod runtime;
 
-pub use runtime::{App, Config, Error, Game, InitContext, RunOptions, RunReport, Update};
+pub use runtime::{
+    App, Config, CursorMode, Error, Game, InitContext, RunOptions, RunReport, Update,
+};
 
 /// Guides authored in Markdown and exported to HTML by rustdoc.
 pub mod guides {
@@ -33,7 +35,7 @@ pub mod prelude {
     pub use crate::assets::{ModelId, SoundId, TextureId};
     pub use crate::input::{Bindings, Button};
     pub use crate::render::Frame;
-    pub use crate::{App, Config, Error, Game, InitContext, RunOptions, Update};
+    pub use crate::{App, Config, CursorMode, Error, Game, InitContext, RunOptions, Update};
     pub use rayengine_core::prelude::*;
     pub use raylib::prelude::{Color, KeyboardKey};
 }
