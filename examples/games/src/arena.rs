@@ -1,6 +1,13 @@
 //! Arena: a compact platform fighter with a training opponent and optional AI.
 
 use rayengine::prelude::*;
+use rayengine::raylib::prelude::MouseButton;
+
+const CAMERA: Camera2D = Camera2D {
+    target: Vec2::new(0.0, -45.0),
+    view_height: 540.0,
+    rotation: 0.0,
+};
 
 /// Move left.
 pub const LEFT: Action = Action(0);
@@ -14,6 +21,14 @@ pub const ATTACK: Action = Action(3);
 pub const RESET: Action = Action(4);
 /// Toggle the training opponent's simple AI.
 pub const TOGGLE_AI: Action = Action(5);
+/// Strike left or right toward the mouse's world-space position.
+pub const MOUSE_ATTACK: Action = Action(6);
+
+#[derive(Clone, Copy)]
+enum Strike {
+    Facing,
+    Toward(f32),
+}
 
 /// Character component, kept separate from rendering and window state.
 #[derive(Clone, Copy, Debug)]
@@ -130,6 +145,12 @@ impl ArenaSimulation {
 
     /// Advances the full gameplay simulation with already sampled actions.
     pub fn step(&mut self, input: &Input, dt: f32) {
+        self.step_with_pointer(input, None, dt);
+    }
+
+    /// Advances gameplay with an optional world-space mouse position.
+    /// Mouse strikes require a valid pointer; keyboard strikes use current facing.
+    pub fn step_with_pointer(&mut self, input: &Input, pointer: Option<Vec2>, dt: f32) {
         if input.pressed(RESET) {
             *self = Self::new();
             return;
@@ -150,16 +171,19 @@ impl ArenaSimulation {
             && enemy.body.grounded
             && (player.body.position.y < enemy.body.position.y - 55.0
                 || enemy.body.position.x.abs() > 325.0);
+        let mouse_strike = pointer
+            .filter(|point| input.pressed(MOUSE_ATTACK) && point.is_finite())
+            .map(|point| Strike::Toward(point.x));
         let controls = [
             (
                 input.axis(LEFT, RIGHT),
                 input.pressed(JUMP),
-                input.pressed(ATTACK),
+                mouse_strike.or_else(|| input.pressed(ATTACK).then_some(Strike::Facing)),
             ),
             (
                 enemy_move,
                 enemy_jump,
-                self.enemy_ai && separation.abs() < 100.0,
+                (self.enemy_ai && separation.abs() < 100.0).then_some(Strike::Facing),
             ),
         ];
         for (index, &(axis, jump, attack)) in controls.iter().enumerate() {
@@ -243,7 +267,7 @@ fn advance_fighter(
     fighter: &mut Fighter,
     axis: f32,
     jump: bool,
-    attack: bool,
+    attack: Option<Strike>,
     dt: f32,
     solids: &[Aabb2],
 ) {
@@ -269,7 +293,7 @@ fn advance_fighter(
         };
         fighter.body.velocity.x =
             approach(fighter.body.velocity.x, axis * 300.0, acceleration * dt);
-        if axis != 0.0 {
+        if axis != 0.0 && fighter.attack == 0.0 {
             fighter.facing = axis.signum();
         }
         if fighter.jump_buffer > 0.0 && (fighter.jumps > 0 || fighter.coyote > 0.0) {
@@ -283,7 +307,16 @@ fn advance_fighter(
             fighter.coyote = 0.0;
             fighter.jump_buffer = 0.0;
         }
-        if attack && fighter.cooldown == 0.0 {
+        if let Some(strike) = attack
+            && fighter.cooldown == 0.0
+        {
+            if let Strike::Toward(x) = strike {
+                if x < fighter.body.position.x {
+                    fighter.facing = -1.0;
+                } else if x > fighter.body.position.x {
+                    fighter.facing = 1.0;
+                }
+            }
             fighter.attack = 0.18;
             fighter.cooldown = 0.35;
             fighter.connected = false;
@@ -317,6 +350,10 @@ fn shadow_position(feet: Vec2, solids: &[Aabb2]) -> Option<Vec2> {
         .map(|solid| Vec2::new(feet.x, solid.min.y - 2.0))
 }
 
+fn pointer_to_world(pointer: Option<Vec2>, view: &Viewport) -> Option<Vec2> {
+    pointer.and_then(|ui| CAMERA.screen_to_world(view.ui_to_screen(ui), view))
+}
+
 /// Playable presentation over [`ArenaSimulation`].
 pub struct Arena {
     simulation: ArenaSimulation,
@@ -344,12 +381,17 @@ impl Game for Arena {
             .bind(JUMP, KeyboardKey::KEY_SPACE)
             .bind(JUMP, KeyboardKey::KEY_W)
             .bind(ATTACK, KeyboardKey::KEY_J)
+            .bind(MOUSE_ATTACK, Button::Mouse(MouseButton::MOUSE_BUTTON_LEFT))
             .bind(RESET, KeyboardKey::KEY_R)
             .bind(TOGGLE_AI, KeyboardKey::KEY_T)
     }
 
     fn fixed_update(&mut self, context: &mut Update<'_, '_>) {
-        self.simulation.step(context.input, context.tick.dt);
+        self.simulation.step_with_pointer(
+            context.input,
+            pointer_to_world(context.pointer, &context.viewport),
+            context.tick.dt,
+        );
         for i in 0..2 {
             let values = (
                 self.simulation.fighter(i).damage as u32,
@@ -369,117 +411,110 @@ impl Game for Arena {
         let coral = Color::new(255, 131, 116, 255);
         frame.clear(navy);
         let alpha = frame.alpha;
-        frame.world_2d(
-            Camera2D {
-                target: Vec2::new(0.0, -45.0),
-                view_height: 540.0,
-                rotation: 0.0,
-            },
-            |canvas| {
-                for x in -12..=12 {
-                    let x = x as f32 * 50.0;
-                    canvas.line(
-                        Vec2::new(x, -400.0),
-                        Vec2::new(x, 400.0),
-                        1.0,
-                        Color::new(25, 40, 62, 255),
-                    );
-                }
-                for y in -8..=8 {
-                    let y = y as f32 * 50.0;
-                    canvas.line(
-                        Vec2::new(-700.0, y),
-                        Vec2::new(700.0, y),
-                        1.0,
-                        Color::new(25, 40, 62, 255),
-                    );
-                }
-                canvas.circle(Vec2::new(330.0, -190.0), 70.0, Color::new(25, 45, 65, 255));
-                for (i, &solid) in self.simulation.solids.iter().enumerate() {
-                    canvas.rectangle(
-                        solid,
-                        if i == 0 {
-                            Color::new(43, 60, 79, 255)
-                        } else {
-                            Color::new(56, 78, 99, 255)
-                        },
-                    );
-                    canvas.rectangle(
-                        Aabb2 {
-                            min: solid.min,
-                            max: Vec2::new(solid.max.x, solid.min.y + 4.0),
-                        },
-                        cyan,
-                    );
+        frame.world_2d(CAMERA, |canvas| {
+            for x in -12..=12 {
+                let x = x as f32 * 50.0;
+                canvas.line(
+                    Vec2::new(x, -400.0),
+                    Vec2::new(x, 400.0),
+                    1.0,
+                    Color::new(25, 40, 62, 255),
+                );
+            }
+            for y in -8..=8 {
+                let y = y as f32 * 50.0;
+                canvas.line(
+                    Vec2::new(-700.0, y),
+                    Vec2::new(700.0, y),
+                    1.0,
+                    Color::new(25, 40, 62, 255),
+                );
+            }
+            canvas.circle(Vec2::new(330.0, -190.0), 70.0, Color::new(25, 45, 65, 255));
+            for (i, &solid) in self.simulation.solids.iter().enumerate() {
+                canvas.rectangle(
+                    solid,
                     if i == 0 {
-                        canvas.rectangle(
-                            Aabb2::from_center(Vec2::new(-305.0, 205.0), Vec2::new(22.0, 60.0)),
-                            Color::new(33, 48, 68, 255),
-                        );
-                        canvas.rectangle(
-                            Aabb2::from_center(Vec2::new(305.0, 205.0), Vec2::new(22.0, 60.0)),
-                            Color::new(33, 48, 68, 255),
-                        );
-                    }
-                }
-                for i in 0..2 {
-                    let fighter = self.simulation.fighter(i);
-                    let position = fighter.previous.lerp(fighter.body.position, alpha);
-                    let color = if fighter.stun > 0.15 {
-                        Color::WHITE
-                    } else if i == 0 {
-                        cyan
+                        Color::new(43, 60, 79, 255)
                     } else {
-                        coral
-                    };
-                    // Shadow, feet, torso, face: all primitive art.
-                    let feet = position + Vec2::Y * fighter.body.half_size.y;
-                    if let Some(shadow) = shadow_position(feet, &self.simulation.solids) {
-                        canvas.circle(shadow, 16.0, Color::new(13, 23, 38, 255));
-                    }
+                        Color::new(56, 78, 99, 255)
+                    },
+                );
+                canvas.rectangle(
+                    Aabb2 {
+                        min: solid.min,
+                        max: Vec2::new(solid.max.x, solid.min.y + 4.0),
+                    },
+                    cyan,
+                );
+                if i == 0 {
                     canvas.rectangle(
-                        Aabb2::from_center(position + Vec2::new(-10.0, 23.0), Vec2::new(11.0, 9.0)),
-                        color,
+                        Aabb2::from_center(Vec2::new(-305.0, 205.0), Vec2::new(22.0, 60.0)),
+                        Color::new(33, 48, 68, 255),
                     );
                     canvas.rectangle(
-                        Aabb2::from_center(position + Vec2::new(10.0, 23.0), Vec2::new(11.0, 9.0)),
-                        color,
+                        Aabb2::from_center(Vec2::new(305.0, 205.0), Vec2::new(22.0, 60.0)),
+                        Color::new(33, 48, 68, 255),
                     );
-                    canvas.rectangle(
-                        Aabb2::from_center(position + Vec2::new(0.0, 5.0), Vec2::new(34.0, 33.0)),
-                        color,
-                    );
-                    canvas.circle(position + Vec2::new(0.0, -15.0), 16.0, color);
-                    canvas.rectangle(
-                        Aabb2::from_center(
-                            position + Vec2::new(fighter.facing * 7.0, -17.0),
-                            Vec2::new(12.0, 5.0),
-                        ),
-                        navy,
-                    );
-                    if fighter.attack > 0.0 {
-                        canvas.line(
-                            position + Vec2::new(fighter.facing * 16.0, 0.0),
-                            position + Vec2::new(fighter.facing * 58.0, -5.0),
-                            11.0,
-                            color,
-                        );
-                        canvas.circle(
-                            position + Vec2::new(fighter.facing * 60.0, -5.0),
-                            10.0,
-                            Color::new(255, 222, 139, 255),
-                        );
-                    }
                 }
-                for spark in &self.simulation.sparks {
+            }
+            for i in 0..2 {
+                let fighter = self.simulation.fighter(i);
+                let position = fighter.previous.lerp(fighter.body.position, alpha);
+                let color = if fighter.stun > 0.15 {
+                    Color::WHITE
+                } else if i == 0 {
+                    cyan
+                } else {
+                    coral
+                };
+                // Shadow, feet, torso, face: all primitive art.
+                let feet = position + Vec2::Y * fighter.body.half_size.y;
+                if let Some(shadow) = shadow_position(feet, &self.simulation.solids) {
+                    canvas.circle(shadow, 16.0, Color::new(13, 23, 38, 255));
+                }
+                canvas.rectangle(
+                    Aabb2::from_center(position + Vec2::new(-10.0, 23.0), Vec2::new(11.0, 9.0)),
+                    color,
+                );
+                canvas.rectangle(
+                    Aabb2::from_center(position + Vec2::new(10.0, 23.0), Vec2::new(11.0, 9.0)),
+                    color,
+                );
+                canvas.rectangle(
+                    Aabb2::from_center(position + Vec2::new(0.0, 5.0), Vec2::new(34.0, 33.0)),
+                    color,
+                );
+                canvas.circle(position + Vec2::new(0.0, -15.0), 16.0, color);
+                canvas.rectangle(
+                    Aabb2::from_center(
+                        position + Vec2::new(fighter.facing * 7.0, -17.0),
+                        Vec2::new(12.0, 5.0),
+                    ),
+                    navy,
+                );
+                if fighter.attack > 0.0 {
+                    canvas.line(
+                        position + Vec2::new(fighter.facing * 16.0, 0.0),
+                        position + Vec2::new(fighter.facing * 58.0, -5.0),
+                        11.0,
+                        color,
+                    );
                     canvas.circle(
-                        spark.position,
-                        3.0 * (spark.life / 0.3),
+                        position + Vec2::new(fighter.facing * 60.0, -5.0),
+                        10.0,
                         Color::new(255, 222, 139, 255),
                     );
                 }
-            },
-        );
+            }
+            for spark in &self.simulation.sparks {
+                canvas.circle(
+                    spark.position,
+                    3.0 * (spark.life / 0.3),
+                    Color::new(255, 222, 139, 255),
+                );
+            }
+        });
         frame.ui(|ui| {
             ui.text(
                 "RAYENGINE  /  2D EXAMPLE",
@@ -489,7 +524,7 @@ impl Game for Arena {
             );
             ui.text("ARENA", Vec2::new(24.0, 40.0), 36.0, Color::WHITE);
             ui.text(
-                "A/D move   SPACE double jump   J strike   T toggle AI   R reset",
+                "A/D move   W/SPACE double jump   CLICK/J strike   T toggle AI   R reset",
                 Vec2::new(26.0, 86.0),
                 14.0,
                 muted,
@@ -553,6 +588,69 @@ mod tests {
         for _ in 0..180 {
             sim.step(&Input::default(), DT);
         }
+    }
+
+    #[test]
+    fn mouse_strikes_aim_left_or_right_and_keep_direction_while_moving() {
+        for window in [Vec2::new(1280.0, 720.0), Vec2::new(800.0, 1000.0)] {
+            let view = Viewport::new(window, Vec2::new(960.0, 540.0), ScaleMode::Fit).unwrap();
+            for direction in [-1.0, 1.0] {
+                let mut sim = ArenaSimulation::new();
+                settle(&mut sim);
+                for (index, x) in [0.0, direction * 55.0].into_iter().enumerate() {
+                    let mut fighter = sim
+                        .scene
+                        .world
+                        .get::<&mut Fighter>(sim.fighters[index])
+                        .unwrap();
+                    fighter.body.position.x = x;
+                    fighter.facing = -direction;
+                }
+                // Click far above/below the opponent: only horizontal position
+                // should affect aim, even with portrait letterboxing.
+                let click = Vec2::new(direction * 100.0, direction * 150.0);
+                let screen = view.ui_to_screen(CAMERA.world_to_ui(click, &view));
+                let pointer = pointer_to_world(view.screen_to_ui(screen), &view);
+                let mut input = Input::default();
+                input.set(MOUSE_ATTACK, true);
+                input.set(if direction < 0.0 { RIGHT } else { LEFT }, true);
+                for _ in 0..20 {
+                    sim.step_with_pointer(&input, pointer, DT);
+                    input.consume_edges();
+                    assert_eq!(sim.fighter(0).facing, direction);
+                }
+                assert_eq!(sim.fighter(1).damage, 12.0);
+                assert_eq!(sim.fighter(1).body.velocity.x.signum(), direction);
+            }
+        }
+    }
+
+    #[test]
+    fn mouse_clicks_outside_content_do_not_attack_and_holding_does_not_repeat() {
+        let view = Viewport::new(
+            Vec2::new(800.0, 1000.0),
+            Vec2::new(960.0, 540.0),
+            ScaleMode::Fit,
+        )
+        .unwrap();
+        let mut sim = ArenaSimulation::new();
+        settle(&mut sim);
+        let mut input = Input::default();
+        input.set(MOUSE_ATTACK, true);
+        let pointer = pointer_to_world(view.screen_to_ui(Vec2::new(400.0, 10.0)), &view);
+        assert!(pointer.is_none());
+        sim.step_with_pointer(&input, pointer, DT);
+        assert_eq!(sim.fighter(0).attack, 0.0);
+        sim.step_with_pointer(&input, Some(Vec2::new(f32::NAN, 0.0)), DT);
+        assert_eq!(sim.fighter(0).attack, 0.0);
+        sim.step_with_pointer(&input, Some(Vec2::new(100.0, 0.0)), DT);
+        assert!(sim.fighter(0).attack > 0.0);
+        input.consume_edges();
+        for _ in 0..120 {
+            sim.step_with_pointer(&input, Some(Vec2::new(-100.0, 0.0)), DT);
+        }
+        assert_eq!(sim.fighter(0).attack, 0.0);
+        assert_eq!(sim.fighter(0).cooldown, 0.0);
     }
 
     #[test]
