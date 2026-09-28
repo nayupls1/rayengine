@@ -1,0 +1,67 @@
+# Assets and ownership
+
+Load assets in `Game::init`. The runtime caches them by canonical path and returns
+typed `TextureId`, `ModelId` and `SoundId` handles. Gameplay stores these handles;
+the runtime owns and drops the native resources.
+
+```no_run
+use rayengine::prelude::*;
+
+struct Artwork { portrait: Option<TextureId> }
+impl Game for Artwork {
+    fn init(&mut self, context: &mut InitContext<'_, '_>) -> Result<(), Error> {
+        self.portrait = Some(context.texture("assets/portrait.png")?);
+        Ok(())
+    }
+    fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+    fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+        frame.clear(Color::BLACK);
+        frame.world_2d(Camera2D::default(), |canvas| {
+            if let Some(texture) = self.portrait {
+                canvas.texture(texture, Aabb2::from_center(Vec2::ZERO, Vec2::splat(100.0)), Color::WHITE);
+            }
+        });
+    }
+}
+```
+
+Paths are relative to the game process's working directory. The CLI runs a game
+from its manifest directory, so `assets/...` works consistently there. If using
+Cargo directly from a different directory, choose explicit paths or run from
+the game directory. The backend expects UTF-8 paths without NUL characters;
+the SDK validates them before passing strings to raylib.
+
+Loading the same canonical path returns the same live handle. Explicit unload
+invalidates that handle, and future loads get a new one: indices are never
+reused during a run. `assets.texture/model/sound` return `None` after unload;
+drawing an unloaded handle returns `false`. Handles belong to one run and should
+not be retained for another `App::run`.
+
+Audio is opt-in:
+
+```no_run
+use rayengine::prelude::*;
+let mut config = Config::new("Game with sound");
+config.audio = true;
+// During init: let click = context.sound("assets/click.wav")?;
+// During an update: context.assets.play(click);
+```
+
+Audio initialization fails explicitly when a requested device is unavailable.
+Geometric examples do not initialize audio, so they run on machines without an
+audio device. Raylib exposes additional streaming/audio features through the
+SDK re-export, with its own resource lifetime rules.
+
+Textures and models drop before the graphics window closes. Sounds drop before
+the audio device closes. The game itself is also dropped before these handles,
+so game-owned native resources can be cleaned up while the context is alive,
+including when `init` returns an error.
+
+GPU work and raylib resource creation stay on the owning thread. Use worker
+threads for independent CPU work and pass results back explicitly. Do not send
+the raylib thread token or GPU resources to workers.
+
+For custom shaders, fonts or generated resources, use `InitContext::raylib` and
+`InitContext::thread`. For specialized drawing, use a canvas's `raw` guard or
+`Frame::with_raylib`. These APIs keep the basic SDK small while preserving
+raylib access. Asynchronous asset pipelines and hot reload are outside 0.0.1.

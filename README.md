@@ -1,20 +1,86 @@
 # rayengine
 
-A Linux-first Rust game SDK and CLI built on raylib. No editor: games are
-ordinary Cargo projects, with shared conventions for 2D and 3D.
+A Linux-first Rust game SDK and CLI built on raylib. **Version 0.0.1.**
+Games are ordinary Cargo projects, with a shared lifecycle and conventions for
+2D and 3D. No GUI editor or website toolchain is required.
 
-Version 0.0.1 is being built around fixed simulation timing, responsive
-viewports, typed entities/components, simple collision and playable examples.
-See [the architecture](docs/architecture.md).
+The SDK includes dense typed entities/components, optional scene parenting,
+fixed simulation updates, action input, timers, typed events, interpolated rendering, fitted cameras,
+high-DPI viewports, anchored UI, swept character collision, and cached
+texture/model/sound handles. Raylib is available directly for specialized work.
+
+Try the games:
 
 ```sh
-cargo check --workspace
-cargo doc --workspace --no-deps
+cargo run --release -p rayengine-demos --bin arena
+cargo run --release -p rayengine-demos --bin meadow
 ```
 
-Rust 1.88+, CMake, a C compiler, libclang, and Linux graphics/audio development
-libraries are required for the raylib SDK. The `rayengine-core` crate can be
-built and tested independently without graphics dependencies.
+**Arena** is a compact platform fighter: A/D or arrows to move, Space/W to
+double jump, J to strike, T to toggle the opponent AI, and R to reset. Damage
+increases knockback, and crossing the blast zone awards a knockout.
+
+**Meadow** is a small 3D exploration platformer: WASD to move, Space to jump,
+Shift to sprint, Q/E to orbit the camera, and R to return to your checkpoint.
+Explore the trails, climb the stone course, and collect golden orbs. Both games
+use geometric art and need no downloaded assets.
+
+Create a game:
+
+```sh
+cargo run -p rayengine-cli -- doctor
+cargo run -p rayengine-cli -- new ../my-game --kind 2d
+# Or --kind 3d
+cargo run --manifest-path ../my-game/Cargo.toml
+```
+
+The CLI supports `new`, `info`, `check`, `build`, `run`, and `doctor`. Add
+`--json` for a versioned result, structured errors and preserved Cargo diagnostics.
+Scaffolds use a local SDK path, inferred from this checkout or supplied with
+`--sdk-path /path/to/rayengine/crates/rayengine`; nothing is published to crates.io yet.
+
+Rust **1.89+**, CMake, a C compiler, libclang and Linux graphics/audio development
+libraries are required. See [installation and quickstart](crates/rayengine/docs/quickstart.md).
+The default backend is X11/XWayland; enable `--features rayengine/wayland` for
+native Wayland when running the demos. The core crate has no native dependencies.
+
+Read and export the docs:
+
+```sh
+cargo doc --workspace --no-deps
+# Open target/doc/rayengine/index.html
+```
+
+Guides are plain Markdown included in rustdoc, with checked Rust examples:
+
+- [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
+- [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
+- [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
+- [Assets and ownership](crates/rayengine/docs/assets.md)
+- [Tests and performance comparisons](crates/rayengine/docs/testing_performance.md)
+- [Agent workflow and JSON contract](crates/rayengine/docs/agent_workflow.md)
+- [Architecture](docs/architecture.md)
+
+Validate changes and compare performance:
+
+```sh
+scripts/check.sh
+python3 scripts/template_smoke.py
+scripts/native_smoke.sh                  # requires a display/OpenGL context
+scripts/benchmark.sh save before-change
+scripts/benchmark.sh compare before-change
+```
+
+Benchmark snapshots include samples, revision, toolchain and machine metadata.
+They measure CPU primitives and gameplay simulation; graphics probes check
+rendering separately. Shared CI runs correctness checks, native render probes,
+template checks, minimum-Rust checks and benchmark compilation.
+
+The first release keeps physics and rendering small: axis-aligned static
+collision and character movement, geometric drawing, textures and model access.
+There is no rigid-body solver, automatic world streaming, advanced lighting,
+navigation, networking or editor. Linux is the tested target; Windows/macOS are
+optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)
 is tracked separately and deferred beyond 0.0.1.
