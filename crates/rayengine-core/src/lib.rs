@@ -10,6 +10,7 @@ pub mod camera;
 pub mod collision;
 pub mod events;
 pub mod input;
+pub mod mesh;
 pub mod scene;
 pub mod time;
 pub mod transform;
@@ -22,6 +23,7 @@ pub mod prelude {
     pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D};
     pub use crate::events::Events;
     pub use crate::input::{Action, Input};
+    pub use crate::mesh::{MeshData, MeshError, MeshInfo};
     pub use crate::scene::Scene;
     pub use crate::time::{FixedClock, Tick, Timer};
     pub use crate::transform::{
