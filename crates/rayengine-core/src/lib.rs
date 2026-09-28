@@ -8,6 +8,7 @@ pub use hecs::{Bundle, Entity, World};
 
 pub mod camera;
 pub mod collision;
+pub mod events;
 pub mod input;
 pub mod scene;
 pub mod time;
@@ -19,9 +20,10 @@ pub mod viewport;
 pub mod prelude {
     pub use crate::camera::{Camera2D, Camera3D};
     pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D};
+    pub use crate::events::Events;
     pub use crate::input::{Action, Input};
     pub use crate::scene::Scene;
-    pub use crate::time::{FixedClock, Tick};
+    pub use crate::time::{FixedClock, Tick, Timer};
     pub use crate::transform::{
         GlobalTransform2D, GlobalTransform3D, Parent, Transform2D, Transform3D,
     };

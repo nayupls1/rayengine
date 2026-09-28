@@ -43,9 +43,10 @@ def main():
 
     criterion = Path(os.environ["CRITERION_HOME"])
     source_name = baseline if mode == "save" else "new"
+    started = (destination / "metadata.json").stat().st_mtime_ns
     estimates = {}
     for path in sorted(criterion.rglob("estimates.json")):
-        if path.parent.name != source_name:
+        if path.parent.name != source_name or path.stat().st_mtime_ns < started:
             continue
         relative = path.relative_to(criterion)
         name = "/".join(relative.parts[:-2])

@@ -85,6 +85,8 @@ impl Viewport {
     /// Target pixel dimensions at the given framebuffer scale, rounded and bounded.
     pub fn render_size(&self, dpi: Vec2) -> (u32, u32) {
         let physical = self.size * dpi.max(Vec2::ONE);
+        // Preserve aspect when limiting very large/high-DPI targets.
+        let physical = physical * (8192.0 / physical.max_element()).min(1.0);
         (
             physical.x.round().clamp(1.0, 8192.0) as u32,
             physical.y.round().clamp(1.0, 8192.0) as u32,
@@ -143,5 +145,16 @@ mod tests {
     fn minimized_and_nonfinite_sizes_are_rejected() {
         assert!(Viewport::new(Vec2::ZERO, Vec2::ONE, ScaleMode::Fit).is_none());
         assert!(Viewport::new(Vec2::splat(f32::NAN), Vec2::ONE, ScaleMode::Fit).is_none());
+    }
+
+    #[test]
+    fn target_limit_preserves_camera_aspect_ratio() {
+        let view = Viewport::new(
+            Vec2::new(16000.0, 9000.0),
+            Vec2::new(960.0, 540.0),
+            ScaleMode::Fit,
+        )
+        .unwrap();
+        assert_eq!(view.render_size(Vec2::ONE), (8192, 4608));
     }
 }

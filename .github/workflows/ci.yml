@@ -47,5 +47,5 @@ jobs:
           sudo apt-get install -y cmake clang libclang-dev pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
       - name: Minimum Rust version
         run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          cargo +1.88.0 check --locked --workspace --all-targets
+          rustup toolchain install 1.89.0 --profile minimal
+          cargo +1.89.0 check --locked --workspace --all-targets

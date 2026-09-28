@@ -9,7 +9,9 @@ repository.workspace = true
 
 [features]
 default = []
-wayland = ["raylib/wayland"]
+# Enable the bundled GLFW Wayland backend. raylib's separate `wayland` alias
+# adds an unnecessary system GLFW link and does not enable this CMake option.
+wayland = ["raylib/GLFW_BUILD_WAYLAND"]
 
 [dependencies]
 rayengine-core.workspace = true

@@ -120,6 +120,20 @@ fn primitives(c: &mut Criterion) {
             black_box(&input);
         })
     });
+    let mut timer = Timer::repeating(Duration::from_millis(250));
+    c.bench_function("timer_repeating", |b| {
+        b.iter(|| black_box(timer.advance(black_box(Duration::from_millis(10)))))
+    });
+    let mut events = Events::with_capacity(64);
+    c.bench_function("event_queue_64", |b| {
+        b.iter(|| {
+            for i in 0..64 {
+                events.send(black_box(i));
+            }
+            black_box(events.read());
+            events.clear();
+        })
+    });
 }
 
 criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives }

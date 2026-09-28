@@ -90,6 +90,86 @@ impl FixedClock {
     }
 }
 
+/// Game-owned timer, advanced explicitly by simulation or wall-clock time.
+///
+/// A repeated timer returns the number of crossed periods, so a long update
+/// cannot silently lose scheduled events. Pausing never queues elapsed time.
+#[derive(Clone, Debug)]
+pub struct Timer {
+    duration: Duration,
+    elapsed: Duration,
+    repeating: bool,
+    finished: bool,
+    paused: bool,
+}
+
+impl Timer {
+    /// Timer that completes once. A zero duration completes on its first advance.
+    pub fn once(duration: Duration) -> Self {
+        Self {
+            duration,
+            elapsed: Duration::ZERO,
+            repeating: false,
+            finished: false,
+            paused: false,
+        }
+    }
+    /// Repeated timer. Panics for a zero period.
+    pub fn repeating(duration: Duration) -> Self {
+        assert!(
+            !duration.is_zero(),
+            "repeating timer period must be nonzero"
+        );
+        Self {
+            repeating: true,
+            ..Self::once(duration)
+        }
+    }
+    /// Advances by a duration and returns completions (saturated at `u32::MAX`).
+    pub fn advance(&mut self, elapsed: Duration) -> u32 {
+        if self.paused || self.finished {
+            return 0;
+        }
+        self.elapsed = self.elapsed.saturating_add(elapsed);
+        if self.elapsed < self.duration {
+            return 0;
+        }
+        if self.repeating {
+            let completions = self.elapsed.as_nanos() / self.duration.as_nanos();
+            let remainder = self.elapsed.as_nanos() % self.duration.as_nanos();
+            self.elapsed = Duration::new(
+                (remainder / 1_000_000_000) as u64,
+                (remainder % 1_000_000_000) as u32,
+            );
+            completions.min(u128::from(u32::MAX)) as u32
+        } else {
+            self.elapsed = self.duration;
+            self.finished = true;
+            1
+        }
+    }
+    /// Whether a one-shot timer has completed. Repeated timers never finish.
+    pub fn finished(&self) -> bool {
+        self.finished
+    }
+    /// Progress from zero to one; repeated timers report their current period.
+    pub fn fraction(&self) -> f32 {
+        if self.duration.is_zero() {
+            return if self.finished { 1.0 } else { 0.0 };
+        }
+        (self.elapsed.as_secs_f64() / self.duration.as_secs_f64()).clamp(0.0, 1.0) as f32
+    }
+    /// Pauses/resumes the timer without accumulating elapsed time while paused.
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+    }
+    /// Restarts from zero, preserving the current paused state.
+    pub fn reset(&mut self) {
+        self.elapsed = Duration::ZERO;
+        self.finished = false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,5 +202,30 @@ mod tests {
     fn zero_elapsed_never_invents_an_update() {
         let mut clock = FixedClock::new(60, 8);
         assert_eq!(clock.advance(Duration::ZERO).steps, 0);
+    }
+
+    #[test]
+    fn repeating_timer_keeps_multiple_completions_and_remainder() {
+        let mut timer = Timer::repeating(Duration::from_millis(100));
+        assert_eq!(timer.advance(Duration::from_millis(350)), 3);
+        assert_eq!(timer.fraction(), 0.5);
+        assert_eq!(timer.advance(Duration::from_millis(50)), 1);
+        assert!(!timer.finished());
+    }
+
+    #[test]
+    fn one_shot_pause_and_reset_have_explicit_behavior() {
+        let mut timer = Timer::once(Duration::from_millis(100));
+        timer.set_paused(true);
+        assert_eq!(timer.advance(Duration::from_secs(10)), 0);
+        timer.set_paused(false);
+        assert_eq!(timer.advance(Duration::from_millis(120)), 1);
+        assert!(timer.finished());
+        assert_eq!(timer.advance(Duration::from_secs(1)), 0);
+        timer.reset();
+        assert_eq!(timer.advance(Duration::from_millis(100)), 1);
+        let mut immediate = Timer::once(Duration::ZERO);
+        assert_eq!(immediate.advance(Duration::ZERO), 1);
+        assert_eq!(immediate.advance(Duration::ZERO), 0);
     }
 }

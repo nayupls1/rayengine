@@ -257,7 +257,7 @@ fn create_project(
     })?;
     fs::create_dir(path.join("src")).map_err(io_error)?;
     let cargo = format!(
-        "[package]\nname = {}\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.88\"\n\n[dependencies]\nrayengine = {{ path = {} }}\n\n[workspace]\n",
+        "[package]\nname = {}\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\n\n[dependencies]\nrayengine = {{ path = {} }}\n\n[workspace]\n",
         serde_json::to_string(&name).expect("string serialization"),
         serde_json::to_string(sdk_string).expect("string serialization")
     );

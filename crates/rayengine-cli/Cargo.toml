@@ -10,6 +10,7 @@ repository.workspace = true
 [[bin]]
 name = "rayengine"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 clap.workspace = true
