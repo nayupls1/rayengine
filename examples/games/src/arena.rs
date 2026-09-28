@@ -307,6 +307,16 @@ fn approach(value: f32, target: f32, amount: f32) -> f32 {
     value + (target - value).clamp(-amount, amount)
 }
 
+fn shadow_position(feet: Vec2, solids: &[Aabb2]) -> Option<Vec2> {
+    solids
+        .iter()
+        .filter(|solid| {
+            feet.x >= solid.min.x && feet.x <= solid.max.x && feet.y <= solid.min.y + 0.001
+        })
+        .min_by(|a, b| a.min.y.total_cmp(&b.min.y))
+        .map(|solid| Vec2::new(feet.x, solid.min.y - 2.0))
+}
+
 /// Playable presentation over [`ArenaSimulation`].
 pub struct Arena {
     simulation: ArenaSimulation,
@@ -423,11 +433,10 @@ impl Game for Arena {
                         coral
                     };
                     // Shadow, feet, torso, face: all primitive art.
-                    canvas.circle(
-                        Vec2::new(position.x, 123.0),
-                        16.0,
-                        Color::new(13, 23, 38, 255),
-                    );
+                    let feet = position + Vec2::Y * fighter.body.half_size.y;
+                    if let Some(shadow) = shadow_position(feet, &self.simulation.solids) {
+                        canvas.circle(shadow, 16.0, Color::new(13, 23, 38, 255));
+                    }
                     canvas.rectangle(
                         Aabb2::from_center(position + Vec2::new(-10.0, 23.0), Vec2::new(11.0, 9.0)),
                         color,
@@ -544,6 +553,53 @@ mod tests {
         for _ in 0..180 {
             sim.step(&Input::default(), DT);
         }
+    }
+
+    #[test]
+    fn shadows_follow_the_surface_of_every_landing_platform() {
+        let mut sim = ArenaSimulation::new();
+        for solid in sim.solids.clone() {
+            {
+                let mut fighter = sim
+                    .scene
+                    .world
+                    .get::<&mut Fighter>(sim.fighters[0])
+                    .unwrap();
+                fighter.body.position = Vec2::new(
+                    solid.center().x,
+                    solid.min.y - fighter.body.half_size.y - 1.0,
+                );
+                fighter.body.velocity = Vec2::ZERO;
+            }
+            settle(&mut sim);
+            let fighter = sim.fighter(0);
+            assert!(fighter.body.grounded);
+            for alpha in [0.0, 0.5, 1.0] {
+                let position = fighter.previous.lerp(fighter.body.position, alpha);
+                let feet = position + Vec2::Y * fighter.body.half_size.y;
+                assert_eq!(
+                    shadow_position(feet, &sim.solids),
+                    Some(Vec2::new(position.x, solid.min.y - 2.0))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn airborne_shadow_uses_nearest_surface_below_and_disappears_offstage() {
+        let sim = ArenaSimulation::new();
+        let platform = sim.solids[1];
+        let x = platform.center().x;
+        assert_eq!(
+            shadow_position(Vec2::new(x, platform.min.y - 50.0), &sim.solids),
+            Some(Vec2::new(x, platform.min.y - 2.0))
+        );
+        assert_eq!(
+            shadow_position(Vec2::new(x, platform.max.y + 1.0), &sim.solids),
+            Some(Vec2::new(x, sim.solids[0].min.y - 2.0))
+        );
+        assert_eq!(shadow_position(Vec2::new(500.0, 0.0), &sim.solids), None);
+        assert_eq!(shadow_position(Vec2::new(0.0, 200.0), &sim.solids), None);
     }
 
     #[test]
