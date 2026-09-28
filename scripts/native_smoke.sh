@@ -13,7 +13,7 @@ elif [[ "$backend" != x11 ]]; then
     exit 2
 fi
 cargo test -p rayengine "${features[@]}" native_render_smoke -- --ignored --test-threads=1
-cargo test -p rayengine "${features[@]}" native_mesh_smoke -- --ignored --test-threads=1
+cargo test -p rayengine "${features[@]}" native_mesh -- --ignored --test-threads=1
 cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored --test-threads=1
 cargo build -p rayengine-demos "${demo_features[@]}" --bins
 rayengine_target=${CARGO_TARGET_DIR:-"$rayengine_root/target"}

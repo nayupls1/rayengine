@@ -31,6 +31,9 @@ pixel results, UI scaling, portrait resizing and an absolute screenshot path.
 The generated mesh probe also verifies indexed/unindexed uploads, replacement,
 transforms, tint, failure preserving the old geometry, stale handles, slot reuse,
 and resource teardown after both normal exit and initialization failure.
+On Linux the GPU failure probe rejects each vertex/index buffer allocation in
+turn, checks partial resource cleanup, and verifies the old mesh still renders
+after failed replacement. Its test-only dispatch hook is restored before drawing.
 The script also runs both demos at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;

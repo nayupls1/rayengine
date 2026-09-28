@@ -8,6 +8,8 @@ use crate::{
 use rayengine_core::mesh::MeshData;
 use raylib::prelude::*;
 
+mod gpu;
+
 pub(super) struct MeshAssets {
     slots: Vec<Slot>,
     free: Vec<usize>,
@@ -175,11 +177,10 @@ fn upload(thread: &RaylibThread, data: &MeshData) -> Result<Mesh, Error> {
     let mesh = builder
         .build(thread)
         .map_err(|error| Error::Asset(format!("mesh upload: {error}")))?;
-    if mesh.vaoId == 0 {
-        return Err(Error::Asset(
-            "raylib did not allocate a mesh vertex array".into(),
-        ));
-    }
+    // Object creation can succeed even when glBufferData fails. Accept the
+    // replacement only after every required buffer has its full storage. On
+    // failure this temporary Mesh drops, leaving the store's old mesh intact.
+    gpu::verify(thread, &mesh, data)?;
     Ok(mesh)
 }
 
@@ -230,6 +231,81 @@ mod tests {
             "mesh pixel at {world:?}, frame {}",
             frame.index
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires native OpenGL; run serially via scripts/native_smoke.sh"]
+    fn native_mesh_gpu_failure_smoke() {
+        use gpu::fault::RejectedUpload;
+
+        struct Probe {
+            mesh: Option<MeshId>,
+        }
+        impl Game for Probe {
+            fn init(&mut self, context: &mut InitContext<'_, '_>) -> Result<(), Error> {
+                for reject in 1..=5 {
+                    let fault = RejectedUpload::new(context.thread, reject);
+                    assert!(
+                        matches!(context.mesh(&quad([255; 4])), Err(Error::Asset(_))),
+                        "creation accepted failed GPU buffer {reject}"
+                    );
+                    fault.assert_partial_upload_released();
+                    assert_eq!(context.assets.meshes.live, 0);
+                    assert!(context.assets.meshes.slots.is_empty());
+                    assert!(context.assets.meshes.material.is_none());
+                }
+                self.mesh = Some(context.mesh(&quad([0, 128, 0, 255]))?);
+                Ok(())
+            }
+
+            fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+
+            fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+                let id = self.mesh.unwrap();
+                let vao = frame.assets.mesh(id).unwrap().vaoId;
+                for reject in 1..=5 {
+                    let fault = RejectedUpload::new(frame.thread, reject);
+                    assert!(
+                        matches!(
+                            frame.replace_mesh(id, &quad([255, 0, 0, 255])),
+                            Err(Error::Asset(_))
+                        ),
+                        "replacement accepted failed GPU buffer {reject}"
+                    );
+                    fault.assert_partial_upload_released();
+                    assert_eq!(frame.assets.mesh(id).unwrap().vaoId, vao);
+                    assert_eq!(frame.assets.meshes.live, 1);
+                    assert_eq!(frame.assets.meshes.slots.len(), 1);
+                    // Positions remain live, and buffer inspection restores GL state.
+                    fault.assert_query_binding_restored(frame.assets.mesh(id).unwrap());
+                    drop(fault);
+                    frame.clear(Color::BLACK);
+                    frame.world_3d(camera(), |canvas| {
+                        assert!(canvas.mesh(id, Transform3D::default(), Color::WHITE))
+                    });
+                    assert_pixel(frame, Vec3::ZERO, Color::GREEN);
+                }
+                frame.replace_mesh(id, &quad([0, 0, 255, 255])).unwrap();
+                frame.clear(Color::BLACK);
+                frame.world_3d(camera(), |canvas| {
+                    assert!(canvas.mesh(id, Transform3D::default(), Color::WHITE))
+                });
+                assert_pixel(frame, Vec3::ZERO, Color::BLUE);
+            }
+        }
+        let mut config = Config::new("GPU mesh allocation failure probe");
+        config.window_size = (960, 540);
+        config.vsync = false;
+        App::new(config)
+            .with_options(RunOptions {
+                frames: Some(1),
+                hidden: true,
+                uncapped: true,
+                ..RunOptions::default()
+            })
+            .run(Probe { mesh: None })
+            .unwrap();
     }
 
     #[test]

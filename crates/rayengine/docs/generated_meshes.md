@@ -107,7 +107,13 @@ an `Error::Asset` with the validation or upload failure message.
 `InitContext::replace_mesh` and `Frame::replace_mesh` preserve a live handle.
 They upload a complete replacement before dropping the old resource, so a
 validation/upload error leaves the old geometry usable. This temporarily needs
-space for both GPU meshes. Uploads also allocate typed conversion buffers and
+space for both GPU meshes. Before accepting an upload, the SDK checks the actual
+OpenGL storage size of the position, UV, and any supplied normal/color/index
+buffers. A nonzero VAO or buffer name alone is insufficient. Missing or undersized
+storage returns `Error::Asset` and frees the partial mesh; queries restore the
+array-buffer binding and leave VAO element bindings untouched.
+
+Uploads also allocate typed conversion buffers and
 raylib-owned CPU copies; schedule them when geometry changes, never on every
 draw. This first API uses static uploads and complete replacement, with no
 partial buffer updates, upload budgets, or asynchronous scheduling.
@@ -124,8 +130,9 @@ All generated meshes share one engine-owned default material. It is created
 lazily and released when the last mesh unloads. Remaining meshes and the material
 drop before the graphics context closes, including on initialization failure.
 Raylib-rs returns a non-owning default material wrapper; a private, documented
-ownership conversion installs its RAII owner. The SDK denies other unsafe code;
-the CPU core continues to forbid it.
+ownership conversion installs its RAII owner. OpenGL allocation checks also use a
+private render-thread FFI bridge with documented pointer/procedure invariants.
+The SDK denies unsafe code outside these bridges; the CPU core continues to forbid it.
 
 Render-thread contexts expose upload and replacement. `Update` only offers
 shared asset access; GPU mutation happens during initialization or rendering.
@@ -144,6 +151,12 @@ face selection, meshing algorithms, and world streaming policy remain game code.
 Run CPU validation tests with `cargo test -p rayengine-core mesh`. The native
 mesh probe in `scripts/native_smoke.sh` checks actual pixels, indexed/unindexed
 replacement, transforms, tint, failed replacement, stale handles, repeated slot
-reuse, portrait resizing, and normal/error teardown. `mesh_validation` Criterion
+reuse, portrait resizing, and normal/error teardown. On Linux a second native
+probe rejects each `glBufferData` upload individually while allowing object
+creation and the other allocations. It verifies failed creation/replacement,
+partial resource cleanup, unchanged handles/geometry, rendered old pixels, and
+recovery on a later successful upload. The test-only GLAD hook is scoped and
+restores the original dispatch on exit or unwind; native probes run serially.
+`mesh_validation` Criterion
 workloads measure positions-only and indexed geometry with all attributes at
 1K/10K triangles. They measure CPU validation, not GPU upload or rendering.
