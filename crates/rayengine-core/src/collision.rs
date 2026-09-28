@@ -191,7 +191,7 @@ fn sweep_axis<const N: usize>(
         return (position[axis], false);
     }
     let mut allowed = step;
-    let mut resolved = position[axis] + step;
+    let mut boundary = 0.0;
     let mut hit = false;
     for (min, max) in solids {
         let overlaps_other_axes = (0..N)
@@ -204,23 +204,35 @@ fn sweep_axis<const N: usize>(
         let high = position[axis] + half[axis];
         if step > 0.0 && high <= min[axis] && high + allowed >= min[axis] {
             allowed = (min[axis] - high).max(0.0);
-            // Set the contact center directly: adding a clipped displacement
-            // can round the body inside the solid and lose the next sweep.
-            resolved = min[axis] - half[axis];
-            if resolved + half[axis] > min[axis] {
-                resolved = resolved.next_down();
-            }
+            boundary = min[axis];
             hit = true;
         } else if step < 0.0 && low >= max[axis] && low + allowed <= max[axis] {
             allowed = (max[axis] - low).min(0.0);
-            resolved = max[axis] + half[axis];
-            if resolved - half[axis] < max[axis] {
-                resolved = resolved.next_up();
-            }
+            boundary = max[axis];
             hit = true;
         }
     }
-    (resolved, hit)
+    if !hit {
+        return (position[axis] + step, false);
+    }
+    // Resolve only the nearest contact after scanning the boxes. Adding a
+    // clipped displacement can round the body inside and lose the next sweep.
+    let resolved = if step > 0.0 {
+        let center = boundary - half[axis];
+        if center + half[axis] > boundary {
+            center.next_down()
+        } else {
+            center
+        }
+    } else {
+        let center = boundary + half[axis];
+        if center - half[axis] < boundary {
+            center.next_up()
+        } else {
+            center
+        }
+    };
+    (resolved, true)
 }
 
 #[cfg(test)]
