@@ -24,6 +24,12 @@ pub struct ModelId(pub(crate) usize);
 /// Stable handle for a sound owned by the current game run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SoundId(pub(crate) usize);
+/// Stable shader handle owned by the current game run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ShaderId(pub(crate) usize);
+/// Stable material-description handle owned by the current game run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MaterialId(pub(crate) usize);
 
 /// Versioned handle for a generated mesh owned by the current game run.
 ///

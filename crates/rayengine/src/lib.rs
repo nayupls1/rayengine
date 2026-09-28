@@ -5,6 +5,7 @@ pub use raylib;
 
 pub mod assets;
 pub mod input;
+pub mod material;
 pub mod render;
 pub mod runtime;
 
@@ -34,8 +35,9 @@ pub mod guides {
 
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
-    pub use crate::assets::{MeshId, ModelId, SoundId, TextureId};
+    pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
     pub use crate::input::{Bindings, Button};
+    pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
     pub use crate::render::Frame;
     pub use crate::{App, Config, CursorMode, Error, Game, InitContext, RunOptions, Update};
     pub use rayengine_core::prelude::*;
