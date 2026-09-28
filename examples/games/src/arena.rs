@@ -23,6 +23,8 @@ pub const RESET: Action = Action(4);
 pub const TOGGLE_AI: Action = Action(5);
 /// Strike left or right toward the mouse's world-space position.
 pub const MOUSE_ATTACK: Action = Action(6);
+/// Drop through the current one-way platform, once per press.
+pub const DROP: Action = Action(7);
 
 #[derive(Clone, Copy)]
 enum Strike {
@@ -49,6 +51,7 @@ pub struct Fighter {
     attack: f32,
     cooldown: f32,
     connected: bool,
+    drop_platform: Option<usize>,
 }
 
 impl Fighter {
@@ -65,6 +68,7 @@ impl Fighter {
             attack: 0.0,
             cooldown: 0.0,
             connected: false,
+            drop_platform: None,
         }
     }
 
@@ -178,21 +182,23 @@ impl ArenaSimulation {
             (
                 input.axis(LEFT, RIGHT),
                 input.pressed(JUMP),
+                input.pressed(DROP),
                 mouse_strike.or_else(|| input.pressed(ATTACK).then_some(Strike::Facing)),
             ),
             (
                 enemy_move,
                 enemy_jump,
+                false,
                 (self.enemy_ai && separation.abs() < 100.0).then_some(Strike::Facing),
             ),
         ];
-        for (index, &(axis, jump, attack)) in controls.iter().enumerate() {
+        for (index, &(axis, jump, drop, attack)) in controls.iter().enumerate() {
             let mut fighter = self
                 .scene
                 .world
                 .get::<&mut Fighter>(self.fighters[index])
                 .expect("fighter exists");
-            advance_fighter(&mut fighter, axis, jump, attack, dt, &self.solids);
+            advance_fighter(&mut fighter, axis, jump, drop, attack, dt, &self.solids);
         }
         for (attacker, defender) in [(0, 1), (1, 0)] {
             let strike = self.fighter(attacker);
@@ -267,6 +273,7 @@ fn advance_fighter(
     fighter: &mut Fighter,
     axis: f32,
     jump: bool,
+    drop: bool,
     attack: Option<Strike>,
     dt: f32,
     solids: &[Aabb2],
@@ -276,6 +283,15 @@ fn advance_fighter(
     fighter.cooldown = (fighter.cooldown - dt).max(0.0);
     fighter.attack = (fighter.attack - dt).max(0.0);
     fighter.jump_buffer = (fighter.jump_buffer - dt).max(0.0);
+    if let Some(index) = fighter.drop_platform {
+        let bounds = fighter.body.bounds();
+        let platform = solids[index];
+        // Restore collision once clear of the platform, including an air jump
+        // that carries the fighter back above it before finishing the drop.
+        if bounds.min.y >= platform.max.y || bounds.max.y <= platform.min.y {
+            fighter.drop_platform = None;
+        }
+    }
     if fighter.body.grounded {
         fighter.jumps = 2;
         fighter.coyote = 0.1;
@@ -286,6 +302,22 @@ fn advance_fighter(
         fighter.jump_buffer = 0.12;
     }
     if fighter.stun <= 0.0 {
+        if drop && fighter.body.grounded {
+            let bounds = fighter.body.bounds();
+            let support = solids.iter().enumerate().skip(1).find(|(_, platform)| {
+                (bounds.max.y - platform.min.y).abs() <= 0.001
+                    && bounds.max.x > platform.min.x
+                    && bounds.min.x < platform.max.x
+            });
+            if let Some((index, _)) = support {
+                fighter.drop_platform = Some(index);
+                fighter.body.grounded = false;
+                fighter.body.velocity.y = fighter.body.velocity.y.max(80.0);
+                fighter.jumps = 1;
+                fighter.coyote = 0.0;
+                fighter.jump_buffer = 0.0;
+            }
+        }
         let acceleration = if fighter.body.grounded {
             2600.0
         } else {
@@ -327,8 +359,11 @@ fn advance_fighter(
     // Stack storage keeps this game-specific collision policy allocation-free.
     let mut active = [solids[0]; 4];
     let mut count = 1;
-    for &platform in &solids[1..] {
-        if fighter.body.velocity.y >= 0.0 && fighter.body.bounds().max.y <= platform.min.y + 0.001 {
+    for (index, &platform) in solids.iter().enumerate().skip(1) {
+        if fighter.drop_platform != Some(index)
+            && fighter.body.velocity.y >= 0.0
+            && fighter.body.bounds().max.y <= platform.min.y + 0.001
+        {
             active[count] = platform;
             count += 1;
         }
@@ -380,6 +415,7 @@ impl Game for Arena {
             .bind(RIGHT, KeyboardKey::KEY_RIGHT)
             .bind(JUMP, KeyboardKey::KEY_SPACE)
             .bind(JUMP, KeyboardKey::KEY_W)
+            .bind(DROP, KeyboardKey::KEY_S)
             .bind(ATTACK, KeyboardKey::KEY_J)
             .bind(MOUSE_ATTACK, Button::Mouse(MouseButton::MOUSE_BUTTON_LEFT))
             .bind(RESET, KeyboardKey::KEY_R)
@@ -524,7 +560,7 @@ impl Game for Arena {
             );
             ui.text("ARENA", Vec2::new(24.0, 40.0), 36.0, Color::WHITE);
             ui.text(
-                "A/D move   W/SPACE double jump   CLICK/J strike   T toggle AI   R reset",
+                "A/D move   W/SPACE jump   S drop   CLICK/J strike   T AI   R reset",
                 Vec2::new(26.0, 86.0),
                 14.0,
                 muted,
@@ -651,6 +687,117 @@ mod tests {
         }
         assert_eq!(sim.fighter(0).attack, 0.0);
         assert_eq!(sim.fighter(0).cooldown, 0.0);
+    }
+
+    fn stand_on(sim: &mut ArenaSimulation, index: usize) {
+        let solid = sim.solids[index];
+        {
+            let mut fighter = sim
+                .scene
+                .world
+                .get::<&mut Fighter>(sim.fighters[0])
+                .unwrap();
+            *fighter = Fighter::new(Vec2::new(solid.center().x, solid.min.y - 28.0), 1.0);
+        }
+        settle(sim);
+        assert!(sim.fighter(0).body.grounded);
+        assert_eq!(sim.fighter(0).body.bounds().max.y, solid.min.y);
+    }
+
+    #[test]
+    fn down_drops_through_every_upper_platform_and_lands_on_the_stage() {
+        for index in 1..4 {
+            let mut sim = ArenaSimulation::new();
+            stand_on(&mut sim, index);
+            let platform = sim.solids[index];
+            let mut input = Input::default();
+            input.set(DROP, true);
+            sim.step(&input, DT);
+            assert!(!sim.fighter(0).body.grounded);
+            assert!(sim.fighter(0).body.bounds().max.y > platform.min.y);
+            input.consume_edges();
+            for _ in 0..180 {
+                sim.step(&input, DT);
+            }
+            let fighter = sim.fighter(0);
+            assert!(fighter.body.grounded);
+            assert_eq!(fighter.body.bounds().max.y, sim.solids[0].min.y);
+            assert!(fighter.drop_platform.is_none());
+        }
+    }
+
+    #[test]
+    fn down_cannot_drop_through_the_main_stage_or_cancel_ground_jump() {
+        let mut sim = ArenaSimulation::new();
+        stand_on(&mut sim, 0);
+        let mut input = Input::default();
+        input.set(DROP, true);
+        sim.step(&input, DT);
+        assert!(sim.fighter(0).body.grounded);
+        assert!(sim.fighter(0).drop_platform.is_none());
+        input.set(JUMP, true);
+        sim.step(&input, DT);
+        assert!(sim.fighter(0).body.velocity.y < 0.0);
+    }
+
+    #[test]
+    fn a_drop_skips_only_its_support_and_can_be_repeated_on_the_next_platform() {
+        let mut sim = ArenaSimulation::new();
+        // Put a lower platform directly below the highest one. Holding S must
+        // land here; a second press should then drop to the main stage.
+        sim.solids[1] = Aabb2::from_center(Vec2::new(0.0, 30.0), Vec2::new(155.0, 16.0));
+        stand_on(&mut sim, 3);
+        let mut input = Input::default();
+        input.set(DROP, true);
+        input.set(JUMP, true);
+        sim.step(&input, DT);
+        assert!(
+            sim.fighter(0).body.velocity.y > 0.0,
+            "drop takes priority on platforms"
+        );
+        assert_eq!(
+            sim.fighter(0).jumps,
+            1,
+            "one air jump remains after dropping"
+        );
+        input.consume_edges();
+        for _ in 0..180 {
+            sim.step(&input, DT);
+        }
+        assert_eq!(sim.fighter(0).body.bounds().max.y, sim.solids[1].min.y);
+        assert!(sim.fighter(0).body.grounded);
+        input.set(DROP, false);
+        input.consume_edges();
+        input.set(DROP, true);
+        sim.step(&input, DT);
+        input.consume_edges();
+        for _ in 0..180 {
+            sim.step(&input, DT);
+        }
+        assert!(sim.fighter(0).body.grounded);
+        assert_eq!(sim.fighter(0).body.bounds().max.y, sim.solids[0].min.y);
+    }
+
+    #[test]
+    fn air_jump_after_dropping_can_land_back_on_the_original_platform() {
+        let mut sim = ArenaSimulation::new();
+        stand_on(&mut sim, 1);
+        let mut input = Input::default();
+        input.set(DROP, true);
+        sim.step(&input, DT);
+        input.consume_edges();
+        input.set(DROP, false);
+        input.set(JUMP, true);
+        sim.step(&input, DT);
+        assert!(sim.fighter(0).body.velocity.y < 0.0);
+        assert_eq!(sim.fighter(0).jumps, 0);
+        input.consume_edges();
+        for _ in 0..180 {
+            sim.step(&input, DT);
+        }
+        assert!(sim.fighter(0).body.grounded);
+        assert_eq!(sim.fighter(0).body.bounds().max.y, sim.solids[1].min.y);
+        assert!(sim.fighter(0).drop_platform.is_none());
     }
 
     #[test]

@@ -17,9 +17,10 @@ cargo run --release -p rayengine-demos --bin meadow
 ```
 
 **Arena** is a compact platform fighter: A/D or arrows to move, Space/W to
-double jump, left click to strike toward the mouse (left/right), J to strike
-in the facing direction, T to toggle the opponent AI, and R to reset. Damage
-increases knockback, and crossing the blast zone awards a knockout.
+double jump, S to drop through the current upper platform, left click to strike
+toward the mouse (left/right), J to strike in the facing direction, T to toggle
+the opponent AI, and R to reset. Damage increases knockback, and crossing the
+blast zone awards a knockout.
 
 **Meadow** is a small 3D exploration platformer: WASD to move, Space to jump,
 Shift to sprint, Q/E to orbit the camera, and R to return to your checkpoint.
