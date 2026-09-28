@@ -1,0 +1,15 @@
+[package]
+name = "rayengine-core"
+description = "Display-independent game primitives for rayengine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+glam.workspace = true
+hecs.workspace = true
+
+[lints]
+workspace = true

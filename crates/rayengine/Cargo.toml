@@ -1,0 +1,19 @@
+[package]
+name = "rayengine"
+description = "A small Linux-first Rust game SDK over raylib"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+wayland = ["raylib/wayland"]
+
+[dependencies]
+rayengine-core.workspace = true
+raylib.workspace = true
+
+[lints]
+workspace = true

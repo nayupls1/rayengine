@@ -1,0 +1,15 @@
+[package]
+name = "rayengine-demos"
+description = "Playable 2D and 3D examples for rayengine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rayengine.workspace = true
+
+[lints]
+workspace = true
