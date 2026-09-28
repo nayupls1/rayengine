@@ -30,7 +30,7 @@ The native probe checks texture cache/unload behavior, model loading, 2D and 3D
 pixel results, UI scaling, portrait resizing and an absolute screenshot path.
 The script also runs both demos at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
-on an upper platform and Meadow's character stays visible above the first stone;
+on an upper platform and Meadow's first-person view stays above the first stone;
 their screenshots are saved under `artifacts/regressions/`.
 Graphics probes are intentionally ignored by normal
 `cargo test`; the smoke script invokes them explicitly. Software OpenGL tests

@@ -22,8 +22,9 @@ toward the mouse (left/right), J to strike in the facing direction, T to toggle
 the opponent AI, and R to reset. Damage increases knockback, and crossing the
 blast zone awards a knockout.
 
-**Meadow** is a small 3D exploration platformer: WASD to move, Space to jump,
-Shift to sprint, Q/E to orbit the camera, and R to return to your checkpoint.
+**Meadow** is a first-person 3D exploration platformer: mouse to look around,
+WASD to move, Space to jump, Shift to sprint, and R to return to your checkpoint.
+Q/E also turn left/right. Escape exits; switching away releases the captured cursor.
 Explore the trails, climb the stone course, and collect golden orbs. Both games
 use geometric art and need no downloaded assets.
 

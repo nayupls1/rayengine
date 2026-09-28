@@ -3,6 +3,10 @@
 use rayengine::prelude::*;
 use rayengine::raylib::prelude::RaylibDraw3D;
 
+const MOUSE_SENSITIVITY: f32 = 0.0025;
+const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.05;
+const EYE_HEIGHT: f32 = 0.7;
+
 /// Strafe left relative to the camera.
 pub const LEFT: Action = Action(0);
 /// Strafe right relative to the camera.
@@ -15,10 +19,10 @@ pub const BACK: Action = Action(3);
 pub const JUMP: Action = Action(4);
 /// Sprint.
 pub const SPRINT: Action = Action(5);
-/// Orbit the camera left.
-pub const ORBIT_LEFT: Action = Action(6);
-/// Orbit the camera right.
-pub const ORBIT_RIGHT: Action = Action(7);
+/// Turn left, as a keyboard alternative to mouse look.
+pub const TURN_LEFT: Action = Action(6);
+/// Turn right, as a keyboard alternative to mouse look.
+pub const TURN_RIGHT: Action = Action(7);
 /// Return to the latest checkpoint.
 pub const RESET: Action = Action(8);
 
@@ -55,8 +59,10 @@ pub struct MeadowSimulation {
     trees: Vec<Tree>,
     orbs: Vec<Orb>,
     checkpoint: Vec3,
-    /// Camera orbit angle in radians.
+    /// Horizontal view angle in radians; positive turns right.
     pub yaw: f32,
+    /// Vertical view angle in radians; positive looks up.
+    pub pitch: f32,
     /// Number of collected orbs.
     pub collected: usize,
     time: f32,
@@ -154,6 +160,7 @@ impl MeadowSimulation {
             orbs,
             checkpoint: spawn,
             yaw: 0.0,
+            pitch: 0.0,
             collected: 0,
             time: 0.0,
         }
@@ -173,10 +180,32 @@ impl MeadowSimulation {
         self.orbs.len()
     }
 
+    /// Eye-level first-person camera, interpolating position between fixed ticks.
+    /// View angles use the latest input without adding interpolation delay.
+    pub fn camera(&self, alpha: f32) -> Camera3D {
+        let explorer = self.explorer();
+        let position = explorer.previous.lerp(explorer.body.position, alpha) + Vec3::Y * EYE_HEIGHT;
+        let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
+        let (sin_pitch, cos_pitch) = self.pitch.sin_cos();
+        let direction = Vec3::new(sin_yaw * cos_pitch, sin_pitch, -cos_yaw * cos_pitch);
+        Camera3D {
+            position,
+            target: position + direction,
+            vertical_fov: 75.0,
+            up: Vec3::Y,
+        }
+    }
+
     /// Advances gameplay using the same systems as interactive play.
     pub fn step(&mut self, input: &Input, dt: f32) {
         self.time += dt;
-        self.yaw += input.axis(ORBIT_LEFT, ORBIT_RIGHT) * dt * 1.8;
+        let mouse = input.pointer_delta();
+        let turn = mouse.x * MOUSE_SENSITIVITY + input.axis(TURN_LEFT, TURN_RIGHT) * dt * 1.8;
+        if turn != 0.0 {
+            self.yaw = (self.yaw + turn + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+                - std::f32::consts::PI;
+        }
+        self.pitch = (self.pitch - mouse.y * MOUSE_SENSITIVITY).clamp(-MAX_PITCH, MAX_PITCH);
         let mut player = self
             .scene
             .world
@@ -195,9 +224,9 @@ impl MeadowSimulation {
             Vec2::new(input.axis(LEFT, RIGHT), input.axis(FORWARD, BACK)).clamp_length_max(1.0);
         let (sin, cos) = self.yaw.sin_cos();
         let movement = Vec3::new(
-            axis.x * cos + axis.y * sin,
+            axis.x * cos - axis.y * sin,
             0.0,
-            -axis.x * sin + axis.y * cos,
+            axis.x * sin + axis.y * cos,
         );
         let speed = if input.down(SPRINT) { 10.0 } else { 6.0 };
         let blend = 1.0 - (-18.0 * dt).exp();
@@ -238,11 +267,9 @@ impl MeadowSimulation {
     }
 }
 
-/// Playable third-person presentation over [`MeadowSimulation`].
+/// Playable first-person presentation over [`MeadowSimulation`].
 pub struct Meadow {
     simulation: MeadowSimulation,
-    camera: Camera3D,
-    previous_camera: Camera3D,
     status: String,
     shown_collected: usize,
 }
@@ -250,24 +277,19 @@ pub struct Meadow {
 impl Default for Meadow {
     fn default() -> Self {
         let simulation = MeadowSimulation::new();
-        let target = simulation.explorer().body.position;
-        let camera = Camera3D {
-            position: target + Vec3::new(0.0, 9.0, 16.0),
-            target,
-            vertical_fov: 55.0,
-            up: Vec3::Y,
-        };
         Self {
             status: format!("0 / {} orbs", simulation.total_orbs()),
             simulation,
-            camera,
-            previous_camera: camera,
             shown_collected: 0,
         }
     }
 }
 
 impl Game for Meadow {
+    fn cursor_mode(&self) -> CursorMode {
+        CursorMode::Captured
+    }
+
     fn bindings(&self) -> Bindings {
         Bindings::new()
             .bind(LEFT, KeyboardKey::KEY_A)
@@ -276,20 +298,13 @@ impl Game for Meadow {
             .bind(BACK, KeyboardKey::KEY_S)
             .bind(JUMP, KeyboardKey::KEY_SPACE)
             .bind(SPRINT, KeyboardKey::KEY_LEFT_SHIFT)
-            .bind(ORBIT_LEFT, KeyboardKey::KEY_Q)
-            .bind(ORBIT_RIGHT, KeyboardKey::KEY_E)
+            .bind(TURN_LEFT, KeyboardKey::KEY_Q)
+            .bind(TURN_RIGHT, KeyboardKey::KEY_E)
             .bind(RESET, KeyboardKey::KEY_R)
     }
 
     fn fixed_update(&mut self, context: &mut Update<'_, '_>) {
         self.simulation.step(context.input, context.tick.dt);
-        self.previous_camera = self.camera;
-        let target = self.simulation.explorer().body.position + Vec3::Y * 0.7;
-        let (sin, cos) = self.simulation.yaw.sin_cos();
-        let desired = target + Vec3::new(sin * 16.0, 9.0, cos * 16.0);
-        let blend = 1.0 - (-8.0 * context.tick.dt).exp();
-        self.camera.position = self.camera.position.lerp(desired, blend);
-        self.camera.target = self.camera.target.lerp(target, blend);
         if self.shown_collected != self.simulation.collected {
             self.shown_collected = self.simulation.collected;
             self.status = format!(
@@ -306,14 +321,8 @@ impl Game for Meadow {
         let cream = Color::new(240, 233, 208, 255);
         let dark = Color::new(37, 58, 60, 255);
         frame.clear(sky);
-        let mut camera = self.camera;
-        camera.position = self
-            .previous_camera
-            .position
-            .lerp(camera.position, frame.alpha);
-        camera.target = self.previous_camera.target.lerp(camera.target, frame.alpha);
-        let explorer = self.simulation.explorer();
-        let position = explorer.previous.lerp(explorer.body.position, frame.alpha);
+        let camera = self.simulation.camera(frame.alpha);
+        let position = camera.position;
         frame.world_3d(camera, |canvas| {
             canvas.cube(self.simulation.solids[0], grass);
             // Two trails cross the meadow and lead toward the platforming course.
@@ -391,33 +400,10 @@ impl Game for Meadow {
                 Aabb3::from_center(pole + Vec3::new(0.5, 1.1, 0.0), Vec3::new(1.0, 0.65, 0.07)),
                 Color::new(232, 126, 106, 255),
             );
-            // Geometric character, with a ground shadow and eyes.
-            canvas.cube(
-                Aabb3::from_center(
-                    Vec3::new(position.x, 0.03, position.z),
-                    Vec3::new(1.0, 0.03, 0.7),
-                ),
-                Color::new(92, 137, 94, 255),
-            );
-            canvas.cube(
-                Aabb3::from_center(position - Vec3::Y * 0.15, Vec3::new(0.7, 1.1, 0.55)),
-                Color::new(224, 132, 108, 255),
-            );
-            canvas.cube(
-                Aabb3::from_center(position + Vec3::Y * 0.6, Vec3::splat(0.7)),
-                cream,
-            );
-            for x in [-0.16, 0.16] {
-                canvas.cube(
-                    Aabb3::from_center(
-                        position + Vec3::new(x, 0.67, 0.36),
-                        Vec3::new(0.09, 0.09, 0.04),
-                    ),
-                    dark,
-                );
-            }
         });
         frame.ui(|ui| {
+            ui.circle(ui.logical_size * 0.5, 3.0, dark);
+            ui.circle(ui.logical_size * 0.5, 1.5, cream);
             ui.rectangle(
                 Aabb2::from_center(Vec2::new(242.0, 71.0), Vec2::new(440.0, 102.0)),
                 Color::new(37, 58, 60, 230),
@@ -457,7 +443,7 @@ impl Game for Meadow {
             .resolve(ui.logical_size);
             ui.rectangle(controls, Color::new(37, 58, 60, 235));
             ui.text(
-                "WASD move   SPACE jump   SHIFT sprint   Q/E orbit   R checkpoint",
+                "WASD move   MOUSE look   SPACE jump   SHIFT sprint   R checkpoint",
                 controls.min + Vec2::new(13.0, 11.0),
                 13.0,
                 cream,
@@ -474,6 +460,93 @@ mod tests {
         for _ in 0..120 {
             sim.step(&Input::default(), DT);
         }
+    }
+
+    #[test]
+    fn camera_is_at_eye_level_and_looks_in_the_mouse_direction() {
+        let mut sim = MeadowSimulation::new();
+        settle(&mut sim);
+        let mut input = Input::default();
+        input.add_pointer_delta(Vec2::new(100.0, -80.0));
+        sim.step(&input, DT);
+        let camera = sim.camera(1.0);
+        let body = sim.explorer().body;
+        assert!(
+            camera
+                .position
+                .abs_diff_eq(body.position + Vec3::Y * EYE_HEIGHT, 0.00001)
+        );
+        assert!(body.bounds().contains(camera.position));
+        let direction = camera.target - camera.position;
+        assert!(direction.x > 0.0 && direction.y > 0.0 && direction.z < 0.0);
+        assert!((direction.length() - 1.0).abs() < 0.00001);
+        assert_eq!(camera.vertical_fov, 75.0);
+        assert_eq!(Meadow::default().cursor_mode(), CursorMode::Captured);
+    }
+
+    #[test]
+    fn mouse_look_is_independent_of_dt_and_pitch_never_flips_the_camera() {
+        let mut input = Input::default();
+        input.add_pointer_delta(Vec2::new(100.0, 50.0));
+        let mut fast = MeadowSimulation::new();
+        let mut slow = MeadowSimulation::new();
+        fast.step(&input, 1.0 / 240.0);
+        slow.step(&input, 1.0 / 30.0);
+        assert_eq!(fast.yaw, slow.yaw);
+        assert_eq!(fast.pitch, slow.pitch);
+        input.consume_edges();
+        let angles = (fast.yaw, fast.pitch);
+        fast.step(&input, DT);
+        assert_eq!((fast.yaw, fast.pitch), angles);
+        for delta in [Vec2::splat(100_000.0), Vec2::splat(-100_000.0)] {
+            input.add_pointer_delta(delta);
+            fast.step(&input, DT);
+            input.consume_edges();
+            assert!(fast.pitch.abs() <= MAX_PITCH);
+            assert!(fast.yaw.abs() <= std::f32::consts::PI);
+            assert!(fast.camera(1.0).view_matrix().is_finite());
+        }
+    }
+
+    #[test]
+    fn movement_follows_yaw_and_stays_horizontal_when_looking_up_or_down() {
+        let mut sim = MeadowSimulation::new();
+        settle(&mut sim);
+        sim.yaw = std::f32::consts::FRAC_PI_2;
+        sim.pitch = MAX_PITCH;
+        let mut input = Input::default();
+        input.set(FORWARD, true);
+        for _ in 0..60 {
+            sim.step(&input, DT);
+        }
+        let body = sim.explorer().body;
+        assert!(body.velocity.x > 5.9);
+        assert!(body.velocity.z.abs() < 0.001);
+        assert!(body.grounded);
+        assert_eq!(body.velocity.y, 0.0);
+    }
+
+    #[test]
+    fn camera_interpolates_movement_and_resets_without_a_chase_delay() {
+        let mut sim = MeadowSimulation::new();
+        settle(&mut sim);
+        let mut input = Input::default();
+        input.set(JUMP, true);
+        sim.step(&input, DT);
+        let explorer = sim.explorer();
+        for alpha in [0.0, 0.5, 1.0] {
+            let expected =
+                explorer.previous.lerp(explorer.body.position, alpha) + Vec3::Y * EYE_HEIGHT;
+            assert!(sim.camera(alpha).position.abs_diff_eq(expected, 0.00001));
+        }
+        input.consume_edges();
+        input.set(RESET, true);
+        sim.step(&input, DT);
+        assert!(
+            sim.camera(0.0)
+                .position
+                .abs_diff_eq(sim.checkpoint + Vec3::Y * EYE_HEIGHT, 0.00001)
+        );
     }
 
     #[test]
@@ -551,7 +624,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires a native display and OpenGL context; scripts/native_smoke.sh"]
-    fn native_gameplay_character_is_visible_above_first_stone() {
+    fn native_gameplay_first_person_view_stays_above_first_stone() {
         let mut meadow = Meadow::default();
         {
             let sim = &mut meadow.simulation;
@@ -563,28 +636,32 @@ mod tests {
         let body = meadow.simulation.explorer().body;
         assert!(body.grounded);
         assert!(body.bounds().min.y >= meadow.simulation.platforms[0].max.y);
-        meadow.camera.target = body.position + Vec3::Y * 0.7;
-        meadow.camera.position = meadow.camera.target + Vec3::new(0.0, 9.0, 16.0);
-        meadow.previous_camera = meadow.camera;
+        meadow.simulation.pitch = -0.9;
+        let camera = meadow.simulation.camera(1.0);
+        assert_eq!(camera.position.x, body.position.x);
+        assert_eq!(camera.position.z, body.position.z);
         let view = Viewport::new(
             Vec2::new(960.0, 540.0),
             Vec2::new(960.0, 540.0),
             ScaleMode::Fit,
         )
         .unwrap();
-        // Probe the lower torso's front face, which the stone hides when the
-        // character sinks. Project through the camera used by the actual draw.
-        let point = body.position + Vec3::new(0.0, -0.4, 0.275);
-        let clip = meadow.camera.projection(&view, 0.01, 1000.0)
-            * meadow.camera.view_matrix()
-            * point.extend(1.0);
+        // Looking down from the player's eyes must show the stone's top face.
+        let stone = meadow.simulation.platforms[0];
+        let point = Vec3::new(
+            stone.center().x + 0.6,
+            stone.max.y + 0.07,
+            stone.center().z - 0.5,
+        );
+        let clip =
+            camera.projection(&view, 0.01, 1000.0) * camera.view_matrix() * point.extend(1.0);
         let pixel =
             Vec2::new(clip.x / clip.w + 1.0, 1.0 - clip.y / clip.w) * view.logical_size * 0.5;
-        let image = crate::render_tests::screenshot(meadow, "meadow-first-stone.png");
+        let image = crate::render_tests::screenshot(meadow, "meadow-first-person.png");
         assert_eq!(
             image.get_color(pixel.x.round() as i32, pixel.y.round() as i32),
-            Color::new(224, 132, 108, 255),
-            "lower torso should remain visible above the stone"
+            Color::new(240, 233, 208, 255),
+            "first-person camera should see the stone's top from above"
         );
     }
 
