@@ -101,14 +101,14 @@ impl Body2D {
         self.grounded = false;
         for axis in [0, 1] {
             let step = velocity[axis] * dt;
-            let (allowed, hit) = sweep_axis(
+            let (resolved, hit) = sweep_axis(
                 position,
                 half,
                 axis,
                 step,
                 solids.iter().map(|s| (s.min.to_array(), s.max.to_array())),
             );
-            position[axis] += allowed;
+            position[axis] = resolved;
             if hit {
                 velocity[axis] = 0.0;
                 self.grounded |= axis == 1 && step > 0.0;
@@ -162,14 +162,14 @@ impl Body3D {
         self.grounded = false;
         for axis in [0, 2, 1] {
             let step = velocity[axis] * dt;
-            let (allowed, hit) = sweep_axis(
+            let (resolved, hit) = sweep_axis(
                 position,
                 half,
                 axis,
                 step,
                 solids.iter().map(|s| (s.min.to_array(), s.max.to_array())),
             );
-            position[axis] += allowed;
+            position[axis] = resolved;
             if hit {
                 velocity[axis] = 0.0;
                 self.grounded |= axis == 1 && step < 0.0;
@@ -188,9 +188,10 @@ fn sweep_axis<const N: usize>(
     solids: impl Iterator<Item = ([f32; N], [f32; N])>,
 ) -> (f32, bool) {
     if step == 0.0 {
-        return (0.0, false);
+        return (position[axis], false);
     }
     let mut allowed = step;
+    let mut resolved = position[axis] + step;
     let mut hit = false;
     for (min, max) in solids {
         let overlaps_other_axes = (0..N)
@@ -203,13 +204,23 @@ fn sweep_axis<const N: usize>(
         let high = position[axis] + half[axis];
         if step > 0.0 && high <= min[axis] && high + allowed >= min[axis] {
             allowed = (min[axis] - high).max(0.0);
+            // Set the contact center directly: adding a clipped displacement
+            // can round the body inside the solid and lose the next sweep.
+            resolved = min[axis] - half[axis];
+            if resolved + half[axis] > min[axis] {
+                resolved = resolved.next_down();
+            }
             hit = true;
         } else if step < 0.0 && low >= max[axis] && low + allowed <= max[axis] {
             allowed = (max[axis] - low).min(0.0);
+            resolved = max[axis] + half[axis];
+            if resolved - half[axis] < max[axis] {
+                resolved = resolved.next_up();
+            }
             hit = true;
         }
     }
-    (allowed, hit)
+    (resolved, hit)
 }
 
 #[cfg(test)]
@@ -265,5 +276,65 @@ mod tests {
         body.move_and_slide(0.1, &[ceiling]);
         assert_eq!(body.position.y, 3.0);
         assert!(!body.grounded);
+    }
+
+    #[test]
+    fn fractional_contacts_remain_outside_solids_in_2d() {
+        for coordinate in [-8.8, -0.7, 0.7, 1.6, 3.4, 8.8] {
+            for axis in 0..2 {
+                let mut center = Vec2::ZERO;
+                center[axis] = coordinate;
+                let solid = Aabb2::from_center(center, Vec2::splat(0.7));
+                for direction in [-1.0, 1.0] {
+                    let mut body = Body2D::new(Vec2::ZERO, Vec2::new(0.8, 1.8));
+                    body.position[axis] = if direction < 0.0 {
+                        solid.max[axis] + body.half_size[axis] + 0.137
+                    } else {
+                        solid.min[axis] - body.half_size[axis] - 0.137
+                    };
+                    let mut contacts = 0;
+                    for _ in 0..120 {
+                        body.velocity[axis] = direction * 3.25;
+                        body.move_and_slide(1.0 / 120.0, &[solid]);
+                        assert!(!body.bounds().intersects(&solid), "{body:?}, {solid:?}");
+                        if body.velocity[axis] == 0.0 {
+                            contacts += 1;
+                            assert_eq!(body.grounded, axis == 1 && direction > 0.0);
+                        }
+                    }
+                    assert!(contacts > 100, "lost contact: {body:?}, {solid:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fractional_contacts_remain_outside_solids_in_3d() {
+        for coordinate in [-8.8, -0.7, 0.7, 1.6, 3.4, 8.8] {
+            for axis in 0..3 {
+                let mut center = Vec3::ZERO;
+                center[axis] = coordinate;
+                let solid = Aabb3::from_center(center, Vec3::splat(0.7));
+                for direction in [-1.0, 1.0] {
+                    let mut body = Body3D::new(Vec3::ZERO, Vec3::new(0.8, 1.8, 0.8));
+                    body.position[axis] = if direction < 0.0 {
+                        solid.max[axis] + body.half_size[axis] + 0.137
+                    } else {
+                        solid.min[axis] - body.half_size[axis] - 0.137
+                    };
+                    let mut contacts = 0;
+                    for _ in 0..120 {
+                        body.velocity[axis] = direction * 3.25;
+                        body.move_and_slide(1.0 / 120.0, &[solid]);
+                        assert!(!body.bounds().intersects(&solid), "{body:?}, {solid:?}");
+                        if body.velocity[axis] == 0.0 {
+                            contacts += 1;
+                            assert_eq!(body.grounded, axis == 1 && direction < 0.0);
+                        }
+                    }
+                    assert!(contacts > 100, "lost contact: {body:?}, {solid:?}");
+                }
+            }
+        }
     }
 }

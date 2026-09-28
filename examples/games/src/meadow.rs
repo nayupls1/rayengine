@@ -512,6 +512,44 @@ mod tests {
     }
 
     #[test]
+    fn walking_into_first_stone_stops_at_its_front_face() {
+        let mut sim = MeadowSimulation::new();
+        settle(&mut sim);
+        let stone = sim.platforms[0];
+        let mut input = Input::default();
+        input.set(FORWARD, true);
+        for _ in 0..600 {
+            sim.step(&input, DT);
+            let body = sim.explorer().body;
+            assert!(
+                body.bounds().min.z >= stone.max.z,
+                "walked inside the stone: {body:?}, stone: {stone:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn landing_on_every_stone_keeps_the_body_above_its_top() {
+        let mut sim = MeadowSimulation::new();
+        for stone in sim.platforms.clone() {
+            {
+                let mut explorer = sim.scene.world.get::<&mut Explorer>(sim.player).unwrap();
+                explorer.body.position = stone.center().with_y(stone.max.y + 3.0);
+                explorer.body.velocity = Vec3::ZERO;
+                explorer.body.grounded = false;
+            }
+            settle(&mut sim);
+            let body = sim.explorer().body;
+            assert!(body.grounded, "did not land on {stone:?}: {body:?}");
+            assert!(
+                body.bounds().min.y >= stone.max.y,
+                "fell inside the stone: {body:?}, stone: {stone:?}"
+            );
+            assert!((body.bounds().min.y - stone.max.y).abs() < 0.00001);
+        }
+    }
+
+    #[test]
     fn pickup_is_collected_once_and_reset_uses_checkpoint() {
         let mut sim = MeadowSimulation::new();
         sim.scene
