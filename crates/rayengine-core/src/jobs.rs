@@ -337,19 +337,34 @@ fn worker_loop<R: Send + 'static>(shared: Arc<Shared<R>>) {
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
             }
         };
-        let cancellation = job.handle.cancellation;
-        let outcome = if cancellation.is_cancelled() {
-            JobOutcome::Cancelled
-        } else {
-            match catch_unwind(AssertUnwindSafe(|| (job.work)(cancellation.clone()))) {
-                Ok(result) => JobOutcome::Ready(result),
-                Err(_) => JobOutcome::Panicked,
+        let Job { handle, work } = job;
+        let cancellation = handle.cancellation;
+        let outcome = match catch_unwind(AssertUnwindSafe(|| {
+            if cancellation.is_cancelled() {
+                // Cancellation still runs captured inputs' destructors. Keep
+                // that cleanup inside the same panic boundary as execution.
+                drop(work);
+                JobOutcome::Cancelled
+            } else {
+                JobOutcome::Ready(work(cancellation.clone()))
+            }
+        })) {
+            Ok(outcome) => outcome,
+            Err(payload) => {
+                // panic_any payloads can themselves panic when dropped. Catch
+                // cleanup too, so a recovered job cannot terminate its worker.
+                if let Err(nested) = catch_unwind(AssertUnwindSafe(|| drop(payload))) {
+                    // A second payload may repeat the same failing destructor;
+                    // retaining it is the only way to guarantee recovery.
+                    std::mem::forget(nested);
+                }
+                JobOutcome::Panicked
             }
         };
         let finished = Finished {
             cancellation,
             completion: Completion {
-                id: job.handle.id,
+                id: handle.id,
                 outcome,
             },
         };
