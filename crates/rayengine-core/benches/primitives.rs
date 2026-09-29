@@ -308,5 +308,61 @@ fn spatial_queries(c: &mut Criterion) {
     }
 }
 
-criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries }
+fn background_jobs(c: &mut Criterion) {
+    fn generate(size: usize) -> Vec<u8> {
+        let mut data = vec![0; size];
+        for (i, value) in data.iter_mut().enumerate() {
+            *value = (i as u8).wrapping_mul(13);
+        }
+        data
+    }
+    let pool = JobPool::new(1, 8).unwrap();
+    let mut latency = c.benchmark_group("jobs_latency");
+    for size in [0, 1_024, 65_536] {
+        latency.bench_function(BenchmarkId::new("synchronous", size), |b| {
+            b.iter(|| black_box(generate(black_box(size))))
+        });
+        latency.bench_function(BenchmarkId::new("worker_roundtrip", size), |b| {
+            b.iter(|| {
+                pool.try_submit(move |_| generate(size)).unwrap();
+                loop {
+                    if let Some(completion) = pool.try_recv() {
+                        let JobOutcome::Ready(data) = completion.outcome else {
+                            panic!("benchmark job failed")
+                        };
+                        black_box(data);
+                        break;
+                    }
+                    std::thread::yield_now();
+                }
+            })
+        });
+    }
+    latency.finish();
+    c.bench_function("jobs_batch_8x1024", |b| {
+        b.iter(|| {
+            for _ in 0..8 {
+                pool.try_submit(|_| generate(1024)).unwrap();
+            }
+            let mut received = 0;
+            while received < 8 {
+                if let Some(completion) = pool.try_recv() {
+                    assert!(matches!(completion.outcome, JobOutcome::Ready(_)));
+                    black_box(completion);
+                    received += 1;
+                } else {
+                    std::thread::yield_now();
+                }
+            }
+        })
+    });
+    c.bench_function("jobs_empty_poll", |b| b.iter(|| black_box(pool.try_recv())));
+    let full = JobPool::new(1, 1).unwrap();
+    full.try_submit(|_| 0_u32).unwrap();
+    c.bench_function("jobs_full_rejection", |b| {
+        b.iter(|| black_box(full.try_submit(|_| 1_u32).is_err()))
+    });
+}
+
+criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries, background_jobs }
 criterion_main!(benches);
