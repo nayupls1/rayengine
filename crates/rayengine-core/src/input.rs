@@ -32,6 +32,7 @@ struct State {
 pub struct Input {
     states: Vec<State>,
     pointer_delta: Vec2,
+    reset_pending: bool,
 }
 
 impl Input {
@@ -51,6 +52,7 @@ impl Input {
         Self {
             states: vec![State::default(); actions],
             pointer_delta: Vec2::ZERO,
+            reset_pending: false,
         }
     }
 
@@ -106,6 +108,13 @@ impl Input {
         self.pointer_delta
     }
 
+    /// Whether focus loss/reset occurred since the previous consumed tick.
+    /// Retained through paused render frames so UI capture can be cancelled
+    /// even if the window regains focus before simulation resumes.
+    pub fn reset_pending(&self) -> bool {
+        self.reset_pending
+    }
+
     /// Clears transitions and pointer motion after one fixed update, preserving held actions.
     pub fn consume_edges(&mut self) {
         for state in &mut self.states {
@@ -113,10 +122,12 @@ impl Input {
             state.released = false;
         }
         self.pointer_delta = Vec2::ZERO;
+        self.reset_pending = false;
     }
 
     /// Releases every held action, e.g. on focus loss. Releases are observable.
     pub fn release_all(&mut self) {
+        self.reset_pending = true;
         for state in &mut self.states {
             state.released |= state.down;
             state.down = false;

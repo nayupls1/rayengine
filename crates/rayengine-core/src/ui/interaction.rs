@@ -87,6 +87,7 @@ pub struct UiInput {
 
 impl UiInput {
     /// Samples game-defined actions without consuming the original input.
+    /// A pending input reset cancels interaction even if focus already returned.
     pub fn from_actions(
         input: &Input,
         pointer: Option<Vec2>,
@@ -104,7 +105,7 @@ impl UiInput {
             previous: input.pressed(actions.previous),
             activate: input.pressed(actions.activate),
             cancel: input.pressed(actions.cancel),
-            window_focused,
+            window_focused: window_focused && !input.reset_pending(),
         }
     }
 }

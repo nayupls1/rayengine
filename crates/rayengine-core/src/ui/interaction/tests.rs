@@ -251,3 +251,39 @@ fn routing_masks_gameplay_without_consuming_ui_input_or_replaying_edges() {
     assert_eq!(resumed.axis(left, right), 1.0);
     assert_eq!(resumed.pointer_delta(), Vec2::ZERO);
 }
+
+#[test]
+fn input_reset_cancels_capture_even_if_focus_returns_before_the_next_tick() {
+    let actions = UiActions {
+        primary: Action(0),
+        next: Action(1),
+        previous: Action(2),
+        activate: Action(3),
+        cancel: Action(4),
+    };
+    let mut raw = Input::with_capacity(5);
+    let mut ui = UiState::default();
+    let regions = [region(1, 20.0)];
+    let pointer = Some(Vec2::splat(20.0));
+    raw.set(actions.primary, true);
+    ui.update(
+        &regions,
+        UiInput::from_actions(&raw, pointer, actions, true),
+    );
+    raw.consume_edges();
+    raw.release_all(); // Simulation pauses here while minimized/unfocused.
+    assert!(raw.reset_pending());
+    ui.update(
+        &regions,
+        UiInput::from_actions(&raw, pointer, actions, true),
+    );
+    let response = ui.response(UiId(1)).unwrap();
+    assert!(response.cancelled && !response.activated);
+    raw.consume_edges();
+    assert!(!raw.reset_pending());
+    ui.update(
+        &regions,
+        UiInput::from_actions(&raw, pointer, actions, true),
+    );
+    assert!(!ui.response(UiId(1)).unwrap().activated);
+}
