@@ -34,6 +34,10 @@ and resource teardown after both normal exit and initialization failure.
 On Linux the GPU failure probe rejects each vertex/index buffer allocation in
 turn, checks partial resource cleanup, and verifies the old mesh still renders
 after failed replacement. Its test-only dispatch hook is restored before drawing.
+The material probe checks textured meshes/models, opaque/cutout/blended pixels,
+depth writes, primitive ordering, shader compile/type failures, parameter defaults
+and overrides, shared resource lifetime, stale dependencies, and render-state
+restoration.
 The script also runs both demos at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;
@@ -58,6 +62,25 @@ scripted 240-tick arena/meadow simulation batches. Gameplay fixture creation
 and destruction are outside the measured region; every sample starts from
 the same state. **These are CPU workloads; no window or GPU is initialized.**
 They do not measure actual rendering, asset upload, or an arbitrary game's FPS.
+
+Native draw submission has a separate opt-in suite requiring a display:
+
+```sh
+scripts/render_benchmark.sh save materials-v1
+scripts/render_benchmark.sh compare materials-v1
+# Select native Wayland instead:
+RAYENGINE_BACKEND=wayland scripts/render_benchmark.sh save wayland-materials-v1
+```
+
+Stable `draw_submission` cases submit 100 indexed quads through the existing
+default path and opaque, textured, cutout, parameterized, and blended materials.
+The target is 64x64 with vsync disabled. These timings include CPU work, OpenGL
+submission and driver stalls; they do not use GPU timers or measure game FPS.
+Keep the same GPU, driver, backend and display conditions when comparing. The
+script records backend/target settings and `glxinfo -B` when available on X11;
+set `RAYENGINE_RENDERER_INFO` to add renderer details. Native exports use the
+same snapshot schema and comparator as the CPU suite. Normal benchmark runs
+do not initialize this native suite unless `RAYENGINE_RENDER_BENCH=1` is set.
 
 Criterion baselines live in `target/criterion` (or `CARGO_TARGET_DIR/criterion`).
 Every script run exports portable results, samples and metadata under

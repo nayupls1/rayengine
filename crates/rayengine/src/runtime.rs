@@ -1,8 +1,9 @@
 //! Window lifecycle: initialize once, sample input, fixed-update, draw, present.
 
 use crate::{
-    assets::{Assets, MeshId, ModelId, SoundId, TextureId, path_string},
+    assets::{Assets, MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId, path_string},
     input::Bindings,
+    material::{MaterialDesc, UniformId, UniformValue},
     render::{Frame, rect},
 };
 use rayengine_core::{
@@ -230,6 +231,38 @@ pub struct InitContext<'context, 'audio> {
 }
 
 impl InitContext<'_, '_> {
+    /// Creates an owned material description with borrowed resource dependencies.
+    pub fn material(&mut self, desc: MaterialDesc) -> Result<MaterialId, Error> {
+        self.assets.create_material(self.raylib, self.thread, desc)
+    }
+    /// Compiles custom GLSL; None uses raylib's standard mesh vertex shader.
+    pub fn shader_from_source(
+        &mut self,
+        vertex: Option<&str>,
+        fragment: &str,
+    ) -> Result<ShaderId, Error> {
+        self.assets
+            .shader_source(self.raylib, self.thread, vertex, fragment)
+    }
+    /// Loads/caches shader files. None uses the standard mesh vertex shader.
+    pub fn shader(
+        &mut self,
+        vertex: Option<&Path>,
+        fragment: impl AsRef<Path>,
+    ) -> Result<ShaderId, Error> {
+        self.assets
+            .load_shader(self.raylib, self.thread, vertex, fragment.as_ref())
+    }
+    /// Registers a cached binding after checking the active GLSL type.
+    pub fn uniform(
+        &mut self,
+        shader: ShaderId,
+        name: &str,
+        initial: UniformValue,
+    ) -> Result<UniformId, Error> {
+        self.assets.uniform(shader, name, initial)
+    }
+
     /// Validates and uploads generated geometry with the default material.
     pub fn mesh(&mut self, data: &MeshData) -> Result<MeshId, Error> {
         self.assets.upload_mesh(self.raylib, self.thread, data)

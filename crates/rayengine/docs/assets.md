@@ -1,7 +1,7 @@
 # Assets and ownership
 
 Load assets in `Game::init`. The runtime caches them by canonical path and returns
-typed `TextureId`, `ModelId` and `SoundId` handles. Gameplay stores these handles;
+typed `TextureId`, `ModelId`, `SoundId` and `ShaderId` handles. Gameplay stores these handles;
 the runtime owns and drops the native resources.
 
 ```no_run
@@ -43,6 +43,13 @@ unload explicitly on the render thread. Mesh slots can be reused without revivin
 old handles. See [generated meshes](crate::guides::generated_meshes) for the
 complete lifecycle, validation rules, and a compiled example.
 
+`MaterialDesc` describes a reusable textured/shaded surface. Create it with
+`context.material`, then draw generated meshes or imported models using
+`Canvas3D::mesh_material` or `model_material`. Shader programs have independent
+ownership; unloading a material never unloads its shared texture or shader.
+See [materials and shaders](crate::guides::materials) for alpha policies,
+typed uniforms, custom GLSL, replacement, and dependency lifetime rules.
+
 Audio is opt-in:
 
 ```no_run
@@ -67,7 +74,7 @@ GPU work and raylib resource creation stay on the owning thread. Use worker
 threads for independent CPU work and pass results back explicitly. Do not send
 the raylib thread token or GPU resources to workers.
 
-For custom shaders, fonts or other native resources, use `InitContext::raylib` and
+For fonts or other native resources, use `InitContext::raylib` and
 `InitContext::thread`. For specialized drawing, use a canvas's `raw` guard or
 `Frame::with_raylib`. These APIs keep the basic SDK small while preserving
 raylib access. Asynchronous asset pipelines and hot reload are outside 0.0.1.

@@ -9,6 +9,7 @@ Start with [the quickstart](crate::guides::quickstart), then read
 [responsive viewports](crate::guides::responsive),
 [timing and input](crate::guides::timing_input), [assets](crate::guides::assets),
 [generated meshes](crate::guides::generated_meshes),
+[materials and shaders](crate::guides::materials),
 [testing and performance](crate::guides::testing_performance), and the
 [agent workflow](crate::guides::agent_workflow).
 
