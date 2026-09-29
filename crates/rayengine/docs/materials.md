@@ -159,9 +159,10 @@ and updates its default. Renderer-owned names include `mvp`, `matModel`,
 `matView`, `matProjection`, `matNormal`, `colDiffuse`, `texture0`, and the two
 alpha uniforms.
 
-Before each material draw, all registered shader defaults are submitted, then
-that material's overrides. Shared shaders therefore cannot leak an override into
-the next material. `assets.set_uniform` edits a CPU default; the next draw sends
+Before each material draw, registered shader defaults and that material's
+overrides resolve to effective values; only changed values are sent to the GPU.
+Shared shaders therefore cannot leak an override into the next material.
+`assets.set_uniform` edits a CPU default; the next draw using that default sends
 it to the GPU. Uniform locations and types are resolved during setup, with no
 per-draw string lookup. Additional samplers and uniform arrays are outside this
 initial material API; raylib access remains available for specialized pipelines.

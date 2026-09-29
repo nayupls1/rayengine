@@ -24,6 +24,7 @@ pub(super) struct ShaderAsset {
 struct Uniform {
     location: i32,
     value: UniformValue,
+    uploaded: Option<UniformValue>,
 }
 
 impl ShaderAsset {
@@ -129,7 +130,11 @@ impl ShaderAsset {
             return Err(Error::Asset("uniform is missing or optimized out".into()));
         }
         let index = self.uniforms.len();
-        self.uniforms.push(Uniform { location, value });
+        self.uniforms.push(Uniform {
+            location,
+            value,
+            uploaded: None,
+        });
         self.names.insert(name.to_owned(), index);
         Ok(UniformId { shader, index })
     }
@@ -269,15 +274,20 @@ impl MaterialAssets {
             Some(ShaderId(id)) => self.shaders.get_mut(id)?.as_mut()?,
             None => &mut self.backend.as_mut()?.builtin,
         };
-        for uniform in &shader.uniforms {
-            set_value(&mut shader.native, uniform.location, uniform.value);
-        }
-        for param in &desc.parameters {
-            set_value(
-                &mut shader.native,
-                shader.uniforms[param.uniform.index].location,
-                param.value,
-            );
+        for (index, uniform) in shader.uniforms.iter_mut().enumerate() {
+            // Resolve the final value once. The last override wins if the
+            // description supplies the same binding more than once.
+            let effective = desc
+                .parameters
+                .iter()
+                .rev()
+                .find(|param| param.uniform.index == index)
+                .map(|param| param.value)
+                .unwrap_or(uniform.value);
+            if uniform.uploaded != Some(effective) {
+                set_value(&mut shader.native, uniform.location, effective);
+                uniform.uploaded = Some(effective);
+            }
         }
         let (mode, cutoff) = match desc.alpha {
             AlphaMode::Opaque => (0, 0.0),

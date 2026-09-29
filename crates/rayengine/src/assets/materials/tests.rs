@@ -150,10 +150,16 @@ fn native_material_smoke() {
             })?);
             self.red = Some(ctx.material(MaterialDesc {
                 shader: Some(shader),
-                parameters: vec![MaterialParam {
-                    uniform: gain,
-                    value: UniformValue::Vec3(Vec3::X),
-                }],
+                parameters: vec![
+                    MaterialParam {
+                        uniform: gain,
+                        value: UniformValue::Vec3(Vec3::Y),
+                    },
+                    MaterialParam {
+                        uniform: gain,
+                        value: UniformValue::Vec3(Vec3::X),
+                    },
+                ],
                 ..MaterialDesc::default()
             })?);
             self.green = Some(ctx.material(MaterialDesc {
