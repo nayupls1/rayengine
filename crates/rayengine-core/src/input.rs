@@ -35,6 +35,17 @@ pub struct Input {
 }
 
 impl Input {
+    /// Borrows action input with explicit per-update masks, without changing the
+    /// original states or allocating. Block UI-owned actions and relative look
+    /// motion before passing this view to gameplay. Held actions resume when
+    /// unmasked; edges still follow the caller's normal tick consumption.
+    pub fn routed<'a>(&'a self, blocked: &'a [Action], block_motion: bool) -> InputView<'a> {
+        InputView {
+            input: self,
+            blocked,
+            block_motion,
+        }
+    }
     /// Preallocates action slots to avoid allocation during input sampling.
     pub fn with_capacity(actions: usize) -> Self {
         Self {
@@ -111,6 +122,45 @@ impl Input {
             state.down = false;
         }
         self.pointer_delta = Vec2::ZERO;
+    }
+}
+
+/// Read-only gameplay input with game-chosen action and pointer-motion masks.
+#[derive(Clone, Copy, Debug)]
+pub struct InputView<'a> {
+    input: &'a Input,
+    blocked: &'a [Action],
+    block_motion: bool,
+}
+
+impl InputView<'_> {
+    /// Whether an unmasked action is held.
+    pub fn down(&self, action: Action) -> bool {
+        !self.blocked.contains(&action) && self.input.down(action)
+    }
+
+    /// Whether an unmasked action was pressed.
+    pub fn pressed(&self, action: Action) -> bool {
+        !self.blocked.contains(&action) && self.input.pressed(action)
+    }
+
+    /// Whether an unmasked action was released.
+    pub fn released(&self, action: Action) -> bool {
+        !self.blocked.contains(&action) && self.input.released(action)
+    }
+
+    /// Digital axis with masked actions contributing zero.
+    pub fn axis(&self, negative: Action, positive: Action) -> f32 {
+        f32::from(self.down(positive)) - f32::from(self.down(negative))
+    }
+
+    /// Relative look motion, or zero while the UI owns it.
+    pub fn pointer_delta(&self) -> Vec2 {
+        if self.block_motion {
+            Vec2::ZERO
+        } else {
+            self.input.pointer_delta()
+        }
     }
 }
 
