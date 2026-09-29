@@ -216,6 +216,57 @@ fn panics_are_reported_and_the_worker_accepts_later_jobs() {
 }
 
 #[test]
+fn cancelled_capture_cleanup_panics_do_not_terminate_the_worker() {
+    struct PanicsOnDrop;
+    impl Drop for PanicsOnDrop {
+        fn drop(&mut self) {
+            panic!("expected capture cleanup panic");
+        }
+    }
+
+    let pool = JobPool::new(1, 2).unwrap();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    pool.try_submit(move |_| {
+        started_tx.send(()).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        0
+    })
+    .unwrap();
+    started_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    let capture = PanicsOnDrop;
+    let cancelled = pool
+        .try_submit(move |_| {
+            drop(capture);
+            1
+        })
+        .unwrap();
+    cancelled.cancel();
+    release_tx.send(()).unwrap();
+    assert!(matches!(receive(&pool).outcome, JobOutcome::Ready(0)));
+    assert!(matches!(receive(&pool).outcome, JobOutcome::Cancelled));
+    pool.try_submit(|_| 42).unwrap();
+    assert!(matches!(receive(&pool).outcome, JobOutcome::Ready(42)));
+}
+
+#[test]
+fn panic_payload_cleanup_panics_do_not_terminate_the_worker() {
+    struct PanicsOnDrop;
+    impl Drop for PanicsOnDrop {
+        fn drop(&mut self) {
+            panic!("expected panic payload cleanup panic");
+        }
+    }
+
+    let pool = JobPool::new(1, 1).unwrap();
+    pool.try_submit(|_| -> u32 { std::panic::panic_any(PanicsOnDrop) })
+        .unwrap();
+    assert!(matches!(receive(&pool).outcome, JobOutcome::Panicked));
+    pool.try_submit(|_| 42).unwrap();
+    assert!(matches!(receive(&pool).outcome, JobOutcome::Ready(42)));
+}
+
+#[test]
 fn zero_workers_or_capacity_is_rejected() {
     assert!(matches!(
         JobPool::<()>::new(0, 1),
