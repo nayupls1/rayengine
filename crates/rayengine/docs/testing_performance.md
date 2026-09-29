@@ -63,6 +63,13 @@ and destruction are outside the measured region; every sample starts from
 the same state. **These are CPU workloads; no window or GPU is initialized.**
 They do not measure actual rendering, asset upload, or an arbitrary game's FPS.
 
+The spatial suite measures indexed and linear 2D/3D rays, proximity and camera
+visibility queries, and full index rebuilds at 128, 4,096 and 32,768 colliders.
+Use `scripts/benchmark.sh save spatial-v1 spatial_` to save only these workloads
+with the normal provenance/export workflow. Rebuild cases measure the complete
+snapshot update; query cases reuse a built index and visitor callbacks do not
+allocate output vectors.
+
 Native draw submission has a separate opt-in suite requiring a display:
 
 ```sh

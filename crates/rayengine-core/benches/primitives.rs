@@ -156,5 +156,157 @@ fn primitives(c: &mut Criterion) {
     });
 }
 
-criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives }
+fn spatial_queries(c: &mut Criterion) {
+    let viewport = Viewport::new(
+        Vec2::new(960.0, 540.0),
+        Vec2::new(960.0, 540.0),
+        ScaleMode::Fit,
+    )
+    .unwrap();
+    let view2 = Frustum2D::from_camera(
+        &Camera2D {
+            target: Vec2::ZERO,
+            rotation: 0.0,
+            view_height: 12.0,
+        },
+        &viewport,
+    )
+    .unwrap();
+    let view3 = Frustum3D::from_camera(
+        &Camera3D {
+            position: Vec3::new(-10.0, 0.0, 0.0),
+            target: Vec3::ZERO,
+            up: Vec3::Y,
+            vertical_fov: 60.0,
+        },
+        &viewport,
+        0.1,
+        100.0,
+    )
+    .unwrap();
+    let ray2 = Ray2::new(Vec2::new(-10.0, 0.0), Vec2::X).unwrap();
+    let ray3 = Ray3::new(Vec3::new(-10.0, 0.0, 0.0), Vec3::X).unwrap();
+    let area2 = Aabb2::from_center(Vec2::ZERO, Vec2::splat(8.0));
+    let area3 = Aabb3::from_center(Vec3::ZERO, Vec3::splat(8.0));
+
+    for count in [128, 4_096, 32_768] {
+        // Reverse insertion keeps the closest collider last for the linear
+        // reference, while BVH results are independent of source order.
+        let entries2: Vec<_> = (0..count)
+            .rev()
+            .map(|i| {
+                (
+                    i,
+                    Aabb2::from_center(Vec2::new(i as f32 * 4.0, 0.0), Vec2::splat(2.0)),
+                )
+            })
+            .collect();
+        let entries3: Vec<_> = (0..count)
+            .rev()
+            .map(|i| {
+                (
+                    i,
+                    Aabb3::from_center(Vec3::new(i as f32 * 4.0, 0.0, 0.0), Vec3::splat(2.0)),
+                )
+            })
+            .collect();
+        let mut index2 = SpatialIndex2D::new();
+        index2.rebuild(entries2.iter().copied()).unwrap();
+        let mut index3 = SpatialIndex3D::new();
+        index3.rebuild(entries3.iter().copied()).unwrap();
+
+        let mut rays = c.benchmark_group("spatial_ray");
+        rays.bench_function(BenchmarkId::new("index_2d", count), |b| {
+            b.iter(|| black_box(index2.nearest(black_box(ray2), f32::INFINITY).unwrap()))
+        });
+        rays.bench_function(BenchmarkId::new("index_3d", count), |b| {
+            b.iter(|| black_box(index3.nearest(black_box(ray3), f32::INFINITY).unwrap()))
+        });
+        rays.bench_function(BenchmarkId::new("linear_2d", count), |b| {
+            b.iter(|| {
+                let mut nearest = f32::INFINITY;
+                for (_, bounds) in black_box(&entries2) {
+                    if let Some(hit) = ray2.cast(*bounds, nearest).unwrap() {
+                        nearest = hit.distance;
+                    }
+                }
+                black_box(nearest)
+            })
+        });
+        rays.bench_function(BenchmarkId::new("linear_3d", count), |b| {
+            b.iter(|| {
+                let mut nearest = f32::INFINITY;
+                for (_, bounds) in black_box(&entries3) {
+                    if let Some(hit) = ray3.cast(*bounds, nearest).unwrap() {
+                        nearest = hit.distance;
+                    }
+                }
+                black_box(nearest)
+            })
+        });
+        rays.finish();
+
+        let mut proximity = c.benchmark_group("spatial_nearby");
+        proximity.bench_function(BenchmarkId::new("2d", count), |b| {
+            b.iter(|| {
+                index2
+                    .visit_overlapping(black_box(area2), |id| {
+                        black_box(id);
+                    })
+                    .unwrap();
+            })
+        });
+        proximity.bench_function(BenchmarkId::new("3d", count), |b| {
+            b.iter(|| {
+                index3
+                    .visit_overlapping(black_box(area3), |id| {
+                        black_box(id);
+                    })
+                    .unwrap();
+            })
+        });
+        proximity.finish();
+
+        let mut visible = c.benchmark_group("spatial_visible");
+        visible.bench_function(BenchmarkId::new("2d", count), |b| {
+            b.iter(|| {
+                index2.visit_visible(black_box(&view2), |id| {
+                    black_box(id);
+                })
+            })
+        });
+        visible.bench_function(BenchmarkId::new("3d", count), |b| {
+            b.iter(|| {
+                index3.visit_visible(black_box(&view3), |id| {
+                    black_box(id);
+                })
+            })
+        });
+        visible.finish();
+
+        let mut rebuild = c.benchmark_group("spatial_rebuild");
+        rebuild.throughput(Throughput::Elements(count as u64));
+        rebuild.bench_function(BenchmarkId::new("2d", count), |b| {
+            b.iter(|| {
+                black_box(
+                    index2
+                        .rebuild(black_box(&entries2).iter().copied())
+                        .unwrap(),
+                )
+            })
+        });
+        rebuild.bench_function(BenchmarkId::new("3d", count), |b| {
+            b.iter(|| {
+                black_box(
+                    index3
+                        .rebuild(black_box(&entries3).iter().copied())
+                        .unwrap(),
+                )
+            })
+        });
+        rebuild.finish();
+    }
+}
+
+criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries }
 criterion_main!(benches);

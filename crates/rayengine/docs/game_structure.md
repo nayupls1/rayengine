@@ -53,6 +53,8 @@ distinct:
 | Camera | `Camera2D`, visible height | `Camera3D`, vertical FOV |
 | Bounds | `Aabb2` | `Aabb3` |
 | Character movement | `Body2D` | `Body3D` |
+| Ray and index | `Ray2`, `SpatialIndex2D` | `Ray3`, `SpatialIndex3D` |
+| Camera visibility | `Frustum2D` | `Frustum3D` |
 | Drawing pass | `frame.world_2d` | `frame.world_3d` |
 | Filled primitive | `canvas.rectangle` | `canvas.cube` |
 
