@@ -6,7 +6,8 @@ Games are ordinary Cargo projects, with a shared lifecycle and conventions for
 
 The SDK includes dense typed entities/components, optional scene parenting,
 fixed simulation updates, action input, timers, typed events, interpolated rendering, fitted cameras,
-high-DPI viewports, anchored UI, swept character collision, and cached
+high-DPI viewports, anchored UI, swept character collision, 2D/3D ray selection,
+proximity and camera-visibility queries, and cached
 texture/model/sound handles, generated meshes, and materials with typed shader
 parameters and explicit alpha policies. Raylib is available directly for specialized work.
 
@@ -63,6 +64,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Assets and ownership](crates/rayengine/docs/assets.md)
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
+- [Spatial queries](crates/rayengine/docs/spatial_queries.md)
 - [Tests and performance comparisons](crates/rayengine/docs/testing_performance.md)
 - [Agent workflow and JSON contract](crates/rayengine/docs/agent_workflow.md)
 - [Architecture](docs/architecture.md)

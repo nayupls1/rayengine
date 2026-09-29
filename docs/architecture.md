@@ -40,7 +40,9 @@ The first release includes basic collision queries and character movement,
 not a rigid-body physics engine. Demos use geometric art so they need no
 external assets. Texture/model/audio and generated mesh ownership are part of
 the SDK. Generated mesh upload/replacement occurs on the render thread;
-CPU geometry can be produced independently. Materials supply shared shaders,
+CPU geometry can be produced independently. The core also owns explicit 2D/3D
+collider snapshots for ray, proximity, and camera-visibility queries, with no
+renderer dependency. Materials supply shared shaders,
 textures, cached typed uniforms, and explicit opaque/cutout/blended policies for
 generated meshes and imported models. Game code orders transparent draws;
 asynchronous upload scheduling remains separate work.
