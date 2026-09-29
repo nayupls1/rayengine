@@ -40,10 +40,8 @@ fn one_bound_covers_queued_running_and_completed_work_and_rejections_keep_inputs
     started_rx.recv_timeout(Duration::from_secs(3)).unwrap();
     pool.try_submit(|_| 2).unwrap();
     assert_eq!((pool.capacity(), pool.pending()), (2, 2));
-    let captured = vec![3, 4];
-    let rejected = pool
-        .try_submit(move |_| captured.iter().sum::<i32>())
-        .unwrap_err();
+    let captured = String::from("payload");
+    let rejected = pool.try_submit(move |_| captured.len() as i32).unwrap_err();
     assert!(matches!(rejected, SubmitError::Full(_)));
     release_tx.send(()).unwrap();
     wait_finished(&pool, 2);

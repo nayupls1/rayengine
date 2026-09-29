@@ -8,6 +8,7 @@ pub mod input;
 pub mod material;
 pub mod render;
 pub mod runtime;
+pub mod upload;
 
 pub use runtime::{
     App, Config, CursorMode, Error, Game, InitContext, RunOptions, RunReport, Update,
@@ -43,6 +44,10 @@ pub mod prelude {
     pub use crate::input::{Bindings, Button};
     pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
     pub use crate::render::Frame;
+    pub use crate::upload::{
+        MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
+        UploadBudget, UploadReport,
+    };
     pub use crate::{App, Config, CursorMode, Error, Game, InitContext, RunOptions, Update};
     pub use rayengine_core::prelude::*;
     pub use raylib::prelude::{Color, KeyboardKey};

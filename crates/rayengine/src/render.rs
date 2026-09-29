@@ -37,6 +37,28 @@ pub struct Frame<'frame, 'audio> {
 }
 
 impl Frame<'_, '_> {
+    /// Processes bounded mesh uploads before a drawing pass. The game decides
+    /// whether each tag/revision is current and receives success/failure/stale outcomes.
+    pub fn upload_meshes<K>(
+        &mut self,
+        queue: &mut crate::upload::MeshUploadQueue<K>,
+        budget: crate::upload::UploadBudget,
+        is_current: impl FnMut(&K, u64) -> bool,
+        on_result: impl FnMut(crate::upload::MeshUploadResult<K>),
+    ) -> crate::upload::UploadReport {
+        queue.process(
+            budget,
+            is_current,
+            |target, data| match target {
+                crate::upload::MeshUploadTarget::Create => self.mesh(data),
+                crate::upload::MeshUploadTarget::Replace(id) => {
+                    self.replace_mesh(id, data).map(|()| id)
+                }
+            },
+            on_result,
+        )
+    }
+
     /// Creates a material before entering a drawing pass.
     pub fn material(&mut self, desc: MaterialDesc) -> Result<MaterialId, Error> {
         self.assets.create_material(self.raylib, self.thread, desc)
