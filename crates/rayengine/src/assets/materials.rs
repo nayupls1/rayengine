@@ -16,6 +16,7 @@ pub(super) struct ShaderAsset {
     native: Shader,
     mode: i32,
     cutoff: i32,
+    last_alpha: Option<(i32, f32)>,
     uniforms: Vec<Uniform>,
     names: HashMap<String, usize>,
 }
@@ -80,6 +81,7 @@ impl ShaderAsset {
             native,
             mode,
             cutoff,
+            last_alpha: None,
             uniforms: Vec::new(),
             names: HashMap::new(),
         })
@@ -282,11 +284,16 @@ impl MaterialAssets {
             AlphaMode::Cutout(t) => (1, t),
             AlphaMode::Blend => (2, 0.0),
         };
-        if shader.mode >= 0 {
-            shader.native.set_shader_value(shader.mode, mode);
-        }
-        if shader.cutoff >= 0 {
-            shader.native.set_shader_value(shader.cutoff, cutoff);
+        // Engine-owned programs retain uniform values between draws. Alpha
+        // uniforms are reserved, so only this path can change them.
+        if shader.last_alpha != Some((mode, cutoff)) {
+            if shader.mode >= 0 {
+                shader.native.set_shader_value(shader.mode, mode);
+            }
+            if shader.cutoff >= 0 {
+                shader.native.set_shader_value(shader.cutoff, cutoff);
+            }
+            shader.last_alpha = Some((mode, cutoff));
         }
         let mul = |a: u8, b: u8| ((u16::from(a) * u16::from(b) + 127) / 255) as u8;
         Some(Prepared {

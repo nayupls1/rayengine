@@ -77,6 +77,7 @@ fn native_material_smoke() {
         shader: Option<ShaderId>,
         uniform: Option<UniformId>,
         opaque: Option<MaterialId>,
+        cutout_zero: Option<MaterialId>,
         cutout: Option<MaterialId>,
         blend: Option<MaterialId>,
         red: Option<MaterialId>,
@@ -135,6 +136,11 @@ fn native_material_smoke() {
             self.cutout = Some(ctx.material(MaterialDesc {
                 texture: Some(texture),
                 alpha: AlphaMode::Cutout(0.5),
+                ..MaterialDesc::default()
+            })?);
+            self.cutout_zero = Some(ctx.material(MaterialDesc {
+                texture: Some(texture),
+                alpha: AlphaMode::Cutout(0.0),
                 ..MaterialDesc::default()
             })?);
             self.blend = Some(ctx.material(MaterialDesc {
@@ -206,6 +212,17 @@ fn native_material_smoke() {
                     assert_eq!(pixel(frame, -0.5), Color::new(0, 255, 0, 255));
                     frame.clear(Color::BLACK);
                     frame.world_3d(camera(), |canvas| {
+                        assert!(canvas.mesh_material(
+                            mesh,
+                            self.cutout_zero.unwrap(),
+                            Transform3D::default(),
+                            Color::WHITE
+                        ));
+                    });
+                    assert_eq!(pixel(frame, -0.5), Color::new(0, 255, 0, 255));
+                    frame.clear(Color::BLACK);
+                    frame.world_3d(camera(), |canvas| {
+                        // Same alpha mode, different cutoff: cached uniforms must update.
                         assert!(canvas.mesh_material(
                             mesh,
                             self.cutout.unwrap(),
@@ -494,6 +511,7 @@ fn native_material_smoke() {
             shader: None,
             uniform: None,
             opaque: None,
+            cutout_zero: None,
             cutout: None,
             blend: None,
             red: None,
