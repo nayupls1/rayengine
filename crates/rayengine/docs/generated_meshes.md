@@ -141,8 +141,8 @@ Mutable frame access also prevents unloading/replacing a resource while its
 camera pass borrows it. Game code can keep `MeshData` only as long as it needs
 it: uploads copy the data and do not retain a borrow.
 
-Bounded background work and upload budgets are tracked in
-[issue #5](https://github.com/nayupls1/rayengine/issues/5). Voxel/chunk storage,
+Use [background work](crate::guides::background_work) for bounded CPU jobs and
+explicit render-thread upload budgets. Voxel/chunk storage,
 face selection, meshing algorithms, and world streaming policy remain game code.
 
 ## Verification

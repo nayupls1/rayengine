@@ -38,6 +38,8 @@ The material probe checks textured meshes/models, opaque/cutout/blended pixels,
 depth writes, primitive ordering, shader compile/type failures, parameter defaults
 and overrides, shared resource lifetime, stale dependencies, and render-state
 restoration.
+The upload probe sends worker-generated meshes through stale, count, byte and
+failure handling, and checks actual old/new geometry pixels.
 The script also runs both demos at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;
@@ -70,6 +72,11 @@ with the normal provenance/export workflow. Rebuild cases measure the complete
 snapshot update; query cases reuse a built index and visitor callbacks do not
 allocate output vectors.
 
+`scripts/benchmark.sh save background-v1 jobs_` measures idle polling, full-queue
+rejection, scheduling/receipt latency and an eight-job batch. Synchronous payload
+generation is the reference. Payload sizes are 0, 1 KiB and 64 KiB; worker setup
+is outside measurement, while payload allocation/drop and scheduling are inside.
+
 Native draw submission has a separate opt-in suite requiring a display:
 
 ```sh
@@ -77,6 +84,7 @@ scripts/render_benchmark.sh save materials-v1
 scripts/render_benchmark.sh compare materials-v1
 # Select native Wayland instead:
 RAYENGINE_BACKEND=wayland scripts/render_benchmark.sh save wayland-materials-v1
+scripts/render_benchmark.sh save uploads-v1 mesh_upload
 ```
 
 Stable `draw_submission` cases submit 100 indexed quads through the existing
@@ -88,6 +96,10 @@ script records backend/target settings and `glxinfo -B` when available on X11;
 set `RAYENGINE_RENDERER_INFO` to add renderer details. Native exports use the
 same snapshot schema and comparator as the CPU suite. Normal benchmark runs
 do not initialize this native suite unless `RAYENGINE_RENDER_BENCH=1` is set.
+`mesh_upload` cases compare direct and budgeted complete replacement for one
+and 1,024 triangles. Queue setup and CPU data cloning are outside the budgeted
+measured region; draining includes validation, GPU allocation, callbacks and
+staged-data release. These are CPU/driver wall times, without GPU timer queries.
 
 Criterion baselines live in `target/criterion` (or `CARGO_TARGET_DIR/criterion`).
 Every script run exports portable results, samples and metadata under

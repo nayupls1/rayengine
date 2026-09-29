@@ -32,6 +32,8 @@ pub mod guides {
     pub mod materials {}
     #[doc = include_str!("../docs/spatial_queries.md")]
     pub mod spatial_queries {}
+    #[doc = include_str!("../docs/background_work.md")]
+    pub mod background_work {}
     #[doc = include_str!("../docs/testing_performance.md")]
     pub mod testing_performance {}
     #[doc = include_str!("../docs/agent_workflow.md")]

@@ -11,6 +11,7 @@ Start with [the quickstart](crate::guides::quickstart), then read
 [generated meshes](crate::guides::generated_meshes),
 [materials and shaders](crate::guides::materials),
 [spatial queries](crate::guides::spatial_queries),
+[background work](crate::guides::background_work),
 [testing and performance](crate::guides::testing_performance), and the
 [agent workflow](crate::guides::agent_workflow).
 
