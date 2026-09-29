@@ -45,7 +45,9 @@ collider snapshots for ray, proximity, and camera-visibility queries, with no
 renderer dependency. Materials supply shared shaders,
 textures, cached typed uniforms, and explicit opaque/cutout/blended policies for
 generated meshes and imported models. Game code orders transparent draws;
-asynchronous upload scheduling remains separate work.
+CPU jobs and mesh staging have explicit bounded queues. Upload budgets are
+applied on the render thread; cancellation and game-defined revisions reject
+obsolete work. Automatic world streaming remains game policy.
 
 Tests cover behavior without a display; rendering smoke checks exercise raylib
 separately. Benchmarks retain named baselines and record toolchain and machine

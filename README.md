@@ -65,6 +65,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
+- [Background work and upload budgets](crates/rayengine/docs/background_work.md)
 - [Tests and performance comparisons](crates/rayengine/docs/testing_performance.md)
 - [Agent workflow and JSON contract](crates/rayengine/docs/agent_workflow.md)
 - [Architecture](docs/architecture.md)

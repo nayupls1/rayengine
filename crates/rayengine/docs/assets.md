@@ -77,4 +77,6 @@ the raylib thread token or GPU resources to workers.
 For fonts or other native resources, use `InitContext::raylib` and
 `InitContext::thread`. For specialized drawing, use a canvas's `raw` guard or
 `Frame::with_raylib`. These APIs keep the basic SDK small while preserving
-raylib access. Asynchronous asset pipelines and hot reload are outside 0.0.1.
+raylib access. Bounded CPU jobs and staged mesh uploads are covered in
+[background work](crate::guides::background_work); automatic file asset pipelines
+and hot reload remain outside 0.0.1.

@@ -8,6 +8,7 @@ pub mod input;
 pub mod material;
 pub mod render;
 pub mod runtime;
+pub mod upload;
 
 pub use runtime::{
     App, Config, CursorMode, Error, Game, InitContext, RunOptions, RunReport, Update,
@@ -31,6 +32,8 @@ pub mod guides {
     pub mod materials {}
     #[doc = include_str!("../docs/spatial_queries.md")]
     pub mod spatial_queries {}
+    #[doc = include_str!("../docs/background_work.md")]
+    pub mod background_work {}
     #[doc = include_str!("../docs/testing_performance.md")]
     pub mod testing_performance {}
     #[doc = include_str!("../docs/agent_workflow.md")]
@@ -43,6 +46,10 @@ pub mod prelude {
     pub use crate::input::{Bindings, Button};
     pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
     pub use crate::render::Frame;
+    pub use crate::upload::{
+        MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
+        UploadBudget, UploadReport,
+    };
     pub use crate::{App, Config, CursorMode, Error, Game, InitContext, RunOptions, Update};
     pub use rayengine_core::prelude::*;
     pub use raylib::prelude::{Color, KeyboardKey};

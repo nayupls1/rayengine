@@ -30,7 +30,7 @@ import json, os, shutil, subprocess, sys
 from pathlib import Path
 path = Path(sys.argv[1]) / 'metadata.json'
 data = json.loads(path.read_text())
-data.update(measurement='Native OpenGL draw submission wall time; includes driver stalls; no GPU timer', backend=sys.argv[2], render_target=[64,64], vsync=False, renderer_note=os.environ.get('RAYENGINE_RENDERER_INFO',''))
+data.update(measurement='Native OpenGL draw submission/upload wall time; includes driver stalls; no GPU timer', backend=sys.argv[2], render_target=[64,64], vsync=False, renderer_note=os.environ.get('RAYENGINE_RENDERER_INFO',''))
 if sys.argv[2] == 'x11' and shutil.which('glxinfo'):
     result = subprocess.run(['glxinfo','-B'],capture_output=True,text=True,timeout=10)
     data['glxinfo'] = result.stdout

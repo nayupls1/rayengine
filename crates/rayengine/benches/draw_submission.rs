@@ -1,5 +1,5 @@
-//! Opt-in native draw submission workloads. Timings include driver stalls, not GPU timer queries.
-use criterion::{Criterion, Throughput};
+//! Opt-in native drawing/upload workloads. Timings include driver stalls, not GPU timer queries.
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput};
 use rayengine::{prelude::*, raylib::prelude::Image};
 use std::{hint::black_box, path::PathBuf, time::Duration};
 
@@ -80,6 +80,53 @@ impl Game for Bench {
     fn draw(&mut self, frame: &mut Frame<'_, '_>) {
         let mut criterion = self.criterion.take().expect("one benchmark frame");
         let mesh = self.mesh.unwrap();
+        let mut uploads = criterion.benchmark_group("mesh_upload");
+        for triangles in [1, 1_024] {
+            let data = MeshData::new(
+                (0..triangles)
+                    .flat_map(|_| [Vec3::ZERO, Vec3::X, Vec3::Y])
+                    .collect(),
+            );
+            let target = frame.mesh(&data).unwrap();
+            uploads.bench_function(BenchmarkId::new("direct_replace", triangles), |b| {
+                b.iter(|| frame.replace_mesh(target, black_box(&data)).unwrap())
+            });
+            uploads.bench_function(BenchmarkId::new("budgeted_replace", triangles), |b| {
+                b.iter_batched(
+                    || {
+                        let mut queue = MeshUploadQueue::new(1, usize::MAX).unwrap();
+                        queue
+                            .try_push(MeshUpload {
+                                tag: (),
+                                revision: 0,
+                                target: MeshUploadTarget::Replace(target),
+                                data: data.clone(),
+                            })
+                            .unwrap();
+                        queue
+                    },
+                    |mut queue| {
+                        let report = frame.upload_meshes(
+                            &mut queue,
+                            UploadBudget {
+                                max_requests: 1,
+                                max_bytes: usize::MAX,
+                                max_time: Duration::MAX,
+                            },
+                            |_, _| true,
+                            |result| {
+                                assert!(matches!(result.outcome, MeshUploadOutcome::Uploaded(_)));
+                            },
+                        );
+                        assert_eq!(report.uploaded, 1);
+                        black_box(report);
+                    },
+                    BatchSize::SmallInput,
+                )
+            });
+            frame.assets.unload_mesh(target);
+        }
+        uploads.finish();
         let camera = Camera3D {
             position: Vec3::new(0.0, 0.0, 6.0),
             target: Vec3::ZERO,
