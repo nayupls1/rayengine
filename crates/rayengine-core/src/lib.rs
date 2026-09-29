@@ -12,6 +12,7 @@ pub mod events;
 pub mod input;
 pub mod mesh;
 pub mod scene;
+pub mod spatial;
 pub mod time;
 pub mod transform;
 pub mod ui;
@@ -25,6 +26,7 @@ pub mod prelude {
     pub use crate::input::{Action, Input};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
     pub use crate::scene::Scene;
+    pub use crate::spatial::{Frustum2D, Frustum3D, Ray2, Ray3, SpatialIndex2D, SpatialIndex3D};
     pub use crate::time::{FixedClock, Tick, Timer};
     pub use crate::transform::{
         GlobalTransform2D, GlobalTransform3D, Parent, Transform2D, Transform3D,
