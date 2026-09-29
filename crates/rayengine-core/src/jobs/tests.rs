@@ -104,6 +104,72 @@ fn current_handle_rejects_obsolete_and_cross_pool_results() {
 }
 
 #[test]
+fn completions_do_not_wait_for_earlier_submissions() {
+    let pool = JobPool::new(2, 2).unwrap();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let slow = pool
+        .try_submit(move |_| {
+            started_tx.send(()).unwrap();
+            release_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+            1
+        })
+        .unwrap();
+    started_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    let fast = pool.try_submit(|_| 2).unwrap();
+    assert_eq!(receive(&pool).id, fast.id());
+    assert_eq!(pool.pending(), 1);
+    release_tx.send(()).unwrap();
+    assert_eq!(receive(&pool).id, slow.id());
+}
+
+#[test]
+fn cancellation_and_shutdown_drop_user_data_outside_the_queue_mutex() {
+    struct Probe(Arc<Shared<Option<Probe>>>);
+    impl Drop for Probe {
+        fn drop(&mut self) {
+            // Real game cleanup may reenter the pool. Holding this mutex while
+            // dropping captured inputs/results would deadlock here.
+            drop(self.0.lock());
+        }
+    }
+    let (finished_tx, finished_rx) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let mut pool = JobPool::new(1, 2).unwrap();
+        let probe = Probe(Arc::clone(&pool.shared));
+        let handle = pool.try_submit(move |_| Some(probe)).unwrap();
+        wait_finished(&pool, 1);
+        handle.cancel();
+        assert!(matches!(receive(&pool).outcome, JobOutcome::Cancelled));
+        let probe = Probe(Arc::clone(&pool.shared));
+        pool.try_submit(move |_| Some(probe)).unwrap();
+        wait_finished(&pool, 1);
+        pool.shutdown(); // Completed payload.
+
+        let mut pool = JobPool::new(1, 2).unwrap();
+        let probe = Probe(Arc::clone(&pool.shared));
+        let (started_tx, started_rx) = mpsc::channel();
+        pool.try_submit(move |cancel| {
+            started_tx.send(()).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !cancel.is_cancelled() {
+                assert!(Instant::now() < deadline);
+                thread::yield_now();
+            }
+            Some(probe)
+        })
+        .unwrap();
+        started_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        let probe = Probe(Arc::clone(&pool.shared));
+        pool.try_submit(move |_| Some(probe)).unwrap();
+        pool.shutdown(); // Queued capture and running payload.
+        finished_tx.send(()).unwrap();
+    });
+    finished_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    worker.join().unwrap();
+}
+
+#[test]
 fn shutdown_signals_running_jobs_discards_queue_and_never_needs_completion_drain() {
     let mut pool = JobPool::new(1, 2).unwrap();
     let (started_tx, started_rx) = mpsc::channel();

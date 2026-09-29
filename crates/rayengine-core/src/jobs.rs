@@ -287,6 +287,8 @@ impl<R: Send + 'static> JobPool<R> {
 
     /// Drops queued/completed work, signals running jobs, and joins workers.
     /// Idempotent. Running jobs must cooperate or finish before this returns.
+    /// If the pool's last owner is dropped by its own job, that worker exits
+    /// after the job returns instead of attempting to join itself.
     pub fn shutdown(&mut self) {
         self.shared.stopping.store(true, Ordering::Release);
         let discarded = {
