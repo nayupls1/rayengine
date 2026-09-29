@@ -361,6 +361,8 @@ fn visibility_3d_respects_near_far_and_fit_or_expand() {
     let too_close = Aabb3::from_center(Vec3::new(0.0, 0.0, -0.5), Vec3::splat(0.2));
     let too_far = Aabb3::from_center(Vec3::new(0.0, 0.0, -11.0), Vec3::splat(0.2));
     assert!(fitted.intersects(center));
+    assert!(fitted.intersects(Aabb3::from_center(Vec3::new(0.0, 0.0, -1.0), Vec3::ZERO,)));
+    assert!(fitted.intersects(Aabb3::from_center(Vec3::new(0.0, 0.0, -10.0), Vec3::ZERO,)));
     assert!(fitted.intersects(side));
     assert!(portrait_fit.intersects(side));
     assert!(!portrait_expand.intersects(side));
