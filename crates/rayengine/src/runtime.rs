@@ -11,6 +11,7 @@ use rayengine_core::{
     input::Input,
     mesh::MeshData,
     time::{FixedClock, Tick},
+    ui::{UiActions, UiInput},
     viewport::{ScaleMode, Viewport},
 };
 use raylib::prelude::*;
@@ -79,6 +80,9 @@ pub struct Config {
     pub vsync: bool,
     /// Initialize audio. Disabled until a game requests it.
     pub audio: bool,
+    /// Native window-exit key. Defaults to Escape; `None` lets game UI bind
+    /// Escape itself. The window close button and `Update::quit` still work.
+    pub exit_key: Option<KeyboardKey>,
     /// Background color outside the content viewport.
     pub bar_color: Color,
 }
@@ -96,6 +100,7 @@ impl Config {
             target_fps: 120,
             vsync: true,
             audio: false,
+            exit_key: Some(KeyboardKey::KEY_ESCAPE),
             bar_color: Color::new(9, 14, 24, 255),
         }
     }
@@ -297,14 +302,20 @@ pub struct Update<'context, 'audio> {
     pub input: &'context Input,
     /// Current viewport, shared with UI and cameras.
     pub viewport: Viewport,
-    /// Pointer in UI units, or `None` in bars or while unfocused.
+    /// Pointer in UI units, or `None` in bars, while captured, or while unfocused.
     pub pointer: Option<Vec2>,
+    /// Whether the window is focused and can accept UI input.
+    pub window_focused: bool,
     /// Loaded assets, including sound playback.
     pub assets: &'context Assets<'audio>,
     pub(crate) quit: &'context mut bool,
 }
 
 impl Update<'_, '_> {
+    /// Samples UI actions using this tick's mapped pointer and window focus.
+    pub fn ui_input(&self, actions: UiActions) -> UiInput {
+        UiInput::from_actions(self.input, self.pointer, actions, self.window_focused)
+    }
     /// Requests exit after the current update batch and final presentation.
     pub fn quit(&mut self) {
         *self.quit = true;
@@ -313,7 +324,9 @@ impl Update<'_, '_> {
 
 /// Shared game lifecycle for 2D, 3D, or mixed games.
 pub trait Game {
-    /// Chooses the cursor policy at startup. Capture is suspended on focus loss.
+    /// Chooses the current cursor policy. Re-read before input sampling and after
+    /// fixed updates, so opening/closing menus can release/recapture the cursor.
+    /// Capture is suspended on focus loss; transition motion is discarded.
     fn cursor_mode(&self) -> CursorMode {
         CursorMode::Free
     }
@@ -345,16 +358,43 @@ pub enum CursorMode {
 struct CursorState {
     focused: bool,
     captured: bool,
+    discard_motion: bool,
 }
 
 impl CursorState {
-    fn update(&mut self, mode: CursorMode, focused: bool) -> (bool, bool) {
+    fn sync(&mut self, mode: CursorMode, focused: bool) -> bool {
         let capture = focused && mode == CursorMode::Captured;
         let changed = capture != self.captured;
-        let accept_motion = focused && self.focused && !changed;
+        self.discard_motion |= changed || focused != self.focused;
         self.focused = focused;
         self.captured = capture;
-        (changed, accept_motion)
+        changed
+    }
+
+    fn take_motion(&mut self) -> bool {
+        let discard = std::mem::take(&mut self.discard_motion);
+        self.focused && !discard
+    }
+
+    #[cfg(test)]
+    fn update(&mut self, mode: CursorMode, focused: bool) -> (bool, bool) {
+        let changed = self.sync(mode, focused);
+        (changed, self.take_motion())
+    }
+}
+
+fn sync_cursor(
+    raylib: &mut RaylibHandle,
+    state: &mut CursorState,
+    mode: CursorMode,
+    focused: bool,
+) {
+    if state.sync(mode, focused) {
+        if state.captured {
+            raylib.disable_cursor();
+        } else {
+            raylib.enable_cursor();
+        }
     }
 }
 
@@ -418,6 +458,7 @@ impl App {
             builder.hidden().always_run();
         }
         let (mut raylib, thread) = builder.build();
+        raylib.set_exit_key(config.exit_key);
         raylib.set_target_fps(if options.uncapped {
             0
         } else {
@@ -439,7 +480,6 @@ impl App {
             thread: &thread,
             assets: &mut assets,
         })?;
-        let cursor_mode = game.cursor_mode();
         let mut cursor = CursorState::default();
         let mut target: Option<RenderTexture2D> = None;
         let mut target_size = (0, 0);
@@ -461,9 +501,7 @@ impl App {
             );
             let view = Viewport::new(window, config.reference_size, config.scale_mode);
             if raylib.is_window_minimized() || view.is_none() {
-                if cursor.update(cursor_mode, false).0 {
-                    raylib.enable_cursor();
-                }
+                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), false);
                 input.release_all();
                 // Keep backend event polling alive, but pause simulation while minimized.
                 raylib
@@ -473,25 +511,14 @@ impl App {
                 continue;
             }
             let view = view.expect("non-minimized viewport");
-            let (cursor_changed, accept_motion) =
-                cursor.update(cursor_mode, raylib.is_window_focused());
-            if cursor_changed {
-                if cursor.captured {
-                    raylib.disable_cursor();
-                } else {
-                    raylib.enable_cursor();
-                }
-            }
+            let window_focused = raylib.is_window_focused();
+            sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
             bindings.sample(&raylib, &mut input);
-            if accept_motion {
+            if cursor.take_motion() {
                 let delta = raylib.get_mouse_delta();
                 input.add_pointer_delta(Vec2::new(delta.x, delta.y));
             }
             let mouse = raylib.get_mouse_position();
-            let pointer = raylib
-                .is_window_focused()
-                .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
-                .flatten();
             let plan = clock.advance(elapsed);
             report.dropped_time += plan.dropped;
             for step in 0..plan.steps {
@@ -502,11 +529,15 @@ impl App {
                     },
                     input: &input,
                     viewport: view,
-                    pointer,
+                    pointer: (window_focused && !cursor.captured)
+                        .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
+                        .flatten(),
+                    window_focused,
                     assets: &assets,
                     quit: &mut quit,
                 });
                 input.consume_edges();
+                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
                 report.ticks += 1;
                 if quit {
                     break;
@@ -610,6 +641,24 @@ mod tests {
         assert_eq!(free.update(CursorMode::Free, true), (false, false));
         assert_eq!(free.update(CursorMode::Free, true), (false, true));
         assert!(!free.captured);
+    }
+
+    #[test]
+    fn menu_transitions_discard_motion_even_when_changed_between_samples() {
+        let mut state = CursorState::default();
+        assert!(state.sync(CursorMode::Captured, true));
+        assert!(!state.take_motion());
+        assert!(state.take_motion());
+        assert!(state.sync(CursorMode::Free, true));
+        assert!(!state.captured);
+        assert!(state.sync(CursorMode::Captured, true));
+        assert!(!state.take_motion()); // Open/close between samples still discarded.
+        assert!(state.take_motion());
+        assert!(state.sync(CursorMode::Captured, false));
+        assert!(!state.take_motion());
+        assert!(state.sync(CursorMode::Captured, true));
+        assert!(!state.take_motion());
+        assert!(state.take_motion());
     }
 
     #[test]
@@ -790,3 +839,6 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
+
+#[cfg(test)]
+mod ui_tests;

@@ -364,5 +364,123 @@ fn background_jobs(c: &mut Criterion) {
     });
 }
 
-criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries, background_jobs }
+fn ui_interaction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ui_interaction");
+    for count in [1, 32] {
+        let mut regions: Vec<_> = (0..count)
+            .map(|i| {
+                UiRegion::new(
+                    UiId(i as u64),
+                    Aabb2::from_center(Vec2::new(i as f32 * 40.0, 20.0), Vec2::splat(30.0)),
+                )
+            })
+            .collect();
+        let mut ui = UiState::with_capacity(count);
+        let idle = UiInput {
+            pointer: Some(regions[count - 1].bounds.center()),
+            window_focused: true,
+            ..UiInput::default()
+        };
+        group.bench_function(BenchmarkId::new("hover", count), |b| {
+            b.iter(|| black_box(ui.update(black_box(&regions), black_box(idle))))
+        });
+        group.bench_function(BenchmarkId::new("click_pair", count), |b| {
+            b.iter(|| {
+                black_box(ui.update(
+                    &regions,
+                    UiInput {
+                        primary: UiButton {
+                            down: true,
+                            pressed: true,
+                            released: false,
+                        },
+                        ..idle
+                    },
+                ));
+                black_box(ui.update(
+                    &regions,
+                    UiInput {
+                        primary: UiButton {
+                            released: true,
+                            ..UiButton::default()
+                        },
+                        ..idle
+                    },
+                ));
+            })
+        });
+        group.bench_function(BenchmarkId::new("keyboard_next", count), |b| {
+            b.iter(|| {
+                black_box(ui.update(
+                    &regions,
+                    UiInput {
+                        next: true,
+                        window_focused: true,
+                        ..UiInput::default()
+                    },
+                ))
+            })
+        });
+        regions[count - 1].draggable = true;
+        group.bench_function(BenchmarkId::new("drag_triplet", count), |b| {
+            b.iter(|| {
+                black_box(ui.update(
+                    &regions,
+                    UiInput {
+                        primary: UiButton {
+                            down: true,
+                            pressed: true,
+                            released: false,
+                        },
+                        ..idle
+                    },
+                ));
+                black_box(ui.update(
+                    &regions,
+                    UiInput {
+                        pointer: idle.pointer.map(|p| p + Vec2::splat(5.0)),
+                        primary: UiButton {
+                            down: true,
+                            ..UiButton::default()
+                        },
+                        ..idle
+                    },
+                ));
+                black_box(ui.update(
+                    &regions,
+                    UiInput {
+                        primary: UiButton {
+                            released: true,
+                            ..UiButton::default()
+                        },
+                        ..idle
+                    },
+                ));
+            })
+        });
+    }
+    group.finish();
+    let mut raw = Input::with_capacity(8);
+    let actions: Vec<_> = (0..8).map(Action).collect();
+    for &action in &actions {
+        raw.set(action, true);
+    }
+    raw.add_pointer_delta(Vec2::ONE);
+    let mut routing = c.benchmark_group("ui_routing");
+    for masked in [false, true] {
+        routing.bench_function(if masked { "masked_8" } else { "unmasked_8" }, |b| {
+            b.iter(|| {
+                let view = raw.routed(black_box(if masked { &actions } else { &[] }), masked);
+                for &action in &actions {
+                    black_box(view.down(black_box(action)));
+                    black_box(view.pressed(black_box(action)));
+                }
+                black_box(view.pointer_delta());
+            })
+        });
+    }
+    routing.finish();
+}
+
+criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries, background_jobs, ui_interaction }
 criterion_main!(benches);

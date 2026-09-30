@@ -46,20 +46,25 @@ Quick press/release transitions can both be present in that tick.
 
 Keyboard, mouse buttons and digital gamepad buttons are supported. Analog axes,
 rebinding persistence and more elaborate input schemes can be added when needed.
-Focus loss releases held actions. Escape uses raylib's normal window-exit behavior;
-games can request their own exit through `context.quit()`.
+Focus loss releases held actions. `Input::reset_pending` remembers a reset until
+the next consumed tick, including pauses. Escape defaults to window exit; set
+`Config::exit_key = None` to bind it to UI instead. Games can exit with
+`context.quit()` or the window close button.
 
 For first-person mouse look, return `CursorMode::Captured` from
 `Game::cursor_mode`. The runner hides and captures the focused window's cursor,
 releases it on focus loss, and ignores motion during focus/capture transitions.
-Free cursors remain the default, including for Arena.
+The policy is re-read before sampling and after fixed updates: return `Free`
+while menus are open, and `Captured` during play. Free cursors remain the default,
+including for Arena. Use [interactive UI](crate::guides::interactive_ui) for
+focus, drag capture and explicit action/look-motion masks with `Input::routed`.
 
 `context.input.pointer_delta()` supplies relative motion in logical window units.
 Motion accumulates across render frames with no update, is consumed on the first
 fixed tick, and is zero on subsequent catch-up ticks. Apply mouse sensitivity
 directly to this displacement; multiplying by `dt` makes sensitivity depend on
 frame timing. Absolute `context.pointer` coordinates remain available for UI
-and aimed clicks.
+and aimed clicks while the cursor is free; captured cursors yield `None`.
 
 For smooth presentation, record the position before each tick:
 

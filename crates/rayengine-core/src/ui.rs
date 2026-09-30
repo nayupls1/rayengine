@@ -3,6 +3,11 @@
 use crate::collision::Aabb2;
 use glam::Vec2;
 
+mod interaction;
+pub use interaction::{
+    UiActions, UiButton, UiCapture, UiId, UiInput, UiRegion, UiResponse, UiState,
+};
+
 /// A sized UI rectangle with normalized anchor and pivot coordinates.
 #[derive(Clone, Copy, Debug)]
 pub struct UiRect {

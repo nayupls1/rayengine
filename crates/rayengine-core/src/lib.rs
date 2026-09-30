@@ -24,7 +24,7 @@ pub mod prelude {
     pub use crate::camera::{Camera2D, Camera3D};
     pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D};
     pub use crate::events::Events;
-    pub use crate::input::{Action, Input};
+    pub use crate::input::{Action, Input, InputView};
     pub use crate::jobs::{Cancellation, Completion, JobHandle, JobId, JobOutcome, JobPool};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
     pub use crate::scene::Scene;
@@ -36,7 +36,9 @@ pub mod prelude {
     pub use crate::transform::{
         GlobalTransform2D, GlobalTransform3D, Parent, Transform2D, Transform3D,
     };
-    pub use crate::ui::UiRect;
+    pub use crate::ui::{
+        UiActions, UiButton, UiCapture, UiId, UiInput, UiRect, UiRegion, UiResponse, UiState,
+    };
     pub use crate::viewport::{ScaleMode, Viewport};
     pub use glam::{Quat, Vec2, Vec3};
     pub use hecs::{Entity, World};

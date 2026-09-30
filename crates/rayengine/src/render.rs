@@ -14,6 +14,7 @@ use rayengine_core::{
     glam::{Mat4, Vec2, Vec3},
     mesh::MeshData,
     transform::Transform3D,
+    ui::UiResponse,
     viewport::Viewport,
 };
 use raylib::prelude::*;
@@ -175,6 +176,7 @@ impl Frame<'_, '_> {
             scale,
             logical_size: self.viewport.logical_size,
             font,
+            textures: self.assets,
         });
     }
 
@@ -417,9 +419,101 @@ pub struct UiCanvas<'draw, D: RaylibDraw> {
     pub logical_size: Vec2,
     scale: Vec2,
     font: WeakFont,
+    textures: &'draw dyn TextureSource,
+}
+
+/// Optional default button appearance. Layout and interaction remain game-owned.
+#[derive(Clone, Copy, Debug)]
+pub struct UiButtonStyle {
+    /// Resting fill.
+    pub normal: Color,
+    /// Pointer hover fill.
+    pub hovered: Color,
+    /// Held pointer fill.
+    pub pressed: Color,
+    /// Disabled fill.
+    pub disabled: Color,
+    /// Label color.
+    pub text: Color,
+    /// Keyboard focus outline.
+    pub focus: Color,
+    /// Font size in reference UI units.
+    pub font_size: f32,
+}
+
+impl Default for UiButtonStyle {
+    fn default() -> Self {
+        Self {
+            normal: Color::new(37, 49, 66, 255),
+            hovered: Color::new(55, 76, 99, 255),
+            pressed: Color::new(25, 102, 120, 255),
+            disabled: Color::new(44, 44, 48, 255),
+            text: Color::WHITE,
+            focus: Color::new(93, 217, 225, 255),
+            font_size: 20.0,
+        }
+    }
 }
 
 impl<D: RaylibDraw> UiCanvas<'_, D> {
+    /// Draws an already-resolved button response; activation is handled during
+    /// fixed update. Use short labels that fit the supplied bounds.
+    pub fn button(
+        &mut self,
+        bounds: Aabb2,
+        label: &str,
+        response: &UiResponse,
+        style: UiButtonStyle,
+    ) {
+        let fill = if !response.enabled {
+            style.disabled
+        } else if response.held {
+            style.pressed
+        } else if response.hovered {
+            style.hovered
+        } else {
+            style.normal
+        };
+        self.rectangle(bounds, fill);
+        if response.focused {
+            self.raw.draw_rectangle_lines_ex(
+                rect(Aabb2 {
+                    min: bounds.min * self.scale,
+                    max: bounds.max * self.scale,
+                }),
+                2.0 * self.scale.min_element(),
+                style.focus,
+            );
+        }
+        let measured = self.font.measure_text(label, style.font_size, 1.0);
+        self.text(
+            label,
+            bounds.center() - Vec2::new(measured.x, measured.y) * 0.5,
+            style.font_size,
+            style.text,
+        );
+    }
+
+    /// Draws a loaded texture icon into UI-unit bounds. Returns false for a
+    /// stale/unloaded texture. Icons can share an independent interactive region.
+    pub fn icon(&mut self, id: TextureId, bounds: Aabb2, tint: Color) -> bool {
+        if let Some(texture) = self.textures.texture(id) {
+            self.raw.draw_texture_pro(
+                texture,
+                Rectangle::new(0.0, 0.0, texture.width as f32, texture.height as f32),
+                rect(Aabb2 {
+                    min: bounds.min * self.scale,
+                    max: bounds.max * self.scale,
+                }),
+                Vector2::zero(),
+                0.0,
+                tint,
+            );
+            true
+        } else {
+            false
+        }
+    }
     /// Filled UI rectangle, automatically scaled to render pixels.
     pub fn rectangle(&mut self, bounds: Aabb2, color: Color) {
         self.raw.draw_rectangle_rec(

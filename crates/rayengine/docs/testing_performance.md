@@ -40,7 +40,11 @@ and overrides, shared resource lifetime, stale dependencies, and render-state
 restoration.
 The upload probe sends worker-generated meshes through stale, count, byte and
 failure handling, and checks actual old/new geometry pixels.
-The script also runs both demos at wide and portrait dimensions and saves PNGs
+The UI probe checks cursor capture/release calls and changing game policy,
+button state pixels, icons and stale texture handles in wide/portrait/Expand
+layouts. CPU tests cover clicks, keyboard focus, drag transitions, resize mapping,
+focus-loss resets through paused frames, and explicit gameplay masks.
+The script also runs both demos and the menu example at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;
 their screenshots are saved under `artifacts/regressions/`.
@@ -77,6 +81,11 @@ rejection, scheduling/receipt latency and an eight-job batch. Synchronous payloa
 generation is the reference. Payload sizes are 0, 1 KiB and 64 KiB; worker setup
 is outside measurement, while payload allocation/drop and scheduling are inside.
 
+`scripts/benchmark.sh save ui-v1 ui_` measures UI hover, paired click updates,
+keyboard navigation and three-update drags with 1/32 regions, plus eight-action
+masked/unmasked routing. Regions and reusable response storage are prepared
+outside measurement; updates use current reference-unit bounds.
+
 Native draw submission has a separate opt-in suite requiring a display:
 
 ```sh
@@ -85,6 +94,7 @@ scripts/render_benchmark.sh compare materials-v1
 # Select native Wayland instead:
 RAYENGINE_BACKEND=wayland scripts/render_benchmark.sh save wayland-materials-v1
 scripts/render_benchmark.sh save uploads-v1 mesh_upload
+scripts/render_benchmark.sh save ui-draw-v1 ui_draw
 ```
 
 Stable `draw_submission` cases submit 100 indexed quads through the existing
@@ -100,6 +110,9 @@ do not initialize this native suite unless `RAYENGINE_RENDER_BENCH=1` is set.
 and 1,024 triangles. Queue setup and CPU data cloning are outside the budgeted
 measured region; draining includes validation, GPU allocation, callbacks and
 staged-data release. These are CPU/driver wall times, without GPU timer queries.
+`ui_draw` submits 32 buttons with labels or 32 texture icons into the same fixed
+64x64 native target. Layout and interaction preparation are outside measurement;
+button response lookup, text measurement and draw submission are included.
 
 Criterion baselines live in `target/criterion` (or `CARGO_TARGET_DIR/criterion`).
 Every script run exports portable results, samples and metadata under

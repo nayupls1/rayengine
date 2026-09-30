@@ -40,7 +40,9 @@ assert_eq!(bounds.max, Vec2::new(940.0, 520.0));
 ```
 
 `Update::pointer` is already in UI units and returns `None` for bars or an
-unfocused window. For world picking, use `Camera2D::screen_to_world` with a
+unfocused window or a captured cursor. Interactive regions use the same current
+reference-unit layout; see [interactive UI](crate::guides::interactive_ui).
+For world picking, use `Camera2D::screen_to_world` with a
 logical screen pointer and the same viewport. Camera rotation is included in
 both conversions. Raw raylib mouse positions are logical window coordinates;
 do not multiply them by DPI again.

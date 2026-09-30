@@ -34,6 +34,11 @@ pub mod guides {
     pub mod spatial_queries {}
     #[doc = include_str!("../docs/background_work.md")]
     pub mod background_work {}
+    #[doc = include_str!("../docs/interactive_ui.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/menu.rs")]
+    #[doc = "```"]
+    pub mod interactive_ui {}
     #[doc = include_str!("../docs/testing_performance.md")]
     pub mod testing_performance {}
     #[doc = include_str!("../docs/agent_workflow.md")]
@@ -45,7 +50,7 @@ pub mod prelude {
     pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
     pub use crate::input::{Bindings, Button};
     pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
-    pub use crate::render::Frame;
+    pub use crate::render::{Frame, UiButtonStyle};
     pub use crate::upload::{
         MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
         UploadBudget, UploadReport,

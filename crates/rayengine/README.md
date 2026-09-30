@@ -2,7 +2,7 @@
 
 A small Linux-first Rust game SDK over raylib. Games are ordinary Cargo projects
 with a shared lifecycle for 2D and 3D, action input, fixed updates, fitted cameras,
-logical UI and explicit asset ownership. Version **0.0.1**.
+logical UI with optional interaction and explicit asset ownership. Version **0.0.1**.
 
 Start with [the quickstart](crate::guides::quickstart), then read
 [game structure](crate::guides::game_structure). The remaining guides explain
@@ -12,6 +12,7 @@ Start with [the quickstart](crate::guides::quickstart), then read
 [materials and shaders](crate::guides::materials),
 [spatial queries](crate::guides::spatial_queries),
 [background work](crate::guides::background_work),
+[interactive UI and input routing](crate::guides::interactive_ui),
 [testing and performance](crate::guides::testing_performance), and the
 [agent workflow](crate::guides::agent_workflow).
 
