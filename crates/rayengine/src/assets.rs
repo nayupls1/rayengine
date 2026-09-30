@@ -58,6 +58,34 @@ pub struct Assets<'audio> {
 }
 
 impl<'audio> Assets<'audio> {
+    /// Samples live owned resources. This scans asset slots without GPU queries
+    /// or readback; automatic sampling occurs only when diagnostics are enabled.
+    /// Logical payload bytes exclude driver overhead, default resources,
+    /// imported model textures/animations, and game-owned raw handles.
+    pub fn resource_counts(&self) -> crate::diagnostics::ResourceCounts {
+        let (meshes, generated_mesh_bytes) = self.meshes.resource_usage();
+        let (shaders, materials) = self.surfaces.resource_counts();
+        crate::diagnostics::ResourceCounts {
+            textures: self.textures.iter().flatten().count() as u64,
+            models: self.models.iter().flatten().count() as u64,
+            sounds: self.sounds.iter().flatten().count() as u64,
+            meshes,
+            shaders,
+            materials,
+            generated_mesh_bytes,
+            texture_bytes: self.textures.iter().flatten().fold(0_u64, |sum, texture| {
+                sum.saturating_add(texture_payload_bytes(texture.as_ref()))
+            }),
+            model_geometry_bytes: self
+                .models
+                .iter()
+                .flatten()
+                .flat_map(|model| model.meshes())
+                .fold(0_u64, |sum, mesh| {
+                    sum.saturating_add(mesh_payload_bytes(mesh))
+                }),
+        }
+    }
     pub(crate) fn new(audio: Option<&'audio RaylibAudio>) -> Self {
         Self {
             textures: Vec::new(),
@@ -346,6 +374,95 @@ impl<'audio> Assets<'audio> {
     }
 }
 
+fn texture_payload_bytes(texture: &raylib::ffi::Texture2D) -> u64 {
+    let (mut width, mut height) = (texture.width, texture.height);
+    let mut bytes = 0_u64;
+    for _ in 0..texture.mipmaps {
+        bytes = bytes.saturating_add(texture_level_bytes(width, height, texture.format));
+        width = (width / 2).max(1);
+        height = (height / 2).max(1);
+    }
+    bytes
+}
+
+fn texture_level_bytes(width: i32, height: i32, format: i32) -> u64 {
+    use raylib::ffi::PixelFormat::*;
+    // GetPixelDataSize uses a signed int result and fractional bytes/pixel,
+    // which undercounts compressed mip tails and can overflow large textures.
+    // Keep the raw format as an integer rather than transmuting an enum.
+    let layouts = [
+        (PIXELFORMAT_UNCOMPRESSED_GRAYSCALE, 1, 1, 1),
+        (PIXELFORMAT_UNCOMPRESSED_GRAY_ALPHA, 1, 1, 2),
+        (PIXELFORMAT_UNCOMPRESSED_R5G6B5, 1, 1, 2),
+        (PIXELFORMAT_UNCOMPRESSED_R8G8B8, 1, 1, 3),
+        (PIXELFORMAT_UNCOMPRESSED_R5G5B5A1, 1, 1, 2),
+        (PIXELFORMAT_UNCOMPRESSED_R4G4B4A4, 1, 1, 2),
+        (PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1, 1, 4),
+        (PIXELFORMAT_UNCOMPRESSED_R32, 1, 1, 4),
+        (PIXELFORMAT_UNCOMPRESSED_R32G32B32, 1, 1, 12),
+        (PIXELFORMAT_UNCOMPRESSED_R32G32B32A32, 1, 1, 16),
+        (PIXELFORMAT_UNCOMPRESSED_R16, 1, 1, 2),
+        (PIXELFORMAT_UNCOMPRESSED_R16G16B16, 1, 1, 6),
+        (PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1, 1, 8),
+        (PIXELFORMAT_COMPRESSED_DXT1_RGB, 4, 4, 8),
+        (PIXELFORMAT_COMPRESSED_DXT1_RGBA, 4, 4, 8),
+        (PIXELFORMAT_COMPRESSED_DXT3_RGBA, 4, 4, 16),
+        (PIXELFORMAT_COMPRESSED_DXT5_RGBA, 4, 4, 16),
+        (PIXELFORMAT_COMPRESSED_ETC1_RGB, 4, 4, 8),
+        (PIXELFORMAT_COMPRESSED_ETC2_RGB, 4, 4, 8),
+        (PIXELFORMAT_COMPRESSED_ETC2_EAC_RGBA, 4, 4, 16),
+        (PIXELFORMAT_COMPRESSED_PVRT_RGB, 4, 4, 8),
+        (PIXELFORMAT_COMPRESSED_PVRT_RGBA, 4, 4, 8),
+        (PIXELFORMAT_COMPRESSED_ASTC_4x4_RGBA, 4, 4, 16),
+        (PIXELFORMAT_COMPRESSED_ASTC_8x8_RGBA, 8, 8, 16),
+    ];
+    let Some((_, block_width, block_height, block_bytes)) = layouts
+        .into_iter()
+        .find(|(pixel_format, ..)| *pixel_format as i32 == format)
+    else {
+        return 0;
+    };
+    if width <= 0 || height <= 0 {
+        return 0;
+    }
+    let (mut width, mut height) = (width as u64, height as u64);
+    if format == PIXELFORMAT_COMPRESSED_PVRT_RGB as i32
+        || format == PIXELFORMAT_COMPRESSED_PVRT_RGBA as i32
+    {
+        // PVRTC 4bpp has a minimum 2x2 block footprint (8x8 texels).
+        width = width.max(8);
+        height = height.max(8);
+    }
+    width
+        .div_ceil(block_width)
+        .saturating_mul(height.div_ceil(block_height))
+        .saturating_mul(block_bytes)
+}
+
+fn mesh_payload_bytes(mesh: &impl AsRef<raylib::ffi::Mesh>) -> u64 {
+    let mesh = mesh.as_ref();
+    let vertices = mesh.vertexCount.max(0) as u64;
+    let per_vertex = [
+        (mesh.vertices.is_null(), 12),
+        (mesh.texcoords.is_null(), 8),
+        (mesh.texcoords2.is_null(), 8),
+        (mesh.normals.is_null(), 12),
+        (mesh.tangents.is_null(), 16),
+        (mesh.colors.is_null(), 4),
+    ]
+    .into_iter()
+    .filter(|(is_null, _)| !is_null)
+    .map(|(_, size)| size)
+    .sum::<u64>();
+    vertices
+        .saturating_mul(per_vertex)
+        .saturating_add(if mesh.indices.is_null() {
+            0
+        } else {
+            (mesh.triangleCount.max(0) as u64).saturating_mul(6)
+        })
+}
+
 fn asset_path(path: &Path) -> Result<PathBuf, Error> {
     let canonical = path.canonicalize()?;
     path_string(&canonical)?;
@@ -359,4 +476,64 @@ pub(crate) fn path_string(path: &Path) -> Result<&str, Error> {
             path.display()
         ))
     })
+}
+
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::*;
+    use raylib::ffi::PixelFormat::*;
+
+    #[test]
+    fn compressed_texture_bytes_include_complete_blocks_and_mip_tails() {
+        let texture = |width, height, mipmaps, format| raylib::ffi::Texture2D {
+            id: 0,
+            width,
+            height,
+            mipmaps,
+            format: format as i32,
+        };
+        // 8x2, 4x1, 2x1, 1x1: two blocks, then one per mip.
+        assert_eq!(
+            texture_payload_bytes(&texture(8, 2, 4, PIXELFORMAT_COMPRESSED_DXT1_RGB)),
+            40
+        );
+        assert_eq!(
+            texture_payload_bytes(&texture(8, 2, 4, PIXELFORMAT_COMPRESSED_DXT5_RGBA)),
+            80
+        );
+        assert_eq!(
+            texture_level_bytes(5, 7, PIXELFORMAT_COMPRESSED_ETC2_RGB as i32),
+            32
+        );
+        assert_eq!(
+            texture_level_bytes(1, 1, PIXELFORMAT_COMPRESSED_ASTC_8x8_RGBA as i32),
+            16
+        );
+        assert_eq!(
+            texture_level_bytes(9, 1, PIXELFORMAT_COMPRESSED_ASTC_8x8_RGBA as i32),
+            32
+        );
+        assert_eq!(
+            texture_level_bytes(1, 1, PIXELFORMAT_COMPRESSED_PVRT_RGBA as i32),
+            32
+        );
+    }
+
+    #[test]
+    fn uncompressed_texture_bytes_keep_wide_totals_and_mips() {
+        let texture = raylib::ffi::Texture2D {
+            id: 0,
+            width: 8,
+            height: 8,
+            mipmaps: 4,
+            format: PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 as i32,
+        };
+        assert_eq!(texture_payload_bytes(&texture), 340);
+        assert_eq!(
+            texture_level_bytes(16384, 16384, PIXELFORMAT_UNCOMPRESSED_R32G32B32A32 as i32),
+            4_294_967_296
+        );
+        assert_eq!(texture_level_bytes(8, 8, -1), 0);
+        assert_eq!(texture_level_bytes(0, 8, texture.format), 0);
+    }
 }

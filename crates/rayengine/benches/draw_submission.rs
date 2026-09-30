@@ -134,6 +134,61 @@ impl Game for Bench {
             target: Vec3::ZERO,
             ..Camera3D::default()
         };
+        // Same real pass/100 submissions in both cases; counter enable/reset is
+        // outside measurement, while per-submission branches are inside.
+        let mut diagnostics = criterion.benchmark_group("diagnostics_draw");
+        diagnostics.throughput(Throughput::Elements(100));
+        for enabled in [false, true] {
+            frame.set_draw_counters_enabled(enabled);
+            diagnostics.bench_function(
+                if enabled {
+                    "enabled_100"
+                } else {
+                    "disabled_100"
+                },
+                |b| {
+                    b.iter(|| {
+                        frame.world_3d(camera, |canvas| {
+                            for _ in 0..100 {
+                                assert!(black_box(canvas.mesh(
+                                    mesh,
+                                    black_box(Transform3D::default()),
+                                    Color::WHITE
+                                )));
+                            }
+                        })
+                    });
+                },
+            );
+            black_box(frame.draw_counters());
+        }
+        diagnostics.finish();
+        frame.set_draw_counters_enabled(false);
+        criterion.bench_function("diagnostics_resources/owned_fixture", |b| {
+            b.iter(|| black_box(frame.assets.resource_counts()));
+        });
+        let mut timing = criterion.benchmark_group("diagnostics_timing");
+        for enabled in [false, true] {
+            let mut stats = rayengine::diagnostics::TimingStats::default();
+            timing.bench_function(
+                if enabled {
+                    "enabled_phase"
+                } else {
+                    "disabled_phase"
+                },
+                |b| {
+                    b.iter(|| {
+                        let start = enabled.then(std::time::Instant::now);
+                        black_box(black_box(1_u64).wrapping_add(1));
+                        if let Some(start) = start {
+                            stats.record(start.elapsed());
+                        }
+                        black_box(&stats);
+                    });
+                },
+            );
+        }
+        timing.finish();
         frame.world_3d(camera, |canvas| {
             let mut group = criterion.benchmark_group("draw_submission");
             group.throughput(Throughput::Elements(100));

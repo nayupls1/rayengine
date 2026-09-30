@@ -17,6 +17,7 @@ cargo test -p rayengine "${features[@]}" native_mesh -- --ignored --test-threads
 cargo test -p rayengine "${features[@]}" native_material -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_upload -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_ui -- --ignored --test-threads=1
+cargo test -p rayengine "${features[@]}" native_diagnostics -- --ignored --test-threads=1
 cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored --test-threads=1
 cargo build -p rayengine-demos "${demo_features[@]}" --bins
 rayengine_target=${CARGO_TARGET_DIR:-"$rayengine_root/target"}

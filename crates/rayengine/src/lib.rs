@@ -5,6 +5,7 @@ pub use rayengine_core::save;
 pub use raylib;
 
 pub mod assets;
+pub mod diagnostics;
 pub mod input;
 pub mod material;
 pub mod render;
@@ -45,6 +46,8 @@ pub mod guides {
     #[doc = include_str!("../examples/save.rs")]
     #[doc = "```"]
     pub mod saves {}
+    #[doc = include_str!("../docs/diagnostics.md")]
+    pub mod diagnostics {}
     #[doc = include_str!("../docs/testing_performance.md")]
     pub mod testing_performance {}
     #[doc = include_str!("../docs/agent_workflow.md")]

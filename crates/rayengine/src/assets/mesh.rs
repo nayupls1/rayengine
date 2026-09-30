@@ -49,6 +49,16 @@ impl DefaultMaterial {
 }
 
 impl MeshAssets {
+    pub(super) fn resource_usage(&self) -> (u64, u64) {
+        let bytes = self
+            .slots
+            .iter()
+            .filter_map(|slot| slot.mesh.as_ref())
+            .fold(0_u64, |sum, mesh| {
+                sum.saturating_add(super::mesh_payload_bytes(mesh))
+            });
+        (self.live as u64, bytes)
+    }
     pub(super) fn new() -> Self {
         Self {
             slots: Vec::new(),
