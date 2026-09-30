@@ -49,6 +49,12 @@ CPU jobs and mesh staging have explicit bounded queues. Upload budgets are
 applied on the render thread; cancellation and game-defined revisions reject
 obsolete work. Automatic world streaming remains game policy.
 
+UI interaction is an optional CPU state machine over game-owned regions and IDs.
+Pointer capture, keyboard focus, clicks and drag events use reference units;
+games explicitly mask actions/look motion before gameplay. The SDK draws buttons
+and icons and updates cursor capture as menus change. Menu layout, drop targets
+and inventory rules remain game-owned.
+
 Tests cover behavior without a display; rendering smoke checks exercise raylib
 separately. Benchmarks retain named baselines and record toolchain and machine
 metadata. A benchmark result must identify whether it measures CPU systems

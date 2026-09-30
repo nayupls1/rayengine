@@ -66,6 +66,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
 - [Background work and upload budgets](crates/rayengine/docs/background_work.md)
+- [Interactive UI and input routing](crates/rayengine/docs/interactive_ui.md)
 - [Tests and performance comparisons](crates/rayengine/docs/testing_performance.md)
 - [Agent workflow and JSON contract](crates/rayengine/docs/agent_workflow.md)
 - [Architecture](docs/architecture.md)
@@ -80,6 +81,16 @@ scripts/benchmark.sh save before-change
 scripts/benchmark.sh compare before-change
 scripts/render_benchmark.sh save materials-v1 # optional native draw benchmark
 ```
+
+Try the draggable menu, keyboard focus, and dynamic cursor capture example:
+
+```sh
+cargo run -p rayengine --example menu
+```
+
+Escape toggles the menu. Tab/Up/Down moves focus; Enter/Space selects. Drag the
+header to move the panel. Gameplay receives explicitly masked input while the
+menu is open.
 
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
 The CPU suite measures primitives and gameplay simulation; the opt-in native
