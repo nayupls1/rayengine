@@ -13,6 +13,7 @@ Start with [the quickstart](crate::guides::quickstart), then read
 [spatial queries](crate::guides::spatial_queries),
 [background work](crate::guides::background_work),
 [interactive UI and input routing](crate::guides::interactive_ui),
+[versioned saves](crate::guides::saves),
 [testing and performance](crate::guides::testing_performance), and the
 [agent workflow](crate::guides::agent_workflow).
 

@@ -19,6 +19,8 @@ raylib = { workspace = true, features = ["SUPPORT_IMAGE_GENERATION"] }
 
 [dev-dependencies]
 criterion.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [[bench]]
 name = "draw_submission"
