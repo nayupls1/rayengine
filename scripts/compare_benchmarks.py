@@ -19,6 +19,8 @@ def main():
     old_meta = json.loads((args.before / "metadata.json").read_text())
     new_meta = json.loads((args.after / "metadata.json").read_text())
     mismatches = [key for key in ("rustc", "platform", "cpu", "rustflags") if old_meta[key] != new_meta[key]]
+    if old_meta.get("save_io") != new_meta.get("save_io"):
+        mismatches.append("save_io")
     comparisons = []
     for name in sorted(before.keys() & after.keys()):
         old = before[name]["mean_ns"]
