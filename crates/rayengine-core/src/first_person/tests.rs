@@ -116,6 +116,47 @@ fn configured_pitch_limits_clamp_initial_current_and_requested_look() {
     assert_eq!(c.pitch(), 0.1);
 }
 #[test]
+fn small_positive_response_still_accelerates() {
+    let config = FirstPersonConfig {
+        response: 0.000001,
+        ..Default::default()
+    };
+    let mut c = controller(config);
+    c.step(
+        FirstPersonInput {
+            movement: Vec2::X,
+            ..Default::default()
+        },
+        DT,
+        &floor(),
+    );
+    let expected =
+        f64::from(config.walk_speed) * (1.0 - (-f64::from(config.response) * f64::from(DT)).exp());
+    assert!((f64::from(c.body.velocity.x) - expected).abs() < expected * 0.00001);
+}
+#[test]
+fn near_pole_pitch_limits_produce_a_valid_camera_at_nonzero_coordinates() {
+    let config = FirstPersonConfig {
+        min_pitch: (-std::f32::consts::FRAC_PI_2).next_up(),
+        max_pitch: std::f32::consts::FRAC_PI_2.next_down(),
+        ..Default::default()
+    };
+    let mut c = controller(config);
+    c.teleport(Vec3::new(6.0, 1.0, 6.0)).unwrap();
+    for yaw in [0.0, std::f32::consts::FRAC_PI_2, 0.7] {
+        for pitch in [config.min_pitch, config.max_pitch] {
+            c.set_look(yaw, pitch).unwrap();
+            let camera = c.camera(1.0);
+            assert!(camera.view_matrix().is_finite());
+            // Looking vertically still retains the yaw's horizontal right axis.
+            let right = (camera.target - camera.position)
+                .cross(camera.up)
+                .normalize();
+            assert!(right.abs_diff_eq(Vec3::new(yaw.cos(), 0.0, yaw.sin()), 0.00001));
+        }
+    }
+}
+#[test]
 fn routed_actions_and_edges_prevent_repeated_mouse_motion_and_held_jumps() {
     let actions = FirstPersonActions {
         left: Action(20),

@@ -313,7 +313,7 @@ impl FirstPersonController {
         let blend = if self.config.response == 0.0 {
             1.0
         } else {
-            1.0 - (-self.config.response * dt).exp()
+            -(-self.config.response * dt).exp_m1()
         };
         self.body.velocity.x += (movement.x * speed - self.body.velocity.x) * blend;
         self.body.velocity.z += (movement.z * speed - self.body.velocity.z) * blend;
@@ -349,7 +349,9 @@ impl FirstPersonController {
         Camera3D {
             position,
             target: position + Vec3::new(sin_yaw * cos_pitch, sin_pitch, -cos_yaw * cos_pitch),
-            up: Vec3::Y,
+            // The pitched up vector preserves yaw even when adding a near-pole
+            // direction to the eye rounds away its horizontal components.
+            up: Vec3::new(-sin_yaw * sin_pitch, cos_pitch, cos_yaw * sin_pitch),
             vertical_fov: self.config.vertical_fov,
         }
     }
