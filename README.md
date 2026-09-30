@@ -68,6 +68,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Background work and upload budgets](crates/rayengine/docs/background_work.md)
 - [Interactive UI and input routing](crates/rayengine/docs/interactive_ui.md)
 - [Versioned saves and reliable file replacement](crates/rayengine/docs/saves.md)
+- [Runtime diagnostics](crates/rayengine/docs/diagnostics.md)
 - [Tests and performance comparisons](crates/rayengine/docs/testing_performance.md)
 - [Agent workflow and JSON contract](crates/rayengine/docs/agent_workflow.md)
 - [Architecture](docs/architecture.md)

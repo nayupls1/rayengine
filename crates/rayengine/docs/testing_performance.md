@@ -50,6 +50,8 @@ The UI probe checks cursor capture/release calls and changing game policy,
 button state pixels, icons and stale texture handles in wide/portrait/Expand
 layouts. CPU tests cover clicks, keyboard focus, drag transitions, resize mapping,
 focus-loss resets through paused frames, and explicit gameplay masks.
+The diagnostic probe verifies mixed 2D/3D/UI submissions, stale handles,
+replacement/unload byte accounting, sampled peaks, phase totals and JSON schema.
 The script also runs both demos and the menu example at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;
@@ -130,6 +132,7 @@ scripts/render_benchmark.sh compare materials-v1
 RAYENGINE_BACKEND=wayland scripts/render_benchmark.sh save wayland-materials-v1
 scripts/render_benchmark.sh save uploads-v1 mesh_upload
 scripts/render_benchmark.sh save ui-draw-v1 ui_draw
+scripts/render_benchmark.sh save diagnostics-v1 diagnostics_
 ```
 
 Stable `draw_submission` cases submit 100 indexed quads through the existing
@@ -148,6 +151,9 @@ staged-data release. These are CPU/driver wall times, without GPU timer queries.
 `ui_draw` submits 32 buttons with labels or 32 texture icons into the same fixed
 64x64 native target. Layout and interaction preparation are outside measurement;
 button response lookup, text measurement and draw submission are included.
+Diagnostic overhead workloads compare the same 100 mesh submissions with
+counting disabled/enabled, plus resource sampling and optional timer costs.
+See [runtime diagnostics](crate::guides::diagnostics) for report coverage.
 
 Criterion baselines live in `target/criterion` (or `CARGO_TARGET_DIR/criterion`).
 Every script run exports portable results, samples and metadata under

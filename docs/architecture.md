@@ -68,6 +68,11 @@ metadata. A benchmark result must identify whether it measures CPU systems
 or rendering: a fast CPU benchmark does not establish GPU performance. Optional
 save-file benchmarks record their filesystem and directory separately from
 container CPU workloads.
+Runtime diagnostics are optional constant-space wall-time summaries, SDK
+submission counters and sampled owned resources. Disabled runs skip additional
+timers/scans. Native benchmarks compare enabled/disabled counters while retaining
+the existing workload IDs and provenance/export workflow. Counts are not driver
+draw calls and payload byte estimates are not total VRAM.
 
 The interactive agent testing protocol (input → image/state → next input) is
 deferred. CLI JSON diagnostics are tool output, not a game automation protocol.
