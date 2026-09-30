@@ -12,6 +12,9 @@ are optional targets; browser and mobile are outside the current scope.
 - `rayengine`: raylib runtime, rendering and asset ownership. One shared
   lifecycle for 2D and 3D. Rendering stays on raylib's owning thread.
 - `rayengine-cli`: create, inspect and check ordinary Cargo game projects.
+- `plugins/<name>`: optional Cargo libraries selected by games; engine crates
+  never depend on these. `plugins/beacons` demonstrates typed lifecycle hooks,
+  generated meshes, and independently configured instances.
 - `rayengine-demos`: a 2D arena fighter and a 3D exploration platformer.
 
 ## Design contract
@@ -33,6 +36,13 @@ pixels while UI uses logical units. Pixel art can select integer scaling.
 Simulation has a fixed timestep and bounded catch-up. Input edges survive
 render frames without an update and are consumed once by a fixed update.
 Games can interpolate between simulation states during rendering.
+
+Optional `Plugin<State>` hooks borrow explicit shared state and the same public
+init/update/frame contexts as games. Games own instances, action IDs, dependencies,
+call order, failure policies, and removal. There is no registry or runtime loader,
+and the runner performs no automatic plugin dispatch. CPU jobs remain plugin-owned;
+GPU uploads/removal stay on the owning thread. Rustdoc describes the full public
+extension surface and `rayengine new-plugin` creates a normal standalone library.
 
 ## First release
 

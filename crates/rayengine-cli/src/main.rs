@@ -32,6 +32,16 @@ enum Action {
         #[arg(long)]
         sdk_path: Option<PathBuf>,
     },
+    /// Create an optional Cargo plugin library in a new directory.
+    NewPlugin {
+        path: PathBuf,
+        /// Override the package name (default: directory name).
+        #[arg(long)]
+        name: Option<String>,
+        /// Path to the SDK crate; inferred when built from this repository.
+        #[arg(long)]
+        sdk_path: Option<PathBuf>,
+    },
     /// Inspect project packages without compiling.
     Info {
         #[arg(default_value = ".")]
@@ -116,6 +126,7 @@ fn main() -> ExitCode {
     };
     let command = match &cli.command {
         Action::New { .. } => "new",
+        Action::NewPlugin { .. } => "new-plugin",
         Action::Info { .. } => "info",
         Action::Check { .. } => "check",
         Action::Build { .. } => "build",
@@ -160,6 +171,11 @@ fn execute(action: Action, json_mode: bool) -> Result<Value> {
             name,
             sdk_path,
         } => create_project(&path, kind, name, sdk_path),
+        Action::NewPlugin {
+            path,
+            name,
+            sdk_path,
+        } => create_package(&path, Template::Plugin, name, sdk_path),
         Action::Info { path } => {
             let manifest = manifest(&path)?;
             let output = Command::new("cargo")
@@ -211,6 +227,21 @@ fn create_project(
     name: Option<String>,
     sdk_path: Option<PathBuf>,
 ) -> Result<Value> {
+    create_package(path, Template::Game(kind), name, sdk_path)
+}
+
+#[derive(Clone, Copy)]
+enum Template {
+    Game(Kind),
+    Plugin,
+}
+
+fn create_package(
+    path: &Path,
+    template: Template,
+    name: Option<String>,
+    sdk_path: Option<PathBuf>,
+) -> Result<Value> {
     let name = name
         .or_else(|| {
             path.file_name()
@@ -235,7 +266,11 @@ fn create_project(
         .map_err(|e| Failure::new("missing_sdk", e.to_string()))?;
     if !sdk_manifest
         .lines()
-        .any(|line| line.trim() == "name = \"rayengine\"")
+        .map(str::trim)
+        .skip_while(|line| *line != "[package]")
+        .skip(1)
+        .take_while(|line| !line.starts_with('['))
+        .any(|line| line == "name = \"rayengine\"")
     {
         return Err(Failure::new(
             "invalid_sdk",
@@ -256,27 +291,37 @@ fn create_project(
         )
     })?;
     fs::create_dir(path.join("src")).map_err(io_error)?;
+    // Nested standalone plugins are explicit dependencies, not automatically
+    // adopted members of a generated game's workspace.
+    let workspace = match template {
+        Template::Game(_) => "[workspace]\nexclude = [\"plugins\"]\n",
+        Template::Plugin => "[workspace]\n",
+    };
     let cargo = format!(
-        "[package]\nname = {}\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\n\n[dependencies]\nrayengine = {{ path = {} }}\n\n[workspace]\n",
+        "[package]\nname = {}\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\n\n[dependencies]\nrayengine = {{ path = {} }}\n\n{workspace}",
         serde_json::to_string(&name).expect("string serialization"),
         serde_json::to_string(sdk_string).expect("string serialization")
     );
     fs::write(path.join("Cargo.toml"), cargo).map_err(io_error)?;
-    fs::write(
-        path.join("src/main.rs"),
-        match kind {
-            Kind::TwoD => include_str!("templates/2d.rs"),
-            Kind::ThreeD => include_str!("templates/3d.rs"),
-        },
-    )
-    .map_err(io_error)?;
+    let (source_path, source, kind) = match template {
+        Template::Game(Kind::TwoD) => ("src/main.rs", include_str!("templates/2d.rs"), "2d"),
+        Template::Game(Kind::ThreeD) => ("src/main.rs", include_str!("templates/3d.rs"), "3d"),
+        Template::Plugin => ("src/lib.rs", include_str!("templates/plugin.rs"), "plugin"),
+    };
+    fs::write(path.join(source_path), source).map_err(io_error)?;
     fs::write(path.join(".gitignore"), "/target/\n/artifacts/\n").map_err(io_error)?;
-    fs::write(path.join("README.md"), format!("# {name}\n\nA rayengine game.\n\n```sh\ncargo run\ncargo check\ncargo run -- --frames 60 --screenshot artifacts/frame.png\n```\n\nThe SDK path is local and can be changed in Cargo.toml. Keep game state in\nordinary Rust components; fixed_update handles simulation and draw handles\ninterpolated rendering. See rayengine's rustdoc guides for the API.\n")).map_err(io_error)?;
+    let readme = match template {
+        Template::Game(_) => format!(
+            "# {name}\n\nA rayengine game.\n\n```sh\ncargo run\ncargo check\ncargo run -- --frames 60 --screenshot artifacts/frame.png\n```\n\nThe SDK path is local and can be changed in Cargo.toml. Keep game state in\nordinary Rust components; fixed_update handles simulation and draw handles\ninterpolated rendering. See rayengine's rustdoc guides for the API.\n"
+        ),
+        Template::Plugin => format!(
+            "# {name}\n\nAn optional rayengine Cargo plugin.\n\n```sh\ncargo check\ncargo test\ncargo doc --no-deps\n```\n\nAdd this library as a path dependency in the consuming game's Cargo.toml.\nStore MyPlugin and PluginState in your game, then call its Plugin hooks\nexplicitly from Game. The engine does not register or invoke plugins.\nConfigure action IDs in the game; keep GPU work on the render thread.\nThe local SDK dependency must match the SDK source/version used by the game.\nIf nested in an existing workspace, exclude this path in its root workspace\nor remove this library's [workspace] and add it to the root members.\nGenerated rayengine games already exclude plugins.\nSee rayengine's plugins rustdoc guide for composition, ownership, and cleanup.\n"
+        ),
+    };
+    fs::write(path.join("README.md"), readme).map_err(io_error)?;
     let project = path.canonicalize().map_err(io_error)?;
-    Ok(
-        json!({ "path": project, "name": name, "kind": match kind { Kind::TwoD => "2d", Kind::ThreeD => "3d" },
-        "sdk_path": sdk, "files": ["Cargo.toml", "src/main.rs", ".gitignore", "README.md"] }),
-    )
+    Ok(json!({ "path": project, "name": name, "kind": kind,
+        "sdk_path": sdk, "files": ["Cargo.toml", source_path, ".gitignore", "README.md"] }))
 }
 
 fn validate_name(name: &str) -> Result<()> {
@@ -422,8 +467,8 @@ fn process_error(error: std::io::Error) -> Failure {
 
 fn print_success(command: &str, data: &Value) {
     match command {
-        "new" => println!(
-            "Created {} at {}\nRun it with: cargo run --manifest-path {}/Cargo.toml",
+        "new" | "new-plugin" => println!(
+            "Created {} at {}\nCheck it with: cargo check --manifest-path {}/Cargo.toml",
             data["name"].as_str().unwrap_or("game"),
             data["path"].as_str().unwrap_or(""),
             data["path"].as_str().unwrap_or("")

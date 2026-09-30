@@ -113,11 +113,43 @@ automatically at shutdown. Avoid unloading cached textures/shaders shared with
 other plugins; agree ownership or let the run's asset collection retain them.
 Document whether unload is idempotent and whether reinitialization is supported.
 
-## Use a plugin
+## Create and use a plugin
 
-Add the plugin library as a Cargo dependency and call its typed hooks explicitly.
-Repository plugins use workspace package/dependency/lint settings and explicit
-workspace membership. CPU/backend subcrates stay under `plugins/<name>/`.
+From this checkout:
+
+```sh
+cargo run -p rayengine-cli -- new-plugin ../my-game/plugins/my-plugin --name my-plugin
+# Optional: --sdk-path /path/to/rayengine/crates/rayengine
+cargo check --manifest-path ../my-game/plugins/my-plugin/Cargo.toml
+```
+
+The scaffold is a standalone Cargo library with `MyPlugin` and `PluginState`.
+It never overwrites an existing destination or edits the consuming game's
+manifest. It includes an empty `[workspace]` so it can be checked independently.
+Generated games exclude the `plugins/` directory from their workspace, allowing nested
+standalone plugins as dependencies. For an existing workspace, either exclude
+the plugin's path in its root `[workspace].exclude`, or remove the plugin's
+`[workspace]` table and add its path to the root `members`. Do this before adding
+a nested plugin dependency; two overlapping workspace roots are invalid. See
+[Cargo workspace rules](https://doc.rust-lang.org/cargo/reference/workspaces.html#the-members-and-exclude-fields).
+
+Add a dependency to the game's manifest:
+
+```toml
+[dependencies]
+my-plugin = { path = "plugins/my-plugin" }
+```
+
+Then import `my_plugin::{MyPlugin, PluginState}`, store them in your game, and
+call hooks as above. Normal Cargo aliases/features control which plugins compile;
+there is no automatic folder scan. `--json new-plugin ...` returns the existing
+versioned CLI result with `kind: "plugin"` and `src/lib.rs` in its file list.
+
+For plugins in this repository, start from `plugins/beacons/Cargo.toml`, use
+workspace package/dependency/lint settings, and explicitly add the directory to
+root workspace members. Keep core CPU-only; a plugin with substantial simulation
+can split its own CPU and SDK packages under its `plugins/<name>/` directory.
+Depend on `rayengine-core` directly when no native SDK APIs are needed.
 
 Run the working example and export all documentation:
 

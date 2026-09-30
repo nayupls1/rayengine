@@ -39,10 +39,15 @@ cargo run -p rayengine-cli -- new ../my-game --kind 2d
 cargo run --manifest-path ../my-game/Cargo.toml
 ```
 
-The CLI supports `new`, `info`, `check`, `build`, `run`, and `doctor`. Add
+The CLI supports `new`, `new-plugin`, `info`, `check`, `build`, `run`, and `doctor`. Add
 `--json` for a versioned result, structured errors and preserved Cargo diagnostics.
 Scaffolds use a local SDK path, inferred from this checkout or supplied with
 `--sdk-path /path/to/rayengine/crates/rayengine`; nothing is published to crates.io yet.
+
+Optional extensions live under `plugins/`; games select them through Cargo.
+Try `cargo run -p rayengine-beacons --example composition`, or create a library
+with `cargo run -p rayengine-cli -- new-plugin ../my-game/plugins/my-plugin`.
+The game owns plugin instances and calls their typed hooks explicitly.
 
 Rust **1.89+**, CMake, a C compiler, libclang and Linux graphics/audio development
 libraries are required. See [installation and quickstart](crates/rayengine/docs/quickstart.md).
@@ -59,6 +64,7 @@ cargo doc --workspace --no-deps
 Guides are plain Markdown included in rustdoc, with checked Rust examples:
 
 - [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
+- [Optional plugins and authoring](crates/rayengine/docs/plugins.md)
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
