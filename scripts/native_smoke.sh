@@ -24,4 +24,6 @@ for game in arena meadow; do
     "$rayengine_target/debug/$game" --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/$game-wide.png"
     "$rayengine_target/debug/$game" --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/$game-portrait.png"
 done
+cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/menu-wide.png"
+cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/menu-portrait.png"
 echo "Native smoke screenshots: artifacts/smoke/$backend"
