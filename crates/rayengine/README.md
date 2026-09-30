@@ -8,6 +8,7 @@ Start with [the quickstart](crate::guides::quickstart), then read
 [game structure](crate::guides::game_structure). The remaining guides explain
 [responsive viewports](crate::guides::responsive),
 [timing and input](crate::guides::timing_input), [assets](crate::guides::assets),
+[first-person movement](crate::guides::first_person),
 [generated meshes](crate::guides::generated_meshes),
 [materials and shaders](crate::guides::materials),
 [spatial queries](crate::guides::spatial_queries),

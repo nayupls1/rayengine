@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 pub use rayengine_core as core;
+pub use rayengine_core::first_person;
 pub use rayengine_core::save;
 pub use raylib;
 
@@ -26,6 +27,11 @@ pub mod guides {
     pub mod responsive {}
     #[doc = include_str!("../docs/timing_input.md")]
     pub mod timing_input {}
+    #[doc = include_str!("../docs/first_person.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/first_person.rs")]
+    #[doc = "```"]
+    pub mod first_person {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
     #[doc = include_str!("../docs/generated_meshes.md")]

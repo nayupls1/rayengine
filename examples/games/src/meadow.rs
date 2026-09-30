@@ -3,8 +3,9 @@
 use rayengine::prelude::*;
 use rayengine::raylib::prelude::RaylibDraw3D;
 
-const MOUSE_SENSITIVITY: f32 = 0.0025;
+#[cfg(test)]
 const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.05;
+#[cfg(test)]
 const EYE_HEIGHT: f32 = 0.7;
 
 /// Strafe left relative to the camera.
@@ -26,16 +27,19 @@ pub const TURN_RIGHT: Action = Action(7);
 /// Return to the latest checkpoint.
 pub const RESET: Action = Action(8);
 
-/// Player component used by both fixed simulation and rendering.
-#[derive(Clone, Copy, Debug)]
-pub struct Explorer {
-    /// Swept character body, using positive Y up.
-    pub body: Body3D,
-    /// Previous center for interpolation.
-    pub previous: Vec3,
-    coyote: f32,
-    jump_buffer: f32,
-}
+/// Player component: the SDK's optional reusable first-person helper.
+pub type Explorer = FirstPersonController;
+
+const ACTIONS: FirstPersonActions = FirstPersonActions {
+    left: LEFT,
+    right: RIGHT,
+    forward: FORWARD,
+    back: BACK,
+    jump: JUMP,
+    sprint: Some(SPRINT),
+    turn_left: Some(TURN_LEFT),
+    turn_right: Some(TURN_RIGHT),
+};
 
 #[derive(Clone, Copy)]
 struct Tree {
@@ -59,10 +63,6 @@ pub struct MeadowSimulation {
     trees: Vec<Tree>,
     orbs: Vec<Orb>,
     checkpoint: Vec3,
-    /// Horizontal view angle in radians; positive turns right.
-    pub yaw: f32,
-    /// Vertical view angle in radians; positive looks up.
-    pub pitch: f32,
     /// Number of collected orbs.
     pub collected: usize,
     time: f32,
@@ -81,12 +81,12 @@ impl MeadowSimulation {
         let spawn = Vec3::new(0.0, 1.0, 8.0);
         let player = scene.spawn_3d(
             Transform3D::at(spawn),
-            (Explorer {
-                body: Body3D::new(spawn, Vec3::new(0.8, 1.8, 0.8)),
-                previous: spawn,
-                coyote: 0.0,
-                jump_buffer: 0.0,
-            },),
+            (Explorer::new(
+                spawn,
+                Vec3::new(0.8, 1.8, 0.8),
+                FirstPersonConfig::default(),
+            )
+            .expect("valid demo controller"),),
         );
         let ground = Aabb3::from_center(Vec3::new(0.0, -2.0, 0.0), Vec3::new(140.0, 4.0, 140.0));
         let route = [
@@ -159,8 +159,6 @@ impl MeadowSimulation {
             trees,
             orbs,
             checkpoint: spawn,
-            yaw: 0.0,
-            pitch: 0.0,
             collected: 0,
             time: 0.0,
         }
@@ -183,73 +181,44 @@ impl MeadowSimulation {
     /// Eye-level first-person camera, interpolating position between fixed ticks.
     /// View angles use the latest input without adding interpolation delay.
     pub fn camera(&self, alpha: f32) -> Camera3D {
-        let explorer = self.explorer();
-        let position = explorer.previous.lerp(explorer.body.position, alpha) + Vec3::Y * EYE_HEIGHT;
-        let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
-        let (sin_pitch, cos_pitch) = self.pitch.sin_cos();
-        let direction = Vec3::new(sin_yaw * cos_pitch, sin_pitch, -cos_yaw * cos_pitch);
-        Camera3D {
-            position,
-            target: position + direction,
-            vertical_fov: 75.0,
-            up: Vec3::Y,
-        }
+        self.explorer().camera(alpha)
+    }
+
+    /// Horizontal view angle in radians; positive turns right.
+    pub fn yaw(&self) -> f32 {
+        self.explorer().yaw()
+    }
+    /// Vertical view angle in radians; positive looks up.
+    pub fn pitch(&self) -> f32 {
+        self.explorer().pitch()
+    }
+    /// Sets the player's view through the helper's finite/clamped angle API.
+    pub fn set_look(&mut self, yaw: f32, pitch: f32) -> Result<(), FirstPersonError> {
+        self.scene
+            .world
+            .get::<&mut Explorer>(self.player)
+            .expect("player exists")
+            .set_look(yaw, pitch)
     }
 
     /// Advances gameplay using the same systems as interactive play.
     pub fn step(&mut self, input: &Input, dt: f32) {
         self.time += dt;
-        let mouse = input.pointer_delta();
-        let turn = mouse.x * MOUSE_SENSITIVITY + input.axis(TURN_LEFT, TURN_RIGHT) * dt * 1.8;
-        if turn != 0.0 {
-            self.yaw = (self.yaw + turn + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
-                - std::f32::consts::PI;
-        }
-        self.pitch = (self.pitch - mouse.y * MOUSE_SENSITIVITY).clamp(-MAX_PITCH, MAX_PITCH);
         let mut player = self
             .scene
             .world
             .get::<&mut Explorer>(self.player)
             .expect("player exists");
-        player.previous = player.body.position;
         if input.pressed(RESET) || player.body.position.y < -15.0 {
-            player.body.position = self.checkpoint;
-            player.previous = self.checkpoint;
-            player.body.velocity = Vec3::ZERO;
-            player.body.grounded = false;
-            player.jump_buffer = 0.0;
-            player.coyote = 0.0;
+            player
+                .teleport(self.checkpoint)
+                .expect("finite demo checkpoint");
         }
-        let axis =
-            Vec2::new(input.axis(LEFT, RIGHT), input.axis(FORWARD, BACK)).clamp_length_max(1.0);
-        let (sin, cos) = self.yaw.sin_cos();
-        let movement = Vec3::new(
-            axis.x * cos - axis.y * sin,
-            0.0,
-            axis.x * sin + axis.y * cos,
+        player.step(
+            FirstPersonInput::from_actions(input, ACTIONS),
+            dt,
+            &self.solids,
         );
-        let speed = if input.down(SPRINT) { 10.0 } else { 6.0 };
-        let blend = 1.0 - (-18.0 * dt).exp();
-        player.body.velocity.x += (movement.x * speed - player.body.velocity.x) * blend;
-        player.body.velocity.z += (movement.z * speed - player.body.velocity.z) * blend;
-        player.coyote = if player.body.grounded {
-            0.1
-        } else {
-            (player.coyote - dt).max(0.0)
-        };
-        player.jump_buffer = if input.pressed(JUMP) {
-            0.12
-        } else {
-            (player.jump_buffer - dt).max(0.0)
-        };
-        if player.coyote > 0.0 && player.jump_buffer > 0.0 {
-            player.body.velocity.y = 11.0;
-            player.body.grounded = false;
-            player.coyote = 0.0;
-            player.jump_buffer = 0.0;
-        }
-        player.body.velocity.y = (player.body.velocity.y - 26.0 * dt).max(-40.0);
-        player.body.move_and_slide(dt, &self.solids);
         let position = player.body.position;
         drop(player);
         self.scene
@@ -492,18 +461,18 @@ mod tests {
         let mut slow = MeadowSimulation::new();
         fast.step(&input, 1.0 / 240.0);
         slow.step(&input, 1.0 / 30.0);
-        assert_eq!(fast.yaw, slow.yaw);
-        assert_eq!(fast.pitch, slow.pitch);
+        assert_eq!(fast.yaw(), slow.yaw());
+        assert_eq!(fast.pitch(), slow.pitch());
         input.consume_edges();
-        let angles = (fast.yaw, fast.pitch);
+        let angles = (fast.yaw(), fast.pitch());
         fast.step(&input, DT);
-        assert_eq!((fast.yaw, fast.pitch), angles);
+        assert_eq!((fast.yaw(), fast.pitch()), angles);
         for delta in [Vec2::splat(100_000.0), Vec2::splat(-100_000.0)] {
             input.add_pointer_delta(delta);
             fast.step(&input, DT);
             input.consume_edges();
-            assert!(fast.pitch.abs() <= MAX_PITCH);
-            assert!(fast.yaw.abs() <= std::f32::consts::PI);
+            assert!(fast.pitch().abs() <= MAX_PITCH);
+            assert!(fast.yaw().abs() <= std::f32::consts::PI);
             assert!(fast.camera(1.0).view_matrix().is_finite());
         }
     }
@@ -512,8 +481,8 @@ mod tests {
     fn movement_follows_yaw_and_stays_horizontal_when_looking_up_or_down() {
         let mut sim = MeadowSimulation::new();
         settle(&mut sim);
-        sim.yaw = std::f32::consts::FRAC_PI_2;
-        sim.pitch = MAX_PITCH;
+        sim.set_look(std::f32::consts::FRAC_PI_2, MAX_PITCH)
+            .unwrap();
         let mut input = Input::default();
         input.set(FORWARD, true);
         for _ in 0..60 {
@@ -636,7 +605,7 @@ mod tests {
         let body = meadow.simulation.explorer().body;
         assert!(body.grounded);
         assert!(body.bounds().min.y >= meadow.simulation.platforms[0].max.y);
-        meadow.simulation.pitch = -0.9;
+        meadow.simulation.set_look(0.0, -0.9).unwrap();
         let camera = meadow.simulation.camera(1.0);
         assert_eq!(camera.position.x, body.position.x);
         assert_eq!(camera.position.z, body.position.z);
