@@ -49,6 +49,11 @@ CPU jobs and mesh staging have explicit bounded queues. Upload budgets are
 applied on the render thread; cancellation and game-defined revisions reject
 obsolete work. Automatic world streaming remains game policy.
 
+An optional CPU first-person controller combines action/mouse look, yaw-relative
+movement, configurable jump/gravity/grace, Body3D collision and an interpolated
+eye camera. Meadow uses it while retaining checkpoint, reset and pickup rules.
+Games can pass direct tick input or action views masked by their UI.
+
 UI interaction is an optional CPU state machine over game-owned regions and IDs.
 Pointer capture, keyboard focus, clicks and drag events use reference units;
 games explicitly mask actions/look motion before gameplay. The SDK draws buttons

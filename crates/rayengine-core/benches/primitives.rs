@@ -4,6 +4,8 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use rayengine_core::{prelude::*, transform::Parent};
 use std::{hint::black_box, time::Duration};
 
+#[path = "support/first_person.rs"]
+mod first_person;
 #[path = "support/saves.rs"]
 mod saves;
 
@@ -485,5 +487,5 @@ fn ui_interaction(c: &mut Criterion) {
     routing.finish();
 }
 
-criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries, background_jobs, ui_interaction, saves::containers, saves::files }
+criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries, background_jobs, ui_interaction, saves::containers, saves::files, first_person::controller }
 criterion_main!(benches);

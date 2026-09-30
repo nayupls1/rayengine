@@ -61,6 +61,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
+- [Reusable first-person controller](crates/rayengine/docs/first_person.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)

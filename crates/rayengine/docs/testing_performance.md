@@ -23,6 +23,11 @@ concurrent complete replacements, and injected partial-write/flush failures.
 An injected rename that completes before returning an error verifies ambiguous
 outcomes; directory-flush failure verifies that the installed save is retained.
 
+First-person CPU tests cover yaw-relative/normalized motion, configurable sprint,
+dt-independent mouse look, pitch limits, input masks/edge consumption, jump/grace,
+walls/ceilings/fall limits, camera interpolation and teleport/reconfiguration.
+Meadow retains its stone landing, contact, checkpoint and pickup regressions.
+
 Native rendering is separate and requires a display/OpenGL context:
 
 ```sh
@@ -59,6 +64,7 @@ their screenshots are saved under `artifacts/regressions/`.
 Graphics probes are intentionally ignored by normal
 `cargo test`; the smoke script invokes them explicitly. Software OpenGL tests
 exercise the native rendering path but do not measure a physical GPU.
+The standalone `first_person` example is also rendered at wide and portrait sizes.
 
 Benchmarks use Criterion and stable workload IDs:
 
@@ -76,6 +82,19 @@ scripted 240-tick arena/meadow simulation batches. Gameplay fixture creation
 and destruction are outside the measured region; every sample starts from
 the same state. **These are CPU workloads; no window or GPU is initialized.**
 They do not measure actual rendering, asset upload, or an arbitrary game's FPS.
+
+`scripts/benchmark.sh save first-person-v1 first_person` measures one helper tick
+with 1/100 static boxes and interpolated camera construction. Each tick copies
+the same settled fixture; initialization/fixture allocation is outside timing.
+The existing `gameplay/meadow_scripted_240_ticks` ID and script remain unchanged
+so the helper extraction can be compared against the earlier demo implementation:
+
+```sh
+# Before the extraction:
+scripts/benchmark.sh save first-person-before-v1 meadow_scripted
+# Afterward, on the same machine/toolchain with the same fixtures:
+scripts/benchmark.sh compare first-person-before-v1 meadow_scripted
+```
 
 The spatial suite measures indexed and linear 2D/3D rays, proximity and camera
 visibility queries, and full index rebuilds at 128, 4,096 and 32,768 colliders.
