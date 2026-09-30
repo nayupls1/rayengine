@@ -84,6 +84,8 @@ and reference sizes, viewport policy, fixed frequency/catch-up, effective
 requested cap/vsync and final render size. Driver overrides may affect vsync;
 the compiled backend label is not a runtime driver identification. Use the
 existing benchmark scripts for revision/toolchain/CPU and renderer provenance.
+Backend labels distinguish GLFW's Win32, Cocoa and Unix X11/Wayland support;
+other targets use the generic `glfw` label.
 Keep driver, GPU, backend, target, DPI, scene, input and caps identical.
 
 ```sh

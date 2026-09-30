@@ -521,10 +521,18 @@ impl App {
                 DiagnosticsReport::new(
                     diagnostics,
                     RunSettings {
-                        backend: if cfg!(feature = "wayland") {
+                        backend: if cfg!(target_os = "windows") {
+                            "glfw-win32"
+                        } else if cfg!(target_os = "macos") {
+                            "glfw-cocoa"
+                        } else if cfg!(all(unix, not(target_vendor = "apple")))
+                            && cfg!(feature = "wayland")
+                        {
                             "glfw-x11+wayland"
-                        } else {
+                        } else if cfg!(all(unix, not(target_vendor = "apple"))) {
                             "glfw-x11"
+                        } else {
+                            "glfw"
                         },
                         os: std::env::consts::OS,
                         arch: std::env::consts::ARCH,
