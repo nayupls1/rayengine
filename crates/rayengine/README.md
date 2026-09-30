@@ -5,7 +5,8 @@ with a shared lifecycle for 2D and 3D, action input, fixed updates, fitted camer
 logical UI with optional interaction and explicit asset ownership. Version **0.0.1**.
 
 Start with [the quickstart](crate::guides::quickstart), then read
-[game structure](crate::guides::game_structure). The remaining guides explain
+[game structure](crate::guides::game_structure) and
+[optional plugins](crate::guides::plugins). The remaining guides explain
 [responsive viewports](crate::guides::responsive),
 [timing and input](crate::guides::timing_input), [assets](crate::guides::assets),
 [first-person movement](crate::guides::first_person),

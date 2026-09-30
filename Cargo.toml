@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/rayengine-core", "crates/rayengine", "crates/rayengine-cli", "examples/games"]
+members = ["crates/rayengine-core", "crates/rayengine", "crates/rayengine-cli", "examples/games", "plugins/beacons"]
 resolver = "3"
 
 [workspace.package]
