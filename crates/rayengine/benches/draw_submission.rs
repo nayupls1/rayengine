@@ -8,6 +8,7 @@ struct Bench {
     mesh: Option<MeshId>,
     surfaces: Vec<(&'static str, MaterialId)>,
     texture_path: PathBuf,
+    icon: Option<TextureId>,
 }
 impl Game for Bench {
     fn init(&mut self, ctx: &mut InitContext<'_, '_>) -> Result<(), Error> {
@@ -23,6 +24,7 @@ impl Game for Bench {
             ..MeshData::default()
         })?);
         let texture = ctx.texture(&self.texture_path)?;
+        self.icon = Some(texture);
         let source = include_str!("../src/assets/materials/default.fs")
             .replace(
                 "out vec4 finalColor;",
@@ -162,6 +164,53 @@ impl Game for Bench {
             }
             group.finish();
         });
+        let regions: Vec<_> = (0..32)
+            .map(|i| {
+                UiRegion::new(
+                    UiId(i),
+                    UiRect::top_left(
+                        Vec2::new((i % 8) as f32 * 8.0, (i / 8) as f32 * 16.0),
+                        Vec2::new(8.0, 16.0),
+                    )
+                    .resolve(frame.viewport.logical_size),
+                )
+            })
+            .collect();
+        let mut ui = UiState::with_capacity(32);
+        ui.update(
+            &regions,
+            UiInput {
+                window_focused: true,
+                ..UiInput::default()
+            },
+        );
+        let style = UiButtonStyle {
+            font_size: 3.0,
+            ..UiButtonStyle::default()
+        };
+        frame.ui(|canvas| {
+            let mut group = criterion.benchmark_group("ui_draw");
+            group.throughput(Throughput::Elements(32));
+            group.bench_function("buttons_32", |b| {
+                b.iter(|| {
+                    for region in &regions {
+                        canvas.button(region.bounds, "Go", ui.response(region.id).unwrap(), style);
+                    }
+                })
+            });
+            group.bench_function("icons_32", |b| {
+                b.iter(|| {
+                    for region in &regions {
+                        assert!(black_box(canvas.icon(
+                            self.icon.unwrap(),
+                            region.bounds,
+                            Color::WHITE
+                        )));
+                    }
+                })
+            });
+            group.finish();
+        });
         criterion.final_summary();
     }
 }
@@ -197,6 +246,7 @@ fn main() -> Result<(), Error> {
             mesh: None,
             surfaces: Vec::new(),
             texture_path: path.clone(),
+            icon: None,
         });
     let _ = std::fs::remove_file(path);
     result?;
