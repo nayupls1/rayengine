@@ -19,6 +19,7 @@ cargo test -p rayengine "${features[@]}" native_upload -- --ignored --test-threa
 cargo test -p rayengine "${features[@]}" native_ui -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_diagnostics -- --ignored --test-threads=1
 cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored --test-threads=1
+cargo test -p rayengine-beacons "${demo_features[@]}" native_plugin -- --ignored --test-threads=1
 cargo build -p rayengine-demos "${demo_features[@]}" --bins
 rayengine_target=${CARGO_TARGET_DIR:-"$rayengine_root/target"}
 for game in arena meadow; do
@@ -29,4 +30,6 @@ cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 -
 cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/menu-portrait.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/first-person-wide.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/first-person-portrait.png"
+cargo run -p rayengine-beacons "${demo_features[@]}" --example composition -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/plugins-wide.png"
+cargo run -p rayengine-beacons "${demo_features[@]}" --example composition -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/plugins-portrait.png"
 echo "Native smoke screenshots: artifacts/smoke/$backend"
