@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 glam.workspace = true
 hecs.workspace = true
+crc32fast.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
