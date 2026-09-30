@@ -9,6 +9,7 @@ pub use hecs::{Bundle, Entity, World};
 pub mod camera;
 pub mod collision;
 pub mod events;
+pub mod first_person;
 pub mod input;
 pub mod jobs;
 pub mod mesh;
@@ -25,6 +26,10 @@ pub mod prelude {
     pub use crate::camera::{Camera2D, Camera3D};
     pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D};
     pub use crate::events::Events;
+    pub use crate::first_person::{
+        FirstPersonActions, FirstPersonConfig, FirstPersonController, FirstPersonError,
+        FirstPersonInput,
+    };
     pub use crate::input::{Action, Input, InputView};
     pub use crate::jobs::{Cancellation, Completion, JobHandle, JobId, JobOutcome, JobPool};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
