@@ -7,7 +7,7 @@ are optional targets; browser and mobile are outside the current scope.
 
 - `rayengine-core`: CPU-only entities/components, transforms and hierarchy,
   fixed simulation timing, action input, viewport math, cameras, collision,
-  UI layout, and validated CPU mesh data. No window, audio device, C toolchain,
+  UI layout, validated CPU mesh data, and versioned save containers. No window, audio device, C toolchain,
   or GPU required.
 - `rayengine`: raylib runtime, rendering and asset ownership. One shared
   lifecycle for 2D and 3D. Rendering stays on raylib's owning thread.
@@ -55,10 +55,19 @@ games explicitly mask actions/look motion before gameplay. The SDK draws buttons
 and icons and updates cursor capture as menus change. Menu layout, drop targets
 and inventory rules remain game-owned.
 
+Persistence accepts bounded opaque payloads with separate engine/game versions
+and corruption checks. File writes replace from unique siblings; Linux durable
+writes flush both file and directory. Errors distinguish pre-replacement,
+ambiguous rename and installed-but-unconfirmed durability outcomes. Games own
+serialization, migration, locations, backups and recovery. File I/O is explicit
+and blocking; games can schedule owned snapshots through the optional CPU jobs.
+
 Tests cover behavior without a display; rendering smoke checks exercise raylib
 separately. Benchmarks retain named baselines and record toolchain and machine
 metadata. A benchmark result must identify whether it measures CPU systems
-or rendering: a fast CPU benchmark does not establish GPU performance.
+or rendering: a fast CPU benchmark does not establish GPU performance. Optional
+save-file benchmarks record their filesystem and directory separately from
+container CPU workloads.
 
 The interactive agent testing protocol (input → image/state → next input) is
 deferred. CLI JSON diagnostics are tool output, not a game automation protocol.

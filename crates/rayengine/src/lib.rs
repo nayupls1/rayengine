@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 pub use rayengine_core as core;
+pub use rayengine_core::save;
 pub use raylib;
 
 pub mod assets;
@@ -39,6 +40,11 @@ pub mod guides {
     #[doc = include_str!("../examples/menu.rs")]
     #[doc = "```"]
     pub mod interactive_ui {}
+    #[doc = include_str!("../docs/saves.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/save.rs")]
+    #[doc = "```"]
+    pub mod saves {}
     #[doc = include_str!("../docs/testing_performance.md")]
     pub mod testing_performance {}
     #[doc = include_str!("../docs/agent_workflow.md")]

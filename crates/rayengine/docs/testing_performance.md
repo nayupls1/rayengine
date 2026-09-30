@@ -17,6 +17,12 @@ The core can be tested without any native graphics dependencies:
 cargo test --locked -p rayengine-core
 ```
 
+Save tests use temporary regular files without a graphics context. They cover a
+fixed wire-format fixture, bounds, corruption, explicit game migration,
+concurrent complete replacements, and injected partial-write/flush failures.
+An injected rename that completes before returning an error verifies ambiguous
+outcomes; directory-flush failure verifies that the installed save is retained.
+
 Native rendering is separate and requires a display/OpenGL context:
 
 ```sh
@@ -85,6 +91,35 @@ is outside measurement, while payload allocation/drop and scheduling are inside.
 keyboard navigation and three-update drags with 1/32 regions, plus eight-action
 masked/unmasked routing. Regions and reusable response storage are prepared
 outside measurement; updates use current reference-unit bounds.
+
+`scripts/benchmark.sh save saves-v1 save_container` measures new/reused-buffer
+encoding and borrowed decoding at 1 KiB, 64 KiB and 1 MiB. These include the
+container CRC; new encoding allocates/drops, while the reusable case warms its
+capacity before measurement. Payload fixtures are prepared outside measurement.
+Game codecs are excluded because serialization is game-defined.
+
+Filesystem work is a separate opt-in workload with the same export workflow:
+
+```sh
+RAYENGINE_SAVE_IO_BENCH=1 scripts/benchmark.sh save saves-io-v1 save_file
+RAYENGINE_SAVE_IO_BENCH=1 scripts/benchmark.sh compare saves-io-v1 save_file
+# Optional: choose a particular existing device/filesystem for the fixtures.
+RAYENGINE_SAVE_BENCH_DIR=/path/on/device RAYENGINE_SAVE_IO_BENCH=1 \
+  scripts/benchmark.sh save saves-device-v1 save_file
+```
+
+`save_file` measures complete replacement in Atomic and (on Linux) Durable
+modes, plus repeated loads at 64 KiB and 1 MiB. Writes include checksum,
+temporary-file creation, write, close, rename and, for Durable, both fsync calls.
+Loads allocate/validate the complete payload from a warm OS page cache; this is
+not a cold-storage benchmark. Unique fixture setup and cleanup are outside
+measurement. I/O cases use 10 samples, 250 ms warm-up and 1 second measurement.
+They write repeatedly and can be slower on storage with high flush latency.
+The default fixture base is `artifacts/benchmarks/save-io-fixtures`; each run
+removes only its owned subdirectory. Normal CPU runs perform no save-file I/O.
+Metadata records the base path, Linux filesystem type and I/O settings. Compare
+on the same device, mount options, cache/load conditions and filesystem; a tmpfs
+run does not establish disk durability latency.
 
 Native draw submission has a separate opt-in suite requiring a display:
 

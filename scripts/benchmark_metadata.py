@@ -38,6 +38,29 @@ def main():
             "baseline": baseline,
             "criterion_arguments": extra,
         }
+        if os.environ.get("RAYENGINE_SAVE_IO_BENCH") == "1":
+            base = Path(os.environ.get("RAYENGINE_SAVE_BENCH_DIR",
+                                       "artifacts/benchmarks/save-io-fixtures")).absolute()
+            existing = base
+            while not existing.exists() and existing != existing.parent:
+                existing = existing.parent
+            filesystem = None
+            if sys.platform.startswith("linux") and shutil.which("stat"):
+                try:
+                    filesystem = command("stat", "-f", "-c", "%T", str(existing))
+                except subprocess.CalledProcessError:
+                    pass
+            data["measurement"] = "CPU and optional filesystem I/O; no window or GPU initialized"
+            data["save_io"] = {
+                "directory": str(base),
+                "filesystem": filesystem,
+                "payload_bytes": [65536, 1048576],
+                "sample_size": 10,
+                "warm_up_seconds": 0.25,
+                "measurement_seconds": 1,
+                "durable_enabled": sys.platform.startswith("linux"),
+                "load_cache": "warm OS page cache; no cache eviction",
+            }
         (destination / "metadata.json").write_text(json.dumps(data, indent=2) + "\n")
         return
 

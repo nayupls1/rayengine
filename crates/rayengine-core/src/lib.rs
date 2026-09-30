@@ -12,6 +12,7 @@ pub mod events;
 pub mod input;
 pub mod jobs;
 pub mod mesh;
+pub mod save;
 pub mod scene;
 pub mod spatial;
 pub mod time;
