@@ -16,11 +16,11 @@ wayland = ["raylib/GLFW_BUILD_WAYLAND"]
 [dependencies]
 rayengine-core.workspace = true
 raylib = { workspace = true, features = ["SUPPORT_IMAGE_GENERATION"] }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 
 [[bench]]
 name = "draw_submission"

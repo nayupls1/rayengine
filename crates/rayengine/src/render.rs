@@ -1,5 +1,6 @@
 //! Immediate drawing with corresponding 2D/3D passes and shared logical UI.
 
+use crate::diagnostics::DrawCounters;
 use crate::{
     Error,
     assets::{
@@ -19,11 +20,20 @@ use rayengine_core::{
 };
 use raylib::prelude::*;
 
+macro_rules! count {
+    ($counts:expr, $field:ident, $amount:expr) => {
+        if let Some(counters) = $counts.as_mut() {
+            counters.$field = counters.$field.saturating_add($amount);
+        }
+    };
+}
+
 /// Concrete offscreen raylib drawing guard, available for advanced passes.
 pub type TargetDraw<'draw, 'target> = RaylibTextureMode<'draw, 'target, RaylibHandle>;
 
 /// One render frame. Game code chooses passes; the engine owns presentation.
 pub struct Frame<'frame, 'audio> {
+    pub(crate) counters: Option<DrawCounters>,
     pub(crate) raylib: &'frame mut RaylibHandle,
     pub(crate) thread: &'frame RaylibThread,
     pub(crate) target: &'frame mut RenderTexture2D,
@@ -38,6 +48,19 @@ pub struct Frame<'frame, 'audio> {
 }
 
 impl Frame<'_, '_> {
+    /// Enables/disables submission counters for this frame. Runtime diagnostics
+    /// enable them automatically; changing mode resets counters. Useful for
+    /// identical enabled/disabled native benchmark workloads.
+    pub fn set_draw_counters_enabled(&mut self, enabled: bool) {
+        if enabled != self.counters.is_some() {
+            self.counters = enabled.then(DrawCounters::default);
+        }
+    }
+    /// Current successful SDK submissions, or None when counting is disabled.
+    pub fn draw_counters(&self) -> Option<DrawCounters> {
+        self.counters
+    }
+
     /// Processes bounded mesh uploads before a drawing pass. The game decides
     /// whether each tag/revision is current and receives success/failure/stale outcomes.
     pub fn upload_meshes<K>(
@@ -110,6 +133,7 @@ impl Frame<'_, '_> {
 
     /// Clears color and depth at the start of the game frame.
     pub fn clear(&mut self, color: Color) {
+        count!(self.counters, clears, 1);
         self.raylib
             .begin_texture_mode(self.thread, self.target)
             .clear_background(color);
@@ -121,6 +145,7 @@ impl Frame<'_, '_> {
         camera: Camera2D,
         draw: impl FnOnce(&mut Canvas2D<'_, RaylibMode2D<'_, TargetDraw<'_, '_>>>),
     ) {
+        count!(self.counters, world_2d_passes, 1);
         let size = Vec2::new(
             self.target.texture().width as f32,
             self.target.texture().height as f32,
@@ -136,6 +161,7 @@ impl Frame<'_, '_> {
         draw(&mut Canvas2D {
             raw: &mut raw,
             textures: self.assets,
+            counters: &mut self.counters,
         });
     }
 
@@ -145,6 +171,7 @@ impl Frame<'_, '_> {
         camera: Camera3D,
         draw: impl FnOnce(&mut Canvas3D<'_, RaylibMode3D<'_, TargetDraw<'_, '_>>>),
     ) {
+        count!(self.counters, world_3d_passes, 1);
         let camera = raylib::prelude::Camera3D {
             position: v3(camera.position),
             target: v3(camera.target),
@@ -159,11 +186,13 @@ impl Frame<'_, '_> {
             raw: &mut raw,
             models: self.assets,
             surface,
+            counters: &mut self.counters,
         });
     }
 
     /// Draws screen UI in reference units, scaled independently from the world camera.
     pub fn ui(&mut self, draw: impl FnOnce(&mut UiCanvas<'_, TargetDraw<'_, '_>>)) {
+        count!(self.counters, ui_passes, 1);
         let pixels = Vec2::new(
             self.target.texture().width as f32,
             self.target.texture().height as f32,
@@ -177,11 +206,13 @@ impl Frame<'_, '_> {
             logical_size: self.viewport.logical_size,
             font,
             textures: self.assets,
+            counters: &mut self.counters,
         });
     }
 
     /// Direct raylib texture pass for shaders or drawing beyond the SDK primitives.
     pub fn with_raylib(&mut self, draw: impl FnOnce(&mut TargetDraw<'_, '_>)) {
+        count!(self.counters, raw_passes, 1);
         let mut raw = self.raylib.begin_texture_mode(self.thread, self.target);
         draw(&mut raw);
     }
@@ -189,6 +220,7 @@ impl Frame<'_, '_> {
 
 /// Immediate 2D primitives. No command buffer or allocation is introduced.
 pub struct Canvas2D<'draw, D: RaylibDraw> {
+    counters: &'draw mut Option<DrawCounters>,
     /// Raylib guard for advanced drawing within this camera pass.
     pub raw: &'draw mut D,
     textures: &'draw dyn TextureSource,
@@ -206,14 +238,17 @@ impl TextureSource for Assets<'_> {
 impl<D: RaylibDraw> Canvas2D<'_, D> {
     /// Filled world-space rectangle.
     pub fn rectangle(&mut self, bounds: Aabb2, color: Color) {
+        count!(self.counters, primitives_2d, 1);
         self.raw.draw_rectangle_rec(rect(bounds), color);
     }
     /// Filled world-space circle.
     pub fn circle(&mut self, center: Vec2, radius: f32, color: Color) {
+        count!(self.counters, primitives_2d, 1);
         self.raw.draw_circle_v(v2(center), radius, color);
     }
     /// World-space line with explicit width.
     pub fn line(&mut self, start: Vec2, end: Vec2, width: f32, color: Color) {
+        count!(self.counters, primitives_2d, 1);
         self.raw.draw_line_ex(v2(start), v2(end), width, color);
     }
     /// Draws a texture into world-space bounds; false for an unloaded handle.
@@ -227,6 +262,7 @@ impl<D: RaylibDraw> Canvas2D<'_, D> {
                 0.0,
                 tint,
             );
+            count!(self.counters, textures, 1);
             true
         } else {
             false
@@ -236,6 +272,7 @@ impl<D: RaylibDraw> Canvas2D<'_, D> {
 
 /// Immediate 3D primitives corresponding to the 2D drawing API.
 pub struct Canvas3D<'draw, D: RaylibDraw> {
+    counters: &'draw mut Option<DrawCounters>,
     /// Raylib guard for advanced drawing within this camera pass.
     pub raw: &'draw mut D,
     models: &'draw mut dyn ModelSource,
@@ -313,6 +350,7 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
                 surface.apply(material.alpha);
             }
             material.draw(self.raw, mesh, matrix(transform));
+            count!(self.counters, meshes, 1);
             true
         } else {
             false
@@ -347,6 +385,8 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
                 m.m13, m.m14, m.m15,
             ]);
             let transform = matrix(transform * local);
+            count!(self.counters, models, 1);
+            count!(self.counters, meshes, model.meshes().len() as u64);
             for mesh in model.meshes() {
                 material.draw(self.raw, mesh, transform);
             }
@@ -371,6 +411,7 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         self.legacy();
         if let Some((mesh, material)) = self.models.mesh(id, tint) {
             self.raw.draw_mesh(mesh, material, matrix(transform));
+            count!(self.counters, meshes, 1);
             true
         } else {
             false
@@ -379,23 +420,27 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
 
     /// Filled world-space box.
     pub fn cube(&mut self, bounds: Aabb3, color: Color) {
+        count!(self.counters, primitives_3d, 1);
         self.legacy();
         self.raw
             .draw_cube_v(v3(bounds.center()), v3(bounds.size()), color);
     }
     /// Box wireframe.
     pub fn wire_cube(&mut self, bounds: Aabb3, color: Color) {
+        count!(self.counters, primitives_3d, 1);
         self.legacy();
         self.raw
             .draw_cube_wires_v(v3(bounds.center()), v3(bounds.size()), color);
     }
     /// Filled sphere with fixed low polygon count.
     pub fn sphere(&mut self, center: Vec3, radius: f32, color: Color) {
+        count!(self.counters, primitives_3d, 1);
         self.legacy();
         self.raw.draw_sphere_ex(v3(center), radius, 12, 16, color);
     }
     /// World-space line.
     pub fn line(&mut self, start: Vec3, end: Vec3, color: Color) {
+        count!(self.counters, primitives_3d, 1);
         self.legacy();
         self.raw.draw_line3D(v3(start), v3(end), color);
     }
@@ -404,6 +449,8 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         self.legacy();
         if let Some(model) = self.models.model(id) {
             self.raw.draw_model(model, v3(position), scale, tint);
+            count!(self.counters, models, 1);
+            count!(self.counters, meshes, model.meshes().len() as u64);
             true
         } else {
             false
@@ -413,6 +460,7 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
 
 /// UI primitives in logical reference units, shared by 2D and 3D.
 pub struct UiCanvas<'draw, D: RaylibDraw> {
+    counters: &'draw mut Option<DrawCounters>,
     /// Raylib guard for advanced screen-space drawing (coordinates are target pixels).
     pub raw: &'draw mut D,
     /// Current content dimensions in UI units.
@@ -476,6 +524,7 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
         };
         self.rectangle(bounds, fill);
         if response.focused {
+            count!(self.counters, ui_primitives, 1);
             self.raw.draw_rectangle_lines_ex(
                 rect(Aabb2 {
                     min: bounds.min * self.scale,
@@ -509,6 +558,7 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
                 0.0,
                 tint,
             );
+            count!(self.counters, textures, 1);
             true
         } else {
             false
@@ -516,6 +566,7 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
     }
     /// Filled UI rectangle, automatically scaled to render pixels.
     pub fn rectangle(&mut self, bounds: Aabb2, color: Color) {
+        count!(self.counters, ui_primitives, 1);
         self.raw.draw_rectangle_rec(
             rect(Aabb2 {
                 min: bounds.min * self.scale,
@@ -526,6 +577,7 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
     }
     /// UI text using raylib's default font. Cache formatted strings when possible.
     pub fn text(&mut self, text: &str, position: Vec2, size: f32, color: Color) {
+        count!(self.counters, text, 1);
         self.raw.draw_text_ex(
             &self.font,
             text,
@@ -537,6 +589,7 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
     }
     /// UI circle, preserving its proportions.
     pub fn circle(&mut self, center: Vec2, radius: f32, color: Color) {
+        count!(self.counters, ui_primitives, 1);
         self.raw.draw_circle_v(
             v2(center * self.scale),
             radius * self.scale.min_element(),

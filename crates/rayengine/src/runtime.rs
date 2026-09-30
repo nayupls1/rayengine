@@ -2,6 +2,7 @@
 
 use crate::{
     assets::{Assets, MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId, path_string},
+    diagnostics::{DiagnosticsConfig, DiagnosticsReport, DrawCounters, RunSettings},
     input::Bindings,
     material::{MaterialDesc, UniformId, UniformValue},
     render::{Frame, rect},
@@ -135,6 +136,8 @@ impl Config {
 /// This is not the deferred interactive game-testing protocol.
 #[derive(Clone, Debug, Default)]
 pub struct RunOptions {
+    /// Opt-in timings, submission counters and resource sampling. Disabled by default.
+    pub diagnostics: Option<DiagnosticsConfig>,
     /// Exit after this many presented frames. `None` means normal interactive play.
     pub frames: Option<u64>,
     /// Save the last presented frame as a PNG.
@@ -149,7 +152,8 @@ pub struct RunOptions {
 
 impl RunOptions {
     /// Reads `--frames N`, `--screenshot file.png`, `--size WIDTHxHEIGHT`,
-    /// `--hidden`, and `--uncapped`. Unknown or incomplete arguments are errors.
+    /// `--hidden`, `--uncapped`, `--diagnostics report.json`, and `--workload ID`.
+    /// Either diagnostic flag enables collection. Unknown/incomplete arguments fail.
     pub fn from_env() -> Result<Self, Error> {
         Self::parse(std::env::args().skip(1))
     }
@@ -197,10 +201,31 @@ impl RunOptions {
                     validate_size(size)?;
                     options.size = Some(size);
                 }
+                "--diagnostics" => {
+                    let path = args
+                        .next()
+                        .ok_or_else(|| Error::Config("--diagnostics needs a JSON path".into()))?;
+                    options
+                        .diagnostics
+                        .get_or_insert_with(|| DiagnosticsConfig::new("unspecified"))
+                        .output = Some(path.into());
+                }
+                "--workload" => {
+                    let id = args
+                        .next()
+                        .ok_or_else(|| Error::Config("--workload needs a stable ID".into()))?;
+                    options
+                        .diagnostics
+                        .get_or_insert_with(|| DiagnosticsConfig::new("unspecified"))
+                        .workload = id;
+                }
                 "--hidden" => options.hidden = true,
                 "--uncapped" => options.uncapped = true,
                 _ => return Err(Error::Config(format!("unknown run option: {arg}"))),
             }
+        }
+        if let Some(diagnostics) = &options.diagnostics {
+            diagnostics.validate()?;
         }
         if let Some(path) = &options.screenshot {
             if path.extension().and_then(|e| e.to_str()) != Some("png") {
@@ -213,8 +238,10 @@ impl RunOptions {
 }
 
 /// Counters returned after a game exits.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct RunReport {
+    /// Optional constant-space performance summary; None when disabled.
+    pub diagnostics: Option<DiagnosticsReport>,
     /// Number of presented frames.
     pub frames: u64,
     /// Number of executed simulation ticks.
@@ -432,6 +459,9 @@ impl App {
             config.window_size = size;
         }
         config.validate()?;
+        if let Some(diagnostics) = &options.diagnostics {
+            diagnostics.validate()?;
+        }
         if options.frames == Some(0) {
             return Err(Error::Config("frame limit must be positive".into()));
         }
@@ -486,7 +516,41 @@ impl App {
         let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
         let start = Instant::now();
         let mut previous_frame = start;
-        let mut report = RunReport::default();
+        let mut report = RunReport {
+            diagnostics: options.diagnostics.as_ref().map(|diagnostics| {
+                DiagnosticsReport::new(
+                    diagnostics,
+                    RunSettings {
+                        backend: if cfg!(feature = "wayland") {
+                            "glfw-x11+wayland"
+                        } else {
+                            "glfw-x11"
+                        },
+                        os: std::env::consts::OS,
+                        arch: std::env::consts::ARCH,
+                        sdk_version: env!("CARGO_PKG_VERSION"),
+                        window_size: config.window_size,
+                        reference_size: config.reference_size.to_array(),
+                        scale_mode: match config.scale_mode {
+                            ScaleMode::Fit => "fit",
+                            ScaleMode::Expand => "expand",
+                            ScaleMode::IntegerFit => "integer-fit",
+                        },
+                        fixed_hz: config.fixed_hz,
+                        max_catch_up: config.max_catch_up,
+                        target_fps: if options.uncapped {
+                            0
+                        } else {
+                            config.target_fps
+                        },
+                        vsync: config.vsync && !options.uncapped,
+                        render_size: (0, 0),
+                    },
+                    assets.resource_counts(),
+                )
+            }),
+            ..RunReport::default()
+        };
         let mut quit = false;
         while !quit
             && !raylib.window_should_close()
@@ -521,7 +585,13 @@ impl App {
             let mouse = raylib.get_mouse_position();
             let plan = clock.advance(elapsed);
             report.dropped_time += plan.dropped;
+            if let Some(metrics) = &mut report.diagnostics {
+                metrics.dropped_ns = metrics
+                    .dropped_ns
+                    .saturating_add(plan.dropped.as_nanos().min(u128::from(u64::MAX)) as u64);
+            }
             for step in 0..plan.steps {
+                let update_start = report.diagnostics.as_ref().map(|_| Instant::now());
                 game.fixed_update(&mut Update {
                     tick: Tick {
                         index: plan.first_tick + u64::from(step),
@@ -536,6 +606,12 @@ impl App {
                     assets: &assets,
                     quit: &mut quit,
                 });
+                if let Some(metrics) = &mut report.diagnostics {
+                    metrics
+                        .update
+                        .record(update_start.expect("diagnostics enabled").elapsed());
+                    metrics.updates = metrics.updates.saturating_add(1);
+                }
                 input.consume_edges();
                 sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
                 report.ticks += 1;
@@ -543,6 +619,7 @@ impl App {
                     break;
                 }
             }
+            let render_start = report.diagnostics.as_ref().map(|_| Instant::now());
             let dpi = Vec2::new(
                 raylib.get_render_width() as f32,
                 raylib.get_render_height() as f32,
@@ -572,17 +649,27 @@ impl App {
                 target_size = size;
             }
             let target = target.as_mut().expect("created target");
-            let mut frame = Frame {
-                raylib: &mut raylib,
-                thread: &thread,
-                target,
-                assets: &mut assets,
-                viewport: view,
-                alpha: plan.alpha,
-                index: report.frames,
+            let draws = {
+                let mut frame = Frame {
+                    counters: report.diagnostics.as_ref().map(|_| DrawCounters::default()),
+                    raylib: &mut raylib,
+                    thread: &thread,
+                    target,
+                    assets: &mut assets,
+                    viewport: view,
+                    alpha: plan.alpha,
+                    index: report.frames,
+                };
+                frame.clear(Color::BLACK);
+                game.draw(&mut frame);
+                frame.draw_counters()
             };
-            frame.clear(Color::BLACK);
-            game.draw(&mut frame);
+            if let Some(metrics) = &mut report.diagnostics {
+                metrics
+                    .render
+                    .record(render_start.expect("diagnostics enabled").elapsed());
+            }
+            let present_start = report.diagnostics.as_ref().map(|_| Instant::now());
             {
                 let mut draw = raylib.begin_drawing(&thread);
                 draw.clear_background(config.bar_color);
@@ -598,6 +685,14 @@ impl App {
                     Color::WHITE,
                 );
             }
+            if let Some(metrics) = &mut report.diagnostics {
+                metrics
+                    .present
+                    .record(present_start.expect("diagnostics enabled").elapsed());
+                metrics.settings.render_size = size;
+                metrics.record_frame(draws.unwrap_or_default(), assets.resource_counts());
+                metrics.frame.record(now.elapsed());
+            }
             report.frames += 1;
         }
         if let Some(path) = &options.screenshot {
@@ -608,6 +703,22 @@ impl App {
             std::fs::write(path, &*png)?;
         }
         report.elapsed = start.elapsed();
+        if let Some((path, metrics)) = options
+            .diagnostics
+            .as_ref()
+            .and_then(|d| d.output.as_ref())
+            .zip(report.diagnostics.as_ref())
+        {
+            if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                std::fs::create_dir_all(parent)?;
+            }
+            let file = std::fs::File::create(path)?;
+            let mut writer = std::io::BufWriter::new(file);
+            metrics
+                .write_json(&mut writer)
+                .map_err(|error| Error::Io(std::io::Error::other(error)))?;
+            std::io::Write::flush(&mut writer)?;
+        }
         Ok(report)
     }
 }
@@ -842,3 +953,6 @@ mod tests {
 
 #[cfg(test)]
 mod ui_tests;
+
+#[cfg(test)]
+mod diagnostics_tests;

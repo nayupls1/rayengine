@@ -58,6 +58,34 @@ pub struct Assets<'audio> {
 }
 
 impl<'audio> Assets<'audio> {
+    /// Samples live owned resources. This scans asset slots without GPU queries
+    /// or readback; automatic sampling occurs only when diagnostics are enabled.
+    /// Logical payload bytes exclude driver overhead, default resources,
+    /// imported model textures/animations, and game-owned raw handles.
+    pub fn resource_counts(&self) -> crate::diagnostics::ResourceCounts {
+        let (meshes, generated_mesh_bytes) = self.meshes.resource_usage();
+        let (shaders, materials) = self.surfaces.resource_counts();
+        crate::diagnostics::ResourceCounts {
+            textures: self.textures.iter().flatten().count() as u64,
+            models: self.models.iter().flatten().count() as u64,
+            sounds: self.sounds.iter().flatten().count() as u64,
+            meshes,
+            shaders,
+            materials,
+            generated_mesh_bytes,
+            texture_bytes: self.textures.iter().flatten().fold(0_u64, |sum, texture| {
+                sum.saturating_add(texture_payload_bytes(texture))
+            }),
+            model_geometry_bytes: self
+                .models
+                .iter()
+                .flatten()
+                .flat_map(|model| model.meshes())
+                .fold(0_u64, |sum, mesh| {
+                    sum.saturating_add(mesh_payload_bytes(mesh))
+                }),
+        }
+    }
     pub(crate) fn new(audio: Option<&'audio RaylibAudio>) -> Self {
         Self {
             textures: Vec::new(),
@@ -344,6 +372,46 @@ impl<'audio> Assets<'audio> {
         self.sound_paths.insert(path, id);
         Ok(id)
     }
+}
+
+fn texture_payload_bytes(texture: &Texture2D) -> u64 {
+    let (mut width, mut height) = (texture.width, texture.height);
+    let mut bytes = 0_u64;
+    for _ in 0..texture.mipmaps {
+        // SAFETY: GetPixelDataSize performs integer arithmetic only, with no
+        // pointers or GL operations. Dimensions/format come from an owned,
+        // successfully loaded texture; no enum transmute or readback is needed.
+        #[allow(unsafe_code)]
+        let size = unsafe { raylib::ffi::GetPixelDataSize(width, height, texture.format) };
+        bytes = bytes.saturating_add(size.max(0) as u64);
+        width = (width / 2).max(1);
+        height = (height / 2).max(1);
+    }
+    bytes
+}
+
+fn mesh_payload_bytes(mesh: &impl AsRef<raylib::ffi::Mesh>) -> u64 {
+    let mesh = mesh.as_ref();
+    let vertices = mesh.vertexCount.max(0) as u64;
+    let per_vertex = [
+        (mesh.vertices.is_null(), 12),
+        (mesh.texcoords.is_null(), 8),
+        (mesh.texcoords2.is_null(), 8),
+        (mesh.normals.is_null(), 12),
+        (mesh.tangents.is_null(), 16),
+        (mesh.colors.is_null(), 4),
+    ]
+    .into_iter()
+    .filter(|(is_null, _)| !is_null)
+    .map(|(_, size)| size)
+    .sum::<u64>();
+    vertices
+        .saturating_mul(per_vertex)
+        .saturating_add(if mesh.indices.is_null() {
+            0
+        } else {
+            (mesh.triangleCount.max(0) as u64).saturating_mul(6)
+        })
 }
 
 fn asset_path(path: &Path) -> Result<PathBuf, Error> {

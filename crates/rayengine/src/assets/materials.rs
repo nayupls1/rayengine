@@ -164,6 +164,12 @@ struct Backend {
 }
 
 impl MaterialAssets {
+    pub(super) fn resource_counts(&self) -> (u64, u64) {
+        (
+            self.shaders.iter().flatten().count() as u64 + u64::from(self.backend.is_some()),
+            self.materials.iter().flatten().count() as u64,
+        )
+    }
     pub(super) fn new() -> Self {
         Self {
             shaders: Vec::new(),
