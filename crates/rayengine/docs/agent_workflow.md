@@ -5,6 +5,7 @@ Build or install `rayengine-cli`, then create, inspect and check game projects:
 ```sh
 rayengine --json doctor
 rayengine --json new ../agent-game --kind 2d --sdk-path /absolute/path/to/rayengine/crates/rayengine
+rayengine --json new-plugin ../agent-game/plugins/my-plugin --name my-plugin
 rayengine --json info ../agent-game
 rayengine --json check ../agent-game
 rayengine --json build ../agent-game --release
@@ -23,6 +24,15 @@ Operational failures use a structured error and process exit code 1:
 {"schema_version":1,"ok":false,"command":"check","error":{"code":"cargo_failed","message":"cargo check failed","details":{"exit_code":101,"diagnostics":[],"stdout":"","stderr":"..."}}}
 ```
 
+`new-plugin` creates a standalone Cargo library, returning `command:
+"new-plugin"`, `data.kind: "plugin"`, the resolved SDK path, and a file list
+containing `src/lib.rs`. Like `new`, it refuses existing destinations and accepts
+`--name` and `--sdk-path`. Add it to the game with an explicit Cargo path
+dependency; the command does not edit the game or register hooks. Generated game
+workspaces exclude the `plugins/` directory so nested standalone libraries can
+be dependencies. For other workspaces, exclude the plugin's path or remove its
+`[workspace]` table and add it as a member. See the [plugin guide](crate::guides::plugins).
+
 Argument errors return exit code 2 and `error.code = "invalid_arguments"` in
 JSON mode. Successful commands return exit code 0. Help and version requests
 remain normal textual CLI output. Do not determine success from an empty stderr;
@@ -39,7 +49,7 @@ result. Use a bounded `--frames` argument when asking an agent to run it. Normal
 text mode streams the process interactively. This is command completion output,
 not a live transport for injecting gameplay commands.
 
-Every scaffold includes `RunOptions::from_env`. Bounded rendering controls are:
+Game scaffolds include `RunOptions::from_env`. Bounded rendering controls are:
 
 - `--frames N`: exit after N **render frames**, not N fixed simulation ticks.
 - `--screenshot file.png`: save the final displayed framebuffer as PNG.

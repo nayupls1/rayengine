@@ -9,10 +9,12 @@ pub mod assets;
 pub mod diagnostics;
 pub mod input;
 pub mod material;
+pub mod plugin;
 pub mod render;
 pub mod runtime;
 pub mod upload;
 
+pub use plugin::Plugin;
 pub use runtime::{
     App, Config, CursorMode, Error, Game, InitContext, RunOptions, RunReport, Update,
 };
@@ -23,6 +25,8 @@ pub mod guides {
     pub mod quickstart {}
     #[doc = include_str!("../docs/game_structure.md")]
     pub mod game_structure {}
+    #[doc = include_str!("../docs/plugins.md")]
+    pub mod plugins {}
     #[doc = include_str!("../docs/responsive.md")]
     pub mod responsive {}
     #[doc = include_str!("../docs/timing_input.md")]
@@ -70,7 +74,9 @@ pub mod prelude {
         MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
         UploadBudget, UploadReport,
     };
-    pub use crate::{App, Config, CursorMode, Error, Game, InitContext, RunOptions, Update};
+    pub use crate::{
+        App, Config, CursorMode, Error, Game, InitContext, Plugin, RunOptions, Update,
+    };
     pub use rayengine_core::prelude::*;
     pub use raylib::prelude::{Color, KeyboardKey};
 }

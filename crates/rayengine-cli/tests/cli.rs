@@ -88,3 +88,54 @@ fn check_retains_structured_compiler_diagnostics_and_exit_status() {
         "JSON CLI must not leak child diagnostics outside its result"
     );
 }
+
+#[test]
+fn new_plugin_reports_library_and_rejects_existing_paths_and_invalid_sdk() {
+    let scratch = Scratch::new("cli-plugin");
+    let project = scratch.0.join("plugins/my-plugin");
+    let invoke = || {
+        Command::new(env!("CARGO_BIN_EXE_rayengine"))
+            .args(["--json", "new-plugin"])
+            .arg(&project)
+            .args(["--name", "my-plugin"])
+            .output()
+            .unwrap()
+    };
+    let output = invoke();
+    assert!(output.status.success());
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["command"], "new-plugin");
+    assert_eq!(response["data"]["kind"], "plugin");
+    assert!(
+        response["data"]["files"]
+            .as_array()
+            .unwrap()
+            .contains(&Value::from("src/lib.rs"))
+    );
+    assert!(!project.join("src/main.rs").exists());
+    let source = fs::read(project.join("src/lib.rs")).unwrap();
+    let output = invoke();
+    assert!(!output.status.success());
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        response["error"]["code"],
+        "destination_exists_or_unwritable"
+    );
+    assert_eq!(fs::read(project.join("src/lib.rs")).unwrap(), source);
+
+    let rejected = scratch.0.join("invalid-plugin");
+    let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "new-plugin"])
+        .arg(&rejected)
+        .arg("--sdk-path")
+        .arg(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(!output.status.success());
+    assert_eq!(response["error"]["code"], "invalid_sdk");
+    assert!(
+        !rejected.exists(),
+        "SDK validation precedes filesystem writes"
+    );
+}

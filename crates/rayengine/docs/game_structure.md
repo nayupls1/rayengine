@@ -18,7 +18,8 @@ assets/         game-owned source assets
 
 Use [`crate::core::scene::Scene`] when entity composition or parenting helps.
 It wraps `hecs` dense component storage; your components are ordinary structs.
-Small games can also use directly owned structs. No mandatory plugin scheduler
+Small games can also use directly owned structs. Optional Cargo libraries use
+[`crate::Plugin`] hooks called by the game; see the [plugin guide](crate::guides::plugins). No mandatory plugin scheduler
 or dynamic reflection is involved.
 
 ```rust

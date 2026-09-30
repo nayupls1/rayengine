@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and compile both real starter projects, outside the workspace."""
+"""Compile real starters, a generated plugin, and external plugin consumers."""
 
 import json
 import os
@@ -21,3 +21,49 @@ with tempfile.TemporaryDirectory(prefix="rayengine-template-") as temporary:
             if result.returncode or not response["ok"]:
                 raise SystemExit(json.dumps(response, indent=2))
         print(f"Generated {kind} starter compiles")
+
+    # A generated library nested below a game stays independent until the game
+    # explicitly adds it as a dependency. Exercise the real CLI output.
+    game = Path(temporary) / "game-3d"
+    plugin = game / "plugins/my-plugin"
+    result = subprocess.run(
+        [str(binary), "--json", "new-plugin", str(plugin), "--name", "my-plugin", "--sdk-path", str(root / "crates/rayengine")],
+        env=environment, text=True, capture_output=True,
+    )
+    response = json.loads(result.stdout)
+    if result.returncode or not response["ok"]:
+        raise SystemExit(json.dumps(response, indent=2))
+    subprocess.run(["cargo", "check", "--manifest-path", str(plugin / "Cargo.toml")], env=environment, check=True)
+    manifest = game / "Cargo.toml"
+    source = manifest.read_text()
+    source = source.replace("[dependencies]\n", '[dependencies]\nmy-plugin = { path = "plugins/my-plugin" }\n')
+    source = source.replace("[dependencies]\n", "[dependencies]\nrayengine-beacons = { path = " + json.dumps(str(root / "plugins/beacons")) + " }\n")
+    manifest.write_text(source)
+    (game / "src/main.rs").write_text('''use rayengine::prelude::*;
+use my_plugin::{MyPlugin, PluginState};
+use rayengine_beacons::{Beacon, BeaconWorld};
+
+#[derive(Default)]
+struct Demo { plugin: MyPlugin, state: PluginState, world: BeaconWorld, beacon: Option<Beacon> }
+impl Game for Demo {
+    fn init(&mut self, context: &mut InitContext<'_, '_>) -> Result<(), Error> {
+        self.plugin.init(&mut self.state, context)?;
+        let mut beacon = Beacon::new(Vec3::ZERO, Color::WHITE, 1.0)?;
+        beacon.init(&mut self.world, context)?;
+        self.beacon = Some(beacon);
+        Ok(())
+    }
+    fn fixed_update(&mut self, context: &mut Update<'_, '_>) {
+        self.plugin.fixed_update(&mut self.state, context);
+        if let Some(beacon) = &mut self.beacon { beacon.fixed_update(&mut self.world, context); }
+    }
+    fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+        frame.clear(Color::BLACK);
+        self.plugin.draw(&self.state, frame);
+        if let Some(beacon) = &mut self.beacon { beacon.draw(&self.world, frame); }
+    }
+}
+fn main() -> Result<(), Error> { App::new(Config::new("External plugins")).run(Demo::default())?; Ok(()) }
+''')
+    subprocess.run(["cargo", "check", "--manifest-path", str(manifest)], env=environment, check=True)
+    print("Generated and repository plugins compose in an external game")

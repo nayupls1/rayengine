@@ -512,6 +512,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayengine-beacons"
+version = "0.0.1"
+dependencies = [
+ "rayengine",
+]
+
+[[package]]
 name = "rayengine-cli"
 version = "0.0.1"
 dependencies = [
