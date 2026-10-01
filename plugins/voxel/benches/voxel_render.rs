@@ -4,6 +4,9 @@ use rayengine::{prelude::*, raylib::prelude::Image};
 use rayengine_voxel::prelude::*;
 use std::{hint::black_box, path::PathBuf, sync::Arc, time::Duration};
 
+#[path = "streaming/render.rs"]
+mod streaming;
+
 struct Fixture {
     name: &'static str,
     mode: &'static str,
@@ -94,6 +97,7 @@ impl Game for Bench {
             });
         }
         uploads.finish();
+        streaming::workloads(&mut c, frame, &self.materials);
         frame.clear(Color::BLACK);
         let camera = Camera3D {
             position: Vec3::new(24.0, 20.0, 32.0),

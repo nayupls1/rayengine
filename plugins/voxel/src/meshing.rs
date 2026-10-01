@@ -99,6 +99,8 @@ pub enum MeshingError {
     InvalidLimits,
     /// Output exceeds a configured face or batch budget.
     LimitExceeded,
+    /// Cooperative worker cancellation.
+    Cancelled,
     /// A CPU allocation could not be admitted.
     Allocation,
 }
@@ -112,6 +114,7 @@ impl fmt::Display for MeshingError {
             Self::InvalidLimits => f.write_str("invalid chunk mesh limits"),
             Self::LimitExceeded => f.write_str("chunk mesh output budget exceeded"),
             Self::Allocation => f.write_str("chunk mesh allocation failed"),
+            Self::Cancelled => f.write_str("chunk meshing cancelled"),
         }
     }
 }
@@ -124,9 +127,12 @@ impl From<VoxelError> for MeshingError {
 
 /// Owner plus six face-neighbor dependency stamps, including missing data.
 /// Captures world identity too; stamps cannot be transferred between worlds.
+/// Each capture has a distinct receipt, preserved by clones, for acknowledging
+/// individual consumer requests even when the underlying stamps are unchanged.
 #[derive(Clone)]
 pub struct MeshDependencies {
     identity: Arc<()>,
+    receipt: Arc<()>,
     position: ChunkPos,
     stamps: [Option<ChunkStamp>; 7],
 }
@@ -138,6 +144,12 @@ impl MeshDependencies {
     /// Owner stamp followed by Face::ALL neighbors; None records missing/out-of-grid data.
     pub fn stamps(&self) -> &[Option<ChunkStamp>; 7] {
         &self.stamps
+    }
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.receipt, &other.receipt)
+            && Arc::ptr_eq(&self.identity, &other.identity)
+            && self.position == other.position
+            && self.stamps == other.stamps
     }
     /// Rejects edits, replacement, removal, neighbor arrivals and another world.
     /// Conservatively rejects any neighbor edit, even outside the sampled border.
@@ -209,6 +221,7 @@ impl MeshInput {
             blocks,
             dependencies: MeshDependencies {
                 identity: world.identity.clone(),
+                receipt: Arc::new(()),
                 position,
                 stamps,
             },
@@ -225,6 +238,15 @@ impl MeshInput {
     /// Generates local-space indexed meshes. UVs repeat once per block; a merged
     /// face is never stretched. Use the repeating renderer or an equivalent shader.
     pub fn build(&self, options: MeshingOptions) -> Result<ChunkMesh, MeshingError> {
+        self.build_cancellable(options, || false)
+    }
+    /// Builds with cooperative cancellation checked once per face slice and batch.
+    /// A cancelled result contains no geometry and never changes native resources.
+    pub fn build_cancellable(
+        &self,
+        options: MeshingOptions,
+        mut cancelled: impl FnMut() -> bool,
+    ) -> Result<ChunkMesh, MeshingError> {
         let limits = options.limits;
         if !(1..=MAX_CHUNK_FACES).contains(&limits.max_quads)
             || !(1..=MAX_CHUNK_FACES).contains(&limits.max_batches)
@@ -238,6 +260,9 @@ impl MeshInput {
         for face in Face::ALL {
             let (axis, u, v, positive) = axes(face);
             for slice in 0..16 {
+                if cancelled() {
+                    return Err(MeshingError::Cancelled);
+                }
                 let mut mask = [None; 256];
                 for b in 0..16 {
                     for a in 0..16 {
@@ -328,6 +353,9 @@ impl MeshInput {
             ..Default::default()
         };
         while cursor < quads.len() {
+            if cancelled() {
+                return Err(MeshingError::Cancelled);
+            }
             if batches.len() == limits.max_batches {
                 return Err(MeshingError::LimitExceeded);
             }
@@ -478,6 +506,10 @@ impl MeshBatch {
     pub fn surface(&self) -> SurfaceKey {
         self.key
     }
+    /// Consumes the batch without cloning vertex buffers.
+    pub fn into_data(self) -> MeshData {
+        self.data
+    }
     /// Immutable SDK upload data.
     pub fn data(&self) -> &MeshData {
         &self.data
@@ -501,6 +533,24 @@ impl ChunkMesh {
     /// Exact geometry/payload counts.
     pub fn stats(&self) -> MeshStats {
         self.stats
+    }
+    /// Retained vertex/index capacities, excluding batch metadata and allocator overhead.
+    pub fn retained_bytes(&self) -> usize {
+        self.batches
+            .iter()
+            .map(|b| {
+                let d = &b.data;
+                d.positions.capacity() * 12
+                    + d.normals.as_ref().map_or(0, |v| v.capacity() * 12)
+                    + d.texcoords.as_ref().map_or(0, |v| v.capacity() * 8)
+                    + d.colors.as_ref().map_or(0, |v| v.capacity() * 4)
+                    + d.indices.as_ref().map_or(0, |v| v.capacity() * 2)
+            })
+            .sum()
+    }
+    /// Consumes ordered batches without copying geometry.
+    pub fn into_batches(self) -> Vec<MeshBatch> {
+        self.batches
     }
     /// Conservative camera visibility without allocating. Local vertex data and
     /// camera-relative translation keep precision near distant signed coordinates.

@@ -52,8 +52,13 @@ selection predicates, save schema/acknowledgements, and eviction policy. CPU mes
 uses owned owner/neighbor snapshots, repeating UVs, deterministic greedy face
 merging and bounded indexed batches. The optional `render` feature adds raylib
 opaque/cutout tile materials, transactional whole-chunk uploads and camera-relative
-visibility. Games explicitly schedule/invalidate/rebuild meshes; streaming, terrain
-generation, propagated lighting and survival rules remain separate follow-ups.
+visibility. Optional chunk streaming uses the core job pool, current neighbor
+receipts and nearest-first focus regions with explicit job/mesh/resident bounds.
+The game owns load/generation and persistence-aware eviction callbacks; dirty
+chunks stay resident until saved. Render streaming stages bounded multi-frame
+uploads, preserves old whole-chunk geometry on failure, and counts temporary
+old/new GPU coexistence. Terrain generation, propagated lighting and survival
+rules remain separate follow-ups.
 
 ## First release
 
@@ -68,7 +73,7 @@ textures, cached typed uniforms, and explicit opaque/cutout/blended policies for
 generated meshes and imported models. Game code orders transparent draws;
 CPU jobs and mesh staging have explicit bounded queues. Upload budgets are
 applied on the render thread; cancellation and game-defined revisions reject
-obsolete work. Automatic world streaming remains game policy.
+obsolete work. Voxel streaming is opt-in, with game-provided focus, terrain and save policy.
 
 An optional CPU first-person controller combines action/mouse look, yaw-relative
 movement, configurable jump/gravity/grace, Body3D collision and an interpolated

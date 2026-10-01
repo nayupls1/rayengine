@@ -35,4 +35,6 @@ cargo run -p rayengine-beacons "${demo_features[@]}" --example composition -- --
 cargo run -p rayengine-beacons "${demo_features[@]}" --example composition -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/plugins-portrait.png"
 cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example render -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/voxel-wide.png"
 cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example render -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/voxel-portrait.png"
+cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example stream_render -- --hidden --frames 120 --size 1280x720 --screenshot "artifacts/smoke/$backend/voxel-stream-wide.png"
+cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example stream_render -- --hidden --frames 120 --size 800x1000 --screenshot "artifacts/smoke/$backend/voxel-stream-portrait.png"
 echo "Native smoke screenshots: artifacts/smoke/$backend"

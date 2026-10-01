@@ -125,7 +125,7 @@ impl Game for Demo {
         }
     }
     fn draw(&mut self, frame: &mut Frame<'_, '_>) {
-        // The game decides when to rebuild/upload; #22 will add bounded scheduling.
+        // Explicit synchronous rebuilds; stream_render shows the optional bounded scheduler.
         for pos in self.dirty.drain(..) {
             let result = MeshInput::capture(&self.world, pos)
                 .and_then(|input| input.build(MeshingOptions::default()));

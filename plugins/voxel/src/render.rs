@@ -1,4 +1,5 @@
-//! Optional explicit render-thread ownership; no automatic scheduler or streaming.
+//! Optional render-thread ownership, materials, and bounded streaming uploads.
+mod streaming;
 use crate::glam::Vec4;
 use crate::meshing::{chunk_bounds, chunk_translation};
 use crate::{
@@ -12,6 +13,7 @@ use rayengine::{
     render::Canvas3D,
 };
 use std::collections::{HashMap, HashSet};
+pub use streaming::{StreamRenderConfig, StreamRenderReport, StreamRenderer, StreamResources};
 
 /// GLSL 330 fragment shader used by built-in materials. Custom shaders can reuse
 /// its per-tile repetition, unwrapped texture gradients and SDK alpha uniforms.
