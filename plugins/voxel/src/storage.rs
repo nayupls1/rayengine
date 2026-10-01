@@ -221,6 +221,11 @@ impl VoxelWorld {
     pub fn registry(&self) -> &BlockRegistry {
         &self.registry
     }
+    /// Clones the same immutable registry allocation for new chunks or CPU jobs.
+    /// This does not copy definitions or require a separately retained handle.
+    pub fn shared_registry(&self) -> Arc<BlockRegistry> {
+        self.registry.clone()
+    }
     /// Resident chunk count.
     pub fn len(&self) -> usize {
         self.chunks.len()

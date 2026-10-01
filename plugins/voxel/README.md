@@ -53,7 +53,9 @@ Game-specific drops, recipes, tools, growth, and health belong in separate table
 keyed by block IDs. For serialization, preserve the registry order or implement
 name/version mapping in the game; this crate does not silently remap numeric IDs.
 All resident chunks must share the **same Arc allocation** as the world, even if
-a separately created registry happens to have equal definitions.
+a separately created registry happens to have equal definitions. Use
+[`VoxelWorld::shared_registry`] to obtain the same allocation for generation/jobs
+without retaining an additional handle in the game.
 
 ## Coordinates, layout, and bounds
 

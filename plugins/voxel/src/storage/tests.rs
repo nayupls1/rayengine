@@ -373,3 +373,12 @@ fn extreme_chunk_borders_never_report_unrepresentable_neighbors() {
     let (chunk, local) = pos.split();
     assert_eq!(DirtyChunks::for_edit(chunk, local).as_slice(), &[chunk]);
 }
+
+#[test]
+fn a_world_can_supply_the_registry_for_generated_chunks_without_an_external_handle() {
+    let (registry, stone, _) = registry();
+    let mut world = VoxelWorld::new(registry, 1);
+    let chunk = Chunk::filled(world.shared_registry(), stone).unwrap();
+    world.insert_chunk(ChunkPos::default(), chunk).unwrap();
+    assert_eq!(world.block(BlockPos::default()), Some(stone));
+}
