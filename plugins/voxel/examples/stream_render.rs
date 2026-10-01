@@ -14,7 +14,6 @@ struct Demo {
     materials: VoxelMaterials,
     stone: BlockId,
     focus: ChunkPos,
-    dirty: bool,
     report: StreamReport,
     render: StreamRenderReport,
 }
@@ -47,7 +46,6 @@ impl Demo {
             materials: VoxelMaterials::new(),
             stone,
             focus: ChunkPos::default(),
-            dirty: false,
             report: StreamReport::default(),
             render: StreamRenderReport::default(),
         })
@@ -89,10 +87,14 @@ impl Game for Demo {
         }
         if ctx.input.pressed(EDIT) {
             let cell = self.focus.block(LocalPos::new(8, 6, 8).unwrap()).unwrap();
-            self.dirty = !self.dirty;
-            let _ = self
-                .world
-                .set_block(cell, if self.dirty { self.stone } else { BlockId::AIR });
+            if let Some(current) = self.world.block(cell) {
+                let replacement = if current == BlockId::AIR {
+                    self.stone
+                } else {
+                    BlockId::AIR
+                };
+                let _ = self.world.set_block(cell, replacement);
+            }
         }
     }
     fn draw(&mut self, frame: &mut Frame<'_, '_>) {
