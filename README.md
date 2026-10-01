@@ -30,14 +30,16 @@ Q/E also turn left/right. Escape exits; switching away releases the captured cur
 Explore the trails, climb the stone course, and collect golden orbs. Both games
 use geometric art and need no downloaded assets.
 
-Preview the seeded Minecraft terrain recipe:
+Play the seeded first-person Minecraft voxel demo:
 
 ```sh
 cargo run -p rayengine-minecraft --bin terrain -- --seed 42 --chunk=-1,2,0
 cargo run --release -p rayengine-minecraft --features render --bin minecraft -- --seed 42
 ```
 
-The preview streams hills, caves, trees and ores with original fallback colors.
+The demo streams hills, caves, trees and ores with original fallback colors.
+WASD/mouse moves and looks; Space jumps, held LMB mines, RMB places, and 1–3
+select dirt/stone/wood. Collision and reach queries use the resident edited world.
 Arrows move the focus. Its game-owned recipe and CPU fixtures are documented in
 [the terrain guide](examples/minecraft/README.md).
 
@@ -77,7 +79,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
 - [Optional plugins and authoring](crates/rayengine/docs/plugins.md)
 - [Voxel storage, generation interfaces, meshing and streaming](plugins/voxel/README.md)
-- [Seeded Minecraft terrain, safe spawn, and native preview](examples/minecraft/README.md)
+- [Seeded Minecraft terrain, safe spawn, movement, mining and placement](examples/minecraft/README.md)
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)

@@ -17,7 +17,9 @@ are optional targets; browser and mobile are outside the current scope.
   generated meshes, and independently configured instances.
 - `rayengine-demos`: a 2D arena fighter and a 3D exploration platformer.
 - `examples/minecraft`: game-owned integer terrain recipe, concrete blocks,
-  safe spawn and an optional native streamed preview; CPU-only by default.
+  safe spawn, CPU-tested movement/interaction rules and an optional native
+  first-person scene; CPU-only by default. Local collision adapters live in the
+  voxel plugin, while mining duration, placement and block choices stay in the game.
 
 ## Design contract
 
