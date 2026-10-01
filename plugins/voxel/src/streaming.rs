@@ -281,7 +281,8 @@ impl ChunkStreamer {
     }
     /// Releases a consumer's reservation. Success records the installed receipt;
     /// failure pauses this revision, so persistent upload errors do not spin.
-    /// Old acknowledgements cannot overwrite a newer held request.
+    /// Old acknowledgements cannot overwrite a newer held request, including
+    /// retries with unchanged owner/neighbor stamps.
     pub fn finish_mesh(&mut self, dependencies: &MeshDependencies, installed: bool) -> bool {
         let position = dependencies.position();
         if !self

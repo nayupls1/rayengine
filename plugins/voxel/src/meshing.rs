@@ -127,9 +127,12 @@ impl From<VoxelError> for MeshingError {
 
 /// Owner plus six face-neighbor dependency stamps, including missing data.
 /// Captures world identity too; stamps cannot be transferred between worlds.
+/// Each capture has a distinct receipt, preserved by clones, for acknowledging
+/// individual consumer requests even when the underlying stamps are unchanged.
 #[derive(Clone)]
 pub struct MeshDependencies {
     identity: Arc<()>,
+    receipt: Arc<()>,
     position: ChunkPos,
     stamps: [Option<ChunkStamp>; 7],
 }
@@ -143,7 +146,8 @@ impl MeshDependencies {
         &self.stamps
     }
     pub(crate) fn same(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.identity, &other.identity)
+        Arc::ptr_eq(&self.receipt, &other.receipt)
+            && Arc::ptr_eq(&self.identity, &other.identity)
             && self.position == other.position
             && self.stamps == other.stamps
     }
@@ -217,6 +221,7 @@ impl MeshInput {
             blocks,
             dependencies: MeshDependencies {
                 identity: world.identity.clone(),
+                receipt: Arc::new(()),
                 position,
                 stamps,
             },

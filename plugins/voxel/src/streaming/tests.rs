@@ -100,6 +100,24 @@ fn edits_in_flight_and_old_acknowledgements_cannot_install_stale_work() {
     let report = tick(&mut s, &mut world, p);
     assert_eq!(report.submitted, 0);
 }
+
+#[test]
+fn retried_mesh_at_the_same_revision_rejects_old_acknowledgements() {
+    let (mut world, mut s, _) = fixture(0, 1);
+    let p = ChunkPos::default();
+    wait(&mut s, &mut world, p, |s, _| !s.ready.is_empty());
+    let old = s.take_mesh(&world).unwrap();
+    assert!(s.finish_mesh(old.dependencies(), false));
+    s.retry(p);
+    wait(&mut s, &mut world, p, |s, _| !s.ready.is_empty());
+    let current = s.take_mesh(&world).unwrap();
+    assert_eq!(old.dependencies().stamps(), current.dependencies().stamps());
+    assert!(!s.finish_mesh(old.dependencies(), true));
+    assert!(!s.finish_mesh(old.dependencies(), false));
+    assert_eq!(tick(&mut s, &mut world, p).mesh_slots, 1);
+    assert!(s.finish_mesh(current.dependencies(), true));
+    assert_eq!(tick(&mut s, &mut world, p).submitted, 0);
+}
 #[test]
 fn neighbor_arrival_and_removal_rebuild_receipts() {
     let (mut world, mut s, stone) = fixture(0, 2);

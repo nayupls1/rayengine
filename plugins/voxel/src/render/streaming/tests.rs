@@ -280,3 +280,169 @@ fn native_voxel_streaming_budgets_stale_rollback_replacement_and_unload() {
         .unwrap();
     assert!(done.load(std::sync::atomic::Ordering::Acquire));
 }
+
+#[test]
+#[ignore = "requires native OpenGL; scripts/native_smoke.sh runs serially"]
+fn native_voxel_streaming_rejects_alpha_changes_during_staging() {
+    struct AlphaProbe {
+        world: VoxelWorld,
+        cpu: ChunkStreamer,
+        gpu: StreamRenderer,
+        materials: VoxelMaterials,
+        layer: MeshLayer,
+        replacement_alpha: AlphaMode,
+    }
+    impl AlphaProbe {
+        fn ready(&mut self) {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                if self
+                    .cpu
+                    .tick(&mut self.world, ChunkPos::default(), |_, _, _| {
+                        Eviction::Keep
+                    })
+                    .unwrap()
+                    .ready
+                    > 0
+                {
+                    break;
+                }
+                assert!(Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(1));
+            }
+        }
+        fn pump(&mut self, frame: &mut Frame<'_, '_>, requests: usize) -> StreamRenderReport {
+            self.gpu.pump(
+                &self.world,
+                &mut self.cpu,
+                &self.materials,
+                frame,
+                UploadBudget {
+                    max_requests: requests,
+                    max_bytes: usize::MAX,
+                    max_time: Duration::from_secs(1),
+                },
+            )
+        }
+    }
+    impl Game for AlphaProbe {
+        fn init(&mut self, context: &mut InitContext<'_, '_>) -> Result<(), Error> {
+            for (tile, layer, alpha) in [
+                (TileId(0), MeshLayer::Opaque, AlphaMode::Opaque),
+                (TileId(1), MeshLayer::Cutout, AlphaMode::Cutout(0.5)),
+            ] {
+                let material = context.material(MaterialDesc {
+                    alpha,
+                    ..Default::default()
+                })?;
+                self.materials.bind(SurfaceKey { tile, layer }, material)?;
+            }
+            Ok(())
+        }
+        fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+        fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+            self.ready();
+            assert_eq!(self.pump(frame, 8).committed, 1);
+            let position = ChunkPos::default();
+            let old: Vec<_> = self
+                .gpu
+                .chunk(position)
+                .unwrap()
+                .batches
+                .iter()
+                .map(|b| b.mesh)
+                .collect();
+            assert_eq!(old.len(), 2);
+            self.world
+                .set_block(BlockPos::default(), BlockId::AIR)
+                .unwrap();
+            self.ready();
+            let staged = self.pump(frame, 1);
+            assert_eq!(staged.committed, 0);
+            assert_eq!(staged.resources.meshes, 3);
+            let key = SurfaceKey {
+                tile: TileId(u16::from(self.layer == MeshLayer::Cutout)),
+                layer: self.layer,
+            };
+            let id = self.materials.surface(key).unwrap();
+            let mut desc = frame.assets.material(id).unwrap().clone();
+            desc.alpha = self.replacement_alpha;
+            frame.assets.replace_material(id, desc).unwrap();
+            let rejected = self.pump(frame, 1);
+            assert!(
+                rejected.error.is_some(),
+                "changed alpha policy must reject the transaction"
+            );
+            assert_eq!(rejected.committed, 0);
+            assert_eq!(rejected.resources.meshes, 2);
+            assert_eq!(
+                self.gpu
+                    .chunk(position)
+                    .unwrap()
+                    .batches
+                    .iter()
+                    .map(|b| b.mesh)
+                    .collect::<Vec<_>>(),
+                old
+            );
+            assert!(old.iter().all(|&id| frame.assets.mesh(id).is_some()));
+            assert_eq!(
+                self.cpu.failure(position),
+                Some(&crate::StreamFailure::Upload)
+            );
+            self.gpu.unload(&mut self.cpu, frame.assets);
+            self.cpu.shutdown();
+            frame.clear(Color::BLACK);
+        }
+    }
+    for (layer, replacement_alpha) in [
+        (MeshLayer::Opaque, AlphaMode::Blend),
+        (MeshLayer::Opaque, AlphaMode::Cutout(0.5)),
+        (MeshLayer::Cutout, AlphaMode::Opaque),
+    ] {
+        let mut registry = BlockRegistry::new();
+        let opaque = registry.register(BlockDef::new("test:opaque")).unwrap();
+        let mut cutout = BlockDef::new("test:cutout");
+        cutout.render = crate::RenderKind::Cutout;
+        cutout.textures = [TileId(1); 6];
+        let cutout = registry.register(cutout).unwrap();
+        let mut world = VoxelWorld::new(Arc::new(registry), 1);
+        let mut chunk = Chunk::filled(world.shared_registry(), opaque).unwrap();
+        chunk
+            .set(crate::LocalPos::new(15, 15, 15).unwrap(), cutout)
+            .unwrap();
+        world.insert_chunk(ChunkPos::default(), chunk).unwrap();
+        let cpu = ChunkStreamer::new(
+            StreamConfig {
+                radius: 0,
+                max_resident: 1,
+                workers: 1,
+                max_jobs: 1,
+                max_meshes: 1,
+                ..Default::default()
+            },
+            |_, r, _| Chunk::filled(r, BlockId::AIR),
+        )
+        .unwrap();
+        let mut config = Config::new("Streaming material mutation probe");
+        config.audio = false;
+        config.vsync = false;
+        config.window_size = (64, 64);
+        App::new(config)
+            .with_options(RunOptions {
+                hidden: true,
+                frames: Some(1),
+                uncapped: true,
+                ..Default::default()
+            })
+            .run(AlphaProbe {
+                world,
+                cpu,
+                gpu: StreamRenderer::new(StreamRenderConfig::default()).unwrap(),
+                materials: VoxelMaterials::new(),
+                layer,
+                replacement_alpha,
+            })
+            .unwrap();
+    }
+}

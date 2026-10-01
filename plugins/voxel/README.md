@@ -282,7 +282,9 @@ All owner and neighbor stamps are rechecked, including arrival/removal of
 unloaded neighbors. Direct world edits automatically invalidate CPU receipts;
 missing-face geometry follows `MeshingOptions::missing`. `take_mesh` rechecks
 results and picks the nearest available one. Call `finish_mesh` on every taken
-result, even on rejection. Failures pause the corresponding revision until
+result, even on rejection. Each captured result has a distinct receipt, so an
+acknowledgement for a prior result cannot release a retried result's reservation,
+even when their owner/neighbor stamps match. Failures pause the corresponding revision until
 its dependencies change or `retry` is called. Inspect `failure` to diagnose;
 `forget_mesh` requests regeneration after consumer teardown. Keep one streamer
 attached to one world. Call `tick` regularly and keep focus/load callbacks bounded;
@@ -326,7 +328,9 @@ Staging/material-validation time and unloading are outside the upload time limit
 
 Partial new batches remain hidden until every batch succeeds. All partial buffers
 are unloaded on stale receipts, material/native failures, focus changes or teardown;
-old installed geometry stays drawable until successful commit. Empty results
+old installed geometry stays drawable until successful commit. Before commit,
+borrowed materials are rechecked for live dependencies and the batch's required
+opaque/cutout alpha policy, including changes during multi-frame staging. Empty results
 successfully clear old geometry. `resources` reports current ownership;
 `peak_resources` includes the old/new coexistence moment within each pump.
 An out-of-range chunk unloads its GPU geometry even if dirty CPU data stays pinned.

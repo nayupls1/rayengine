@@ -35,7 +35,7 @@ struct Pending {
     dependencies: MeshDependencies,
     stats: MeshStats,
     queue: MeshUploadQueue<usize>,
-    materials: Vec<(MaterialId, usize)>,
+    materials: Vec<(MaterialId, SurfaceKey, usize)>,
     uploaded_bytes: usize,
     uploaded: Vec<GpuBatch>,
 }
@@ -172,7 +172,11 @@ impl StreamRenderer {
         for batch in mesh.batches() {
             let d = batch.data();
             let bytes = d.positions.len() * 36 + d.indices.as_ref().unwrap().len() * 2;
-            bindings.push((validate_surface(batch.surface(), materials, assets)?, bytes));
+            bindings.push((
+                validate_surface(batch.surface(), materials, assets)?,
+                batch.surface(),
+                bytes,
+            ));
         }
         let dependencies = mesh.dependencies().clone();
         let mut queue = MeshUploadQueue::new(
@@ -262,7 +266,7 @@ impl StreamRenderer {
                 |_, _| current,
                 |result| match result.outcome {
                     MeshUploadOutcome::Uploaded(mesh) => {
-                        pending.uploaded_bytes += pending.materials[result.tag].1;
+                        pending.uploaded_bytes += pending.materials[result.tag].2;
                         pending.uploaded.push(GpuBatch {
                             mesh,
                             material: pending.materials[result.tag].0,
@@ -274,15 +278,8 @@ impl StreamRenderer {
             );
             if report.error.is_none() && report.discarded == 0 && pending.queue.is_empty() {
                 // Revalidate borrowed material dependencies after multi-frame staging.
-                for &(id, _) in &pending.materials {
-                    let validation = frame
-                        .assets
-                        .material(id)
-                        .ok_or_else(|| {
-                            Error::Asset("voxel material unloaded during staging".into())
-                        })
-                        .and_then(|desc| frame.assets.validate_material(desc));
-                    if let Err(e) = validation {
+                for &(id, surface, _) in &pending.materials {
+                    if let Err(e) = validate_material(id, surface, frame.assets) {
                         report.error = Some(e);
                         break;
                     }
@@ -334,6 +331,10 @@ fn validate_surface(
     let id = materials
         .surface(key)
         .ok_or_else(|| Error::Asset(format!("undefined voxel surface {key:?}")))?;
+    validate_material(id, key, assets)?;
+    Ok(id)
+}
+fn validate_material(id: MaterialId, key: SurfaceKey, assets: &Assets<'_>) -> Result<(), Error> {
     let desc = assets
         .material(id)
         .ok_or_else(|| Error::Asset("voxel material is unloaded".into()))?;
@@ -345,8 +346,7 @@ fn validate_surface(
             "voxel material alpha policy does not match mesh layer".into(),
         ));
     }
-    assets.validate_material(desc)?;
-    Ok(id)
+    assets.validate_material(desc)
 }
 
 #[cfg(test)]
