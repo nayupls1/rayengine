@@ -6,6 +6,8 @@ pub mod block;
 pub mod coords;
 pub mod meshing;
 pub mod ray;
+#[cfg(feature = "render")]
+pub mod render;
 pub mod storage;
 
 pub use meshing::{
@@ -83,6 +85,8 @@ pub mod prelude {
         ChunkMesh, FaceShading, MeshBatch, MeshDependencies, MeshInput, MeshLayer, MeshLimits,
         MeshStats, MeshingError, MeshingMode, MeshingOptions, MissingFaces, SurfaceKey,
     };
+    #[cfg(feature = "render")]
+    pub use crate::render::{ChunkDraw, RenderedChunk, TileTexture, VoxelMaterials};
     pub use crate::{
         BlockDef, BlockEdit, BlockId, BlockPos, BlockRegistry, CHUNK_SIZE, CHUNK_VOLUME, Chunk,
         ChunkInsertError, ChunkPos, ChunkStamp, CollisionKind, DirtyChunks, Face, GridRay,

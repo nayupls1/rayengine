@@ -121,6 +121,13 @@ impl<'audio> Assets<'audio> {
         self.surfaces.descriptor(id)
     }
 
+    /// Checks live texture/shader dependencies, alpha policy and parameter types
+    /// without creating or replacing a material. Useful before a plugin commits
+    /// several resource changes as one transaction.
+    pub fn validate_material(&self, desc: &MaterialDesc) -> Result<(), Error> {
+        self.surfaces.validate(desc, &self.textures)
+    }
+
     /// Unloads only this description; shared shaders/textures stay alive.
     pub fn unload_material(&mut self, id: MaterialId) -> bool {
         self.surfaces
