@@ -546,6 +546,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayengine-voxel"
+version = "0.0.1"
+dependencies = [
+ "rayengine-core",
+]
+
+[[package]]
 name = "raylib"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
