@@ -2,6 +2,7 @@
 pub mod breaking;
 pub mod gameplay;
 pub mod hud;
+pub mod persistence;
 #[cfg(feature = "render")]
 pub mod preview;
 pub mod survival;
