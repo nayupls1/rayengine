@@ -4,6 +4,8 @@ pub use rayengine_core::glam;
 
 pub mod block;
 pub mod coords;
+pub mod generation;
+pub use generation::{ChunkGenerator, GenerationContext, GeneratorInfo, generate_chunk};
 pub mod meshing;
 pub mod ray;
 #[cfg(feature = "render")]
@@ -27,6 +29,8 @@ pub use storage::{BlockEdit, Chunk, ChunkInsertError, ChunkStamp, DirtyChunks, V
 /// Rejected input, capacity exhaustion, or mutation admission failure.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VoxelError {
+    /// Cooperative voxel generation was cancelled.
+    Cancelled,
     /// Invalid block name, hardness, or other definition properties.
     InvalidDefinition,
     /// A block with the same name is already registered.
@@ -60,6 +64,7 @@ pub enum VoxelError {
 impl std::fmt::Display for VoxelError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Cancelled => f.write_str("voxel generation cancelled"),
             Self::InvalidDefinition => f.write_str("block name or hardness is invalid"),
             Self::DuplicateName => f.write_str("block name is already registered"),
             Self::RegistryFull => f.write_str("block registry has exhausted its 16-bit IDs"),
@@ -85,6 +90,7 @@ impl std::error::Error for VoxelError {}
 
 /// Common voxel imports; gameplay content and survival rules remain game-owned.
 pub mod prelude {
+    pub use crate::generation::{ChunkGenerator, GenerationContext, GeneratorInfo, generate_chunk};
     pub use crate::meshing::{
         ChunkMesh, FaceShading, MeshBatch, MeshDependencies, MeshInput, MeshLayer, MeshLimits,
         MeshStats, MeshingError, MeshingMode, MeshingOptions, MissingFaces, SurfaceKey,

@@ -228,6 +228,44 @@ including transitions between missing and resident. Recheck receipts before
 accepting work. Draws intentionally keep previously accepted geometry during
 rebuilds. `ChunkStreamer` performs these checks automatically for scheduled work.
 
+## Game-owned generation
+
+Implement `ChunkGenerator` for an immutable `Send + Sync` game recipe. The plugin
+supplies `GenerationContext` (the receiving world's registry and a cooperative
+cancellation predicate) and `generate_chunk` validation; it prescribes no noise,
+block content, vertical range, spawn rules or persistence schema.
+
+```rust
+use rayengine_voxel::prelude::*;
+use std::sync::Arc;
+struct Empty { seed: u64 }
+impl ChunkGenerator for Empty {
+    fn info(&self) -> GeneratorInfo {
+        GeneratorInfo { name: "my-game:empty", version: 1, seed: self.seed }
+    }
+    fn generate(&self, _: ChunkPos, ctx: &GenerationContext<'_>) -> Result<Chunk, VoxelError> {
+        ctx.check_cancelled()?;
+        Chunk::filled(ctx.registry().clone(), BlockId::AIR)
+    }
+}
+let recipe = Arc::new(Empty { seed: 42 });
+let mut streamer = ChunkStreamer::new(StreamConfig::default(), move |pos, registry, token| {
+    let cancelled = || token.is_cancelled();
+    generate_chunk(recipe.as_ref(), pos, &GenerationContext::new(registry, &cancelled))
+})?;
+streamer.shutdown();
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The wrapper checks coordinates and cancellation before/after generation and
+rejects a foreign registry allocation. Check cancellation inside lengthy work,
+and bound scratch/I/O yourself. Output retains the generator's dirty/saved state;
+reproducible untouched chunks can be explicitly marked saved by the game.
+`GeneratorInfo` records recipe key/version/seed. Saves must also preserve validated
+settings and block mapping; bump the recipe version when output semantics change.
+The concrete integer terrain recipe, trees, caves, ores, safe spawn and versioned
+CPU fixtures live in `examples/minecraft`, keeping the plugin content-neutral.
+
 ## Bounded CPU streaming
 
 [`ChunkStreamer`] is optional. The game owns the world, terrain/load callback,
