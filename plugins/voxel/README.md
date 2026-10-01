@@ -535,3 +535,43 @@ bytes and 1,872 staged CPU bytes. This is a transaction/submission workload,
 not a GPU timer or frame-rate estimate. Existing benchmark IDs remain unchanged.
 Use `scripts/benchmark.sh` and `scripts/render_benchmark.sh` save/compare workflows
 to preserve compiler, machine, backend and workload metadata with samples.
+
+## Player-local collision
+
+`collect_colliders` visits a bounded rectangular cell region and reuses a caller's
+vector. Its work depends on the local query, not total resident chunks. Full-cell
+collision follows `BlockDef::collision`, independently of surface visibility.
+Queries include touching cells for reliable contacts, reject invalid bounds or
+an insufficient budget before traversal, and clear output on every error.
+
+```rust
+use rayengine_voxel::{glam::Vec3, prelude::*};
+use rayengine_core::first_person::{FirstPersonController, FirstPersonConfig, FirstPersonInput};
+use std::sync::Arc;
+let registry = Arc::new(BlockRegistry::new());
+let mut world = VoxelWorld::new(registry.clone(), 1);
+world.insert_chunk(ChunkPos::default(), Chunk::filled(registry, BlockId::AIR)?)?;
+let mut player = FirstPersonController::new(Vec3::splat(8.0), Vec3::new(0.6, 1.8, 0.6), FirstPersonConfig::default())?;
+let origin = BlockPos::default();
+let mut colliders = Vec::new();
+let dt = 1.0 / 60.0;
+world.collect_colliders(controller_bounds(&player, dt)?, origin, 4096,
+    MissingColliders::Reject, &mut colliders)?;
+player.step(FirstPersonInput::default(), dt, &colliders);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`controller_bounds` conservatively encloses the next existing controller sweep,
+including a jump and gravity. It does not scan the world or advance simulation.
+Physics bounds, returned boxes and cameras must share an integer origin;
+`block_bounds` subtracts that origin before converting to f32. Rebase controllers
+before relative coordinates exceed ±1,048,576 units. Missing collider policies
+are explicit: `Reject` lets games pause movement, `Solid` creates barriers, and
+`Skip` allows travel through unknown terrain. Ray selection should separately
+use `MissingPolicy::Stop` when targeting resident terrain only.
+
+`voxel_colliders_v1` benchmarks identical standing (16 cells/4 solids) and swept
+(175 cells/25 solids) negative-coordinate queries with 8 and 512 resident chunks.
+The output capacity is warmed outside timing. `voxel_interaction_v1` measures
+five-block hits/misses and unloaded-boundary queries, with loaded chunk lookups
+and the visible-cell predicate included. All fixtures and count checks are untimed.

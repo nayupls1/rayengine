@@ -2,6 +2,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use rayengine_voxel::{glam::DVec3, prelude::*};
 use std::{hint::black_box, sync::Arc, time::Duration};
+mod collision;
 mod meshing;
 mod streaming;
 
@@ -180,6 +181,6 @@ fn workloads(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default().warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(3));
-    targets = workloads, meshing::workloads, streaming::workloads
+    targets = workloads, meshing::workloads, streaming::workloads, collision::workloads
 }
 criterion_main!(benches);
