@@ -15,8 +15,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: CPU-only primitives require no raylib toolchain
         run: cargo test --locked -p rayengine-core -p rayengine-voxel
-      - name: Headless voxel example
-        run: cargo run --locked -p rayengine-voxel --example query
+      - name: Headless voxel examples
+        run: |
+          cargo run --locked -p rayengine-voxel --example query
+          cargo run --locked -p rayengine-voxel --example stream
 
   linux:
     runs-on: ubuntu-latest

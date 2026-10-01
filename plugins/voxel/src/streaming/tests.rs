@@ -304,3 +304,17 @@ fn mesh_budget_failure_is_paused_until_a_new_generation_can_succeed() {
     assert!(s.failure(p).is_none());
     assert_eq!(s.take_mesh(&world).unwrap().stats().buffer_bytes, 0);
 }
+
+#[test]
+fn impossible_focus_allocation_returns_an_error_instead_of_panicking() {
+    let config = StreamConfig {
+        radius: i32::MAX as u32,
+        vertical_radius: 0,
+        max_resident: usize::MAX,
+        ..Default::default()
+    };
+    assert!(matches!(
+        ChunkStreamer::new(config, |_, r, _| Chunk::filled(r, BlockId::AIR)),
+        Err(StreamError::Allocation | StreamError::Config)
+    ));
+}

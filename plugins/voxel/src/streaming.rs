@@ -66,6 +66,8 @@ pub enum StreamError {
     World,
     /// CPU worker creation failed.
     Jobs(JobPoolError),
+    /// The bounded focus buffer could not be allocated.
+    Allocation,
 }
 impl fmt::Display for StreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -74,6 +76,7 @@ impl fmt::Display for StreamError {
             Self::Position(e) => e.fmt(f),
             Self::World => f.write_str("incompatible streaming world"),
             Self::Jobs(e) => e.fmt(f),
+            Self::Allocation => f.write_str("chunk focus allocation failed"),
         }
     }
 }
@@ -203,13 +206,17 @@ impl ChunkStreamer {
         {
             return Err(StreamError::Config);
         }
+        let mut desired = Vec::new();
+        desired
+            .try_reserve_exact(count)
+            .map_err(|_| StreamError::Allocation)?;
         let pool = JobPool::new(config.workers, config.max_jobs).map_err(StreamError::Jobs)?;
         Ok(Self {
             config,
             loader: Arc::new(loader),
             pool,
             identity: None,
-            desired: Vec::with_capacity(count),
+            desired,
             focus: None,
             evictions: Vec::new(),
             active: Vec::new(),

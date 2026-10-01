@@ -78,7 +78,8 @@ chunks. Constructors/insertions allocate explicitly and report admission errors.
 A rejected [`VoxelWorld::insert_chunk`] returns [`ChunkInsertError`] containing the
 incoming data; existing residents are preserved. A successful replacement returns
 the old chunk, including dirty state. Removal also returns its data. The caller
-owns save/eviction policy; there is no implicit discard, I/O, or streaming.
+owns save/eviction policy; there is no implicit discard or I/O. Optional streaming
+is explicit through `ChunkStreamer`.
 The map may retain allocation from its bounded high-water mark after removal.
 
 ## Edits, invalidation, and asynchronous snapshots
@@ -225,8 +226,7 @@ Edits already return owner/touched-neighbor candidates. Invalidate those meshes
 on an edit. Invalidate all six neighbors on chunk insertion/removal/replacement,
 including transitions between missing and resident. Recheck receipts before
 accepting work. Draws intentionally keep previously accepted geometry during
-rebuilds; worker scheduling, residency, cancellation and frame upload budgets
-belong to the streaming follow-up (#22).
+rebuilds. `ChunkStreamer` performs these checks automatically for scheduled work.
 
 ## Bounded CPU streaming
 
@@ -272,8 +272,9 @@ mesh jobs, ready meshes and results held by consumers together. Cancellation
 retains a slot until drained, so repeated travel cannot grow hidden queues.
 Each snapshot holds 11,664 block bytes. Each output is bounded by `mesh_bytes`
 (actual vertex/index capacities), with `max_quads * 156 <= mesh_bytes` required.
-Temporary quad records are bounded by `max_quads`; batch metadata by
-`max_batches`; registries, allocator overhead and loader-owned scratch are
+Temporary quad record counts are bounded by `max_quads`; batch counts by
+`max_batches` (their growing Vec capacities can be up to twice these limits).
+Registries, allocator overhead and loader-owned scratch are
 additional. Bound loader I/O/scratch separately and cooperate with cancellation.
 Completed results cannot grow beyond these job/mesh bounds even if not consumed.
 
@@ -286,6 +287,66 @@ its dependencies change or `retry` is called. Inspect `failure` to diagnose;
 `forget_mesh` requests regeneration after consumer teardown. Keep one streamer
 attached to one world. Call `tick` regularly and keep focus/load callbacks bounded;
 CPU scheduling/save time is reported, rather than forcibly preempted.
+
+## Budgeted render streaming
+
+With `render` enabled, `StreamRenderer` takes ready results directly from
+`ChunkStreamer` and stages a single whole-chunk transaction in the SDK's
+`MeshUploadQueue`. Call `tick`, then `pump`, then draw installed chunks before
+ending the frame. `plugins/voxel/examples/stream_render.rs` shows the full lifecycle.
+
+```no_run
+# #[cfg(feature = "render")]
+# fn draw(frame: &mut rayengine::prelude::Frame<'_, '_>, world: &rayengine_voxel::VoxelWorld,
+#     cpu: &mut rayengine_voxel::ChunkStreamer, gpu: &mut rayengine_voxel::render::StreamRenderer,
+#     materials: &rayengine_voxel::render::VoxelMaterials) {
+use rayengine::upload::UploadBudget;
+let report = gpu.pump(world, cpu, materials, frame, UploadBudget::default());
+// Use gpu.chunks() with RenderedChunk::draw inside frame.world_3d.
+// Inspect report.error and call cpu.retry(position) after repairing a failure.
+assert!(report.uploads.attempted <= 4);
+# }
+```
+
+`StreamRenderConfig` separately bounds installed chunks, live mesh handles,
+logical GPU buffer bytes, staged requests and actual retained CPU geometry
+capacities. **Old plus all new batches must fit** the GPU bounds before admission.
+A transaction exceeding staging/GPU bounds fails and pauses that receipt;
+increase bounds, reduce meshing fragmentation/limits, or release resources and
+explicitly retry. Unrelated game assets, materials/textures and driver overhead
+are excluded from these mesh bounds.
+
+`UploadBudget` bounds attempted requests/bytes per `pump`, including failed
+attempts. Time is checked between individual raylib calls; calls cannot be
+preempted. Zero limits pause uploads. A batch larger than the remaining byte
+budget stays queued, reported as `blocked_upload_bytes`; it never receives an
+oversized exception. Set `MeshLimits::max_vertices_per_batch` to split large
+batches, or increase the upload budget. One result is admitted per pump.
+Staging/material-validation time and unloading are outside the upload time limit.
+
+Partial new batches remain hidden until every batch succeeds. All partial buffers
+are unloaded on stale receipts, material/native failures, focus changes or teardown;
+old installed geometry stays drawable until successful commit. Empty results
+successfully clear old geometry. `resources` reports current ownership;
+`peak_resources` includes the old/new coexistence moment within each pump.
+An out-of-range chunk unloads its GPU geometry even if dirty CPU data stays pinned.
+Keep borrowed materials/textures alive while drawing. Call `gpu.unload(cpu, assets)`
+on detachment, then `cpu.shutdown`; repeated teardown is harmless. Dropping the
+renderer alone follows SDK asset ownership and retains GPU resources until run end.
+After CPU shutdown, a subsequent pump rolls back/unloads instead of accepting work.
+
+Run the checked examples:
+
+```sh
+cargo run -p rayengine-voxel --example stream
+cargo run -p rayengine-voxel --features render --example stream_render
+```
+
+The headless `voxel-stream/travel-16.v1` workload prints timing and queue/resource
+peaks as JSON; it uses a mock mesh consumer, so it measures no GPU work. In the
+visual example arrows move the chunk focus and SPACE edits; generated terrain is
+reproducible and clean, while unsaved edits stay pinned. Enough pinned chunks
+intentionally stop future loads until the game supplies a save policy.
 
 ## Optional rendering
 
@@ -411,5 +472,24 @@ and survive; the image probe separately verifies holes, repetition and depth.
 Record GPU/driver/backend via the existing native metadata workflow. Tests include
 all-face winding/tiles, all six neighbor slabs, an independent seeded unit-face
 oracle, worst-case splits, receipt identity, and native failure rollback/pixels.
-Terrain generation, streaming, save schemas, and survival content remain separate
+Terrain generation, save schemas, and survival content remain separate
 roadmap issues.
+
+Streaming benchmarks use versioned fixtures:
+`voxel_stream_v1/idle_9` measures steady scheduling with nine installed receipts,
+and `voxel_stream_v1/travel_16` includes sixteen single-chunk load/mesh/eviction
+hops and worker completion latency. Thread startup and teardown are untimed;
+CPU results use a mock consumer. The asynchronous travel case measures wall time,
+so OS scheduling can add noise. Identical geometry and travel paths are preserved
+in the shared example fixture. Reports include jobs, resident chunks, mesh slots,
+ready buffer peaks and maximum logical mesh bytes.
+
+Native `voxel_stream_upload_v1/replace_12_pumps` replaces six old solid-chunk
+meshes with twelve new meshes for a single interior-air edit. Each pump admits
+one 156-byte quad batch. CPU generation, initial GPU geometry, thread startup and
+final teardown are untimed; staging, twelve uploads, receipt/material checks and
+old-buffer release are timed. Its peaks are 18 GPU meshes / 2,808 logical GPU
+bytes and 1,872 staged CPU bytes. This is a transaction/submission workload,
+not a GPU timer or frame-rate estimate. Existing benchmark IDs remain unchanged.
+Use `scripts/benchmark.sh` and `scripts/render_benchmark.sh` save/compare workflows
+to preserve compiler, machine, backend and workload metadata with samples.
