@@ -570,3 +570,43 @@ fn tiny_coordinate_gap_can_cross_an_axis_with_an_infinite_reciprocal() {
     assert_eq!(contact.face, Some(Face::NegY));
     assert_eq!(contact.distance, gap / direction);
 }
+
+#[test]
+fn inclusive_reach_uses_the_same_crossing_calculation_after_the_first_cell() {
+    let ray = GridRay::new(DVec3::new(0.0, 0.0, 0.5), DVec3::new(2.0, 3.0, 0.0)).unwrap();
+    let reach = 3.0 / ray.direction().x;
+    let contact = hit(ray
+        .cast(options(reach), |cell| {
+            if cell.x == 3 {
+                RayCell::Hit(SOLID)
+            } else {
+                RayCell::Empty
+            }
+        })
+        .unwrap());
+    assert_eq!(contact.position.x, 3);
+    assert_eq!(contact.distance, reach);
+    assert_eq!(contact.face, Some(Face::NegX));
+}
+
+#[test]
+fn repeated_asymmetric_corner_crossings_skip_side_cells() {
+    let ray = GridRay::new(DVec3::new(0.0, 0.0, 0.5), DVec3::new(1.0, 3.0, 0.0)).unwrap();
+    let target = BlockPos::new(15, 45, 0);
+    let reach = 15.0 / ray.direction().x;
+    assert_eq!(reach, 45.0 / ray.direction().y);
+    let contact = hit(ray
+        .cast(options(reach), |cell| {
+            // This side cell is touched only at the corner and must be skipped.
+            assert_ne!(cell, BlockPos::new(14, 45, 0));
+            if cell == target {
+                RayCell::Hit(SOLID)
+            } else {
+                RayCell::Empty
+            }
+        })
+        .unwrap());
+    assert_eq!(contact.position, target);
+    assert_eq!(contact.distance, reach);
+    assert_eq!(contact.face, Some(Face::NegX));
+}
