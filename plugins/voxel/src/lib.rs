@@ -4,8 +4,14 @@ pub use rayengine_core::glam;
 
 pub mod block;
 pub mod coords;
+pub mod meshing;
 pub mod ray;
 pub mod storage;
+
+pub use meshing::{
+    ChunkMesh, FaceShading, MeshBatch, MeshDependencies, MeshInput, MeshLayer, MeshLimits,
+    MeshStats, MeshingError, MeshingMode, MeshingOptions, MissingFaces, SurfaceKey,
+};
 
 pub use block::{BlockDef, BlockId, BlockRegistry, CollisionKind, RenderKind, TileId};
 pub use coords::{BlockPos, CHUNK_SIZE, CHUNK_VOLUME, ChunkPos, Face, LocalPos};
@@ -73,6 +79,10 @@ impl std::error::Error for VoxelError {}
 
 /// Common voxel imports; gameplay content and survival rules remain game-owned.
 pub mod prelude {
+    pub use crate::meshing::{
+        ChunkMesh, FaceShading, MeshBatch, MeshDependencies, MeshInput, MeshLayer, MeshLimits,
+        MeshStats, MeshingError, MeshingMode, MeshingOptions, MissingFaces, SurfaceKey,
+    };
     pub use crate::{
         BlockDef, BlockEdit, BlockId, BlockPos, BlockRegistry, CHUNK_SIZE, CHUNK_VOLUME, Chunk,
         ChunkInsertError, ChunkPos, ChunkStamp, CollisionKind, DirtyChunks, Face, GridRay,
