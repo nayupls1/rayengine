@@ -1,4 +1,3 @@
-
 use super::*;
 use std::{sync::Mutex, time::Instant};
 struct Probe {

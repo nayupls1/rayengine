@@ -297,3 +297,24 @@ fn respawn_uses_loaded_edited_terrain_and_stays_collision_safe() {
     world.remove_chunk(spawn.split().0);
     assert!(respawn_feet(&world, spawn).is_none());
 }
+
+#[test]
+fn partial_pickup_collection_retains_the_unaccepted_remainder() {
+    let mut survival = Survival::default();
+    survival.inventory.insert(Item::Dirt, 35 * 64);
+    survival.inventory.insert(Item::Log, 63);
+    survival.pickups.push(Pickup {
+        position: DVec3::ZERO,
+        stack: Stack {
+            item: Item::Log,
+            count: 5,
+        },
+    });
+    assert_eq!(survival.collect(DVec3::ZERO), 1);
+    assert_eq!(survival.inventory.count(Item::Log), 64);
+    assert_eq!(survival.pickups()[0].stack.count(), 4);
+    assert_eq!(survival.collect(DVec3::ZERO), 0);
+    survival.inventory.remove(Item::Dirt, 64);
+    assert_eq!(survival.collect(DVec3::ZERO), 4);
+    assert!(survival.pickups().is_empty());
+}

@@ -366,6 +366,7 @@ pub struct SurvivalInput {
     pub dt: f32,
 }
 /// Game-owned session progress. New worlds start with an empty inventory.
+#[derive(Clone)]
 pub struct Survival {
     /// Fixed inventory, including hotbar.
     pub inventory: Inventory,

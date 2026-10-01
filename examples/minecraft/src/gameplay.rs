@@ -222,7 +222,8 @@ pub struct InteractionReport {
 impl Interaction {
     /// Apply game rules after movement. Hand mining takes hardness seconds;
     /// unbreakable blocks never progress. Right-click places an unlimited supplied
-    /// block and takes priority over mining. Tools, drops and inventory are deferred.
+    /// block and takes priority over mining. This low-level helper ignores item
+    /// counts; [`crate::survival::Survival::interact`] adds tools, drops and inventory.
     pub fn step(
         &mut self,
         world: &mut VoxelWorld,

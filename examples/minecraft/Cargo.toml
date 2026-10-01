@@ -43,3 +43,12 @@ harness = false
 name = "textures_render"
 harness = false
 required-features = ["render"]
+
+[[bench]]
+name = "survival"
+harness = false
+
+[[bench]]
+name = "survival_render"
+harness = false
+required-features = ["render"]
