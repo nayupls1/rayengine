@@ -13,8 +13,9 @@ pub struct GridRay {
     direction: DVec3,
 }
 impl GridRay {
-    /// Validates and normalizes without overflow/underflow, including tiny
-    /// directions. The forward starting cell must fit in the i32 grid.
+    /// Validates and normalizes using scaled arithmetic, including uniformly
+    /// tiny directions. Rejects component underflow that would turn a moving
+    /// axis into a stationary one. The forward starting cell must fit in i32.
     pub fn new(origin: DVec3, direction: DVec3) -> Result<Self, VoxelError> {
         if !origin.is_finite() || !direction.is_finite() {
             return Err(VoxelError::InvalidRay);
@@ -28,6 +29,9 @@ impl GridRay {
             origin,
             direction: scaled / scaled.length(),
         };
+        if (0..3).any(|axis| direction[axis] != 0.0 && ray.direction[axis] == 0.0) {
+            return Err(VoxelError::InvalidRay);
+        }
         ray.start()?;
         Ok(ray)
     }

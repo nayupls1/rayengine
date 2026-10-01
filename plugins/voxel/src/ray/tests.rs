@@ -321,6 +321,21 @@ fn invalid_queries_are_rejected_before_calling_the_source() {
 }
 
 #[test]
+fn normalization_cannot_silently_turn_a_moving_axis_into_a_stationary_one() {
+    for axis in 0..3 {
+        for sign in [-1.0, 1.0] {
+            let mut direction = DVec3::splat(2.0);
+            direction[axis] = sign * f64::from_bits(1);
+            for coordinate in [0.0, f64::from(i32::MIN), f64::from(i32::MAX) + 1.0] {
+                let mut origin = DVec3::splat(0.5);
+                origin[axis] = coordinate;
+                assert_eq!(GridRay::new(origin, direction), Err(VoxelError::InvalidRay));
+            }
+        }
+    }
+}
+
+#[test]
 fn full_integer_grid_precision_and_outer_boundaries_are_checked() {
     let upper = f64::from(i32::MAX);
     let lower = f64::from(i32::MIN);

@@ -127,7 +127,10 @@ assert_eq!(hit.adjacent, Some(BlockPos::new(2, 1, 1)));
 ```
 
 [`GridRay`] normalizes finite nonzero directions using f64 math. f64 retains cell
-precision at all i32 grid positions. `GridRay::try_from(core::spatial::Ray3)` adapts
+precision at all i32 grid positions. Uniformly tiny directions are supported;
+mixed magnitudes that make a moving component underflow to zero during
+normalization are rejected with [`VoxelError::InvalidRay`], preserving forward
+boundary ownership. `GridRay::try_from(core::spatial::Ray3)` adapts
 the engine's camera ray; conversion cannot recover precision already lost in
 f32 positions. This is query precision, not a large-world rendering solution.
 Ray origins must have a representable forward starting cell.

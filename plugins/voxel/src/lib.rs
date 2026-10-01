@@ -39,7 +39,8 @@ pub enum VoxelError {
     Allocation,
     /// A revision/generation would overflow; no state was changed.
     RevisionExhausted,
-    /// Ray origin/direction is nonfinite, zero, or starts outside the grid.
+    /// Ray origin/direction is nonfinite, zero, loses a moving axis during
+    /// normalization, or starts outside the grid.
     InvalidRay,
     /// Distance must be finite/nonnegative and cell budget must be supported.
     InvalidRayOptions,
@@ -61,9 +62,9 @@ impl std::fmt::Display for VoxelError {
             Self::MissingChunk(pos) => write!(f, "chunk {pos:?} is not resident"),
             Self::Allocation => f.write_str("voxel allocation failed"),
             Self::RevisionExhausted => f.write_str("voxel revision or generation exhausted"),
-            Self::InvalidRay => {
-                f.write_str("ray must be finite, nonzero, and start inside the grid")
-            }
+            Self::InvalidRay => f.write_str(
+                "ray must be finite, nonzero, preserve moving axes, and start inside the grid",
+            ),
             Self::InvalidRayOptions => f.write_str("ray distance or cell budget is invalid"),
         }
     }
