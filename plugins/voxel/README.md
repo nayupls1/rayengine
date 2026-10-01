@@ -154,3 +154,37 @@ Rules:
 - Completed misses, unloaded cells, budget exhaustion, and leaving the grid have
   distinct [`RaycastOutcome`] variants. A hit at the grid edge may have no
   representable adjacent cell. Placement rules remain game code.
+
+## Run, test, and benchmark
+
+```sh
+cargo run --locked -p rayengine-voxel --example query
+cargo test --locked -p rayengine-voxel
+cargo doc --workspace --no-deps
+# target/doc/rayengine_voxel/index.html
+scripts/benchmark.sh save voxel-v1 voxel_
+scripts/benchmark.sh compare voxel-v1 voxel_
+```
+
+Stable Criterion IDs and fixtures:
+
+| Workload | Fixture/measurement |
+| --- | --- |
+| `voxel_storage/allocate_filled_4096` | Registered uniform stone chunk, allocation/fill/validation/drop |
+| `voxel_storage/validate_import_4096` | Validate/adopt 4096 stone IDs; input clone and output drop outside timing |
+| `voxel_access/local` | One dense read at local (7,8,9) |
+| `voxel_access/world_reads_1024/{1,64}` | Fixed 1024-position sequence across 1/64 resident stone chunks |
+| `voxel_edits/{interior_pair,border_pair}` | Stone→air edit pair at interior / three-face corner; revisions and notifications included |
+| `voxel_raycast/empty_axis/{16,256}` | Traverse exactly 16/256 unselected cells via callback |
+| `voxel_raycast/resident_hit_256` | Lookup/predicate across 16 resident air chunks, selected stone at x=255 |
+| `voxel_raycast/empty_corner_256` | 256 exact diagonal cells, simultaneous corner crossings |
+
+Fixtures are constructed outside timed access/edit/query loops. Default world
+hash seeding can contribute run-to-run noise; use confidence intervals and repeated
+identical workloads before drawing conclusions. The existing snapshot workflow
+exports named baselines, samples, revision, toolchain, and machine metadata.
+These are CPU measurements, not GPU performance or whole-game FPS. Tests include
+signed boundaries/extremes, admission/revision failures, all 16-bit IDs, ray faces,
+missing/budget outcomes, and seeded comparison with an exhaustive box oracle.
+Meshing, terrain generation, streaming, save schemas, and survival content are
+separate roadmap issues.

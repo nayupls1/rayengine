@@ -207,3 +207,16 @@ has a dense fast path when there are no parents. Input slots are allocated durin
 setup. Asset loading, hierarchy edits, formatted strings and raylib's own wrappers
 can allocate; avoid calling them blindly in hot loops. Measure the actual game
 before adding parallelism, a spatial index or more rendering infrastructure.
+
+## Optional voxel workloads
+
+The CPU snapshot script also runs `rayengine-voxel`'s stable storage, access,
+edit, and traversal workloads. Filter with `voxel_` to record this plugin alone:
+
+```sh
+scripts/benchmark.sh save voxel-v1 voxel_
+scripts/benchmark.sh compare voxel-v1 voxel_
+```
+
+The plugin rustdoc records fixture sizes, cell layout, query policies, and timing
+boundaries. These workloads initialize no renderer or filesystem save I/O.

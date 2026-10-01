@@ -44,6 +44,13 @@ and the runner performs no automatic plugin dispatch. CPU jobs remain plugin-own
 GPU uploads/removal stay on the owning thread. Rustdoc describes the full public
 extension surface and `rayengine new-plugin` creates a normal standalone library.
 
+The optional `plugins/voxel` package depends only on the CPU core. It owns block
+properties, 16-bit IDs, validated 16³ chunk storage, bounded resident maps,
+installation/content stamps, face-border edit notifications, and budgeted f64 grid
+queries. Missing chunks remain distinct from air. Game code owns block content,
+selection predicates, save schema/acknowledgements, and eviction policy. Meshing,
+streaming, terrain generation, and survival rules remain separate follow-ups.
+
 ## First release
 
 The first release includes basic collision queries and character movement,
