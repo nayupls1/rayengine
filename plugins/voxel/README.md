@@ -228,6 +228,65 @@ accepting work. Draws intentionally keep previously accepted geometry during
 rebuilds; worker scheduling, residency, cancellation and frame upload budgets
 belong to the streaming follow-up (#22).
 
+## Bounded CPU streaming
+
+[`ChunkStreamer`] is optional. The game owns the world, terrain/load callback,
+focus and save policy; no I/O or native resources occur in this scheduler.
+
+```rust
+use rayengine_voxel::prelude::*;
+use std::sync::Arc;
+let registry = Arc::new(BlockRegistry::new());
+let mut world = VoxelWorld::new(registry, 32);
+let mut streamer = ChunkStreamer::new(StreamConfig::default(), |_, registry, cancel| {
+    // Real loaders must check cancel during lengthy generation or I/O.
+    if cancel.is_cancelled() { return Err(VoxelError::Allocation); }
+    let mut chunk = Chunk::filled(registry, BlockId::AIR)?;
+    // This game's untouched generated terrain is reproducible without a save.
+    chunk.mark_saved(chunk.revision());
+    Ok(chunk)
+})?;
+let report = streamer.tick(&mut world, ChunkPos::default(), |_, _, _| Eviction::Keep)?;
+assert!(report.jobs <= 4);
+if let Some(mesh) = streamer.take_mesh(&world) {
+    // A consumer keeps the reservation until it acknowledges its result.
+    streamer.finish_mesh(mesh.dependencies(), true);
+}
+streamer.shutdown(); // Joins workers; world data stays owned by the game.
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The region is `(2*radius+1)² * (2*vertical_radius+1)` chunks, clipped at the
+signed grid edge and prioritized by squared distance, then X/Y/Z ties. Set
+`max_resident` to at least the region size; the supplied world's capacity may
+be smaller (loads then apply backpressure). Dirty chunks outside focus also
+consume resident capacity. New/imported chunks start dirty: an eviction callback
+must return `Eviction::Saved` only after saving the supplied exact stamp, or
+explicitly exempting reproducible data. `Keep` covers failed/in-progress saves.
+The callback runs synchronously on the world-owning thread; asynchronous savers
+can acknowledge using `VoxelWorld::mark_saved` on a later tick. Shutdown/Drop
+never discards the game's resident dirty data.
+
+`max_jobs` covers queued/running/unconsumed CPU results. `max_meshes` covers
+mesh jobs, ready meshes and results held by consumers together. Cancellation
+retains a slot until drained, so repeated travel cannot grow hidden queues.
+Each snapshot holds 11,664 block bytes. Each output is bounded by `mesh_bytes`
+(actual vertex/index capacities), with `max_quads * 156 <= mesh_bytes` required.
+Temporary quad records are bounded by `max_quads`; batch metadata by
+`max_batches`; registries, allocator overhead and loader-owned scratch are
+additional. Bound loader I/O/scratch separately and cooperate with cancellation.
+Completed results cannot grow beyond these job/mesh bounds even if not consumed.
+
+All owner and neighbor stamps are rechecked, including arrival/removal of
+unloaded neighbors. Direct world edits automatically invalidate CPU receipts;
+missing-face geometry follows `MeshingOptions::missing`. `take_mesh` rechecks
+results and picks the nearest available one. Call `finish_mesh` on every taken
+result, even on rejection. Failures pause the corresponding revision until
+its dependencies change or `retry` is called. Inspect `failure` to diagnose;
+`forget_mesh` requests regeneration after consumer teardown. Keep one streamer
+attached to one world. Call `tick` regularly and keep focus/load callbacks bounded;
+CPU scheduling/save time is reported, rather than forcibly preempted.
+
 ## Optional rendering
 
 ```toml

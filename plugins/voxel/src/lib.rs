@@ -9,6 +9,10 @@ pub mod ray;
 #[cfg(feature = "render")]
 pub mod render;
 pub mod storage;
+pub mod streaming;
+pub use streaming::{
+    ChunkStreamer, Eviction, StreamConfig, StreamError, StreamFailure, StreamReport,
+};
 
 pub use meshing::{
     ChunkMesh, FaceShading, MeshBatch, MeshDependencies, MeshInput, MeshLayer, MeshLimits,
@@ -87,6 +91,9 @@ pub mod prelude {
     };
     #[cfg(feature = "render")]
     pub use crate::render::{ChunkDraw, RenderedChunk, TileTexture, VoxelMaterials};
+    pub use crate::streaming::{
+        ChunkStreamer, Eviction, StreamConfig, StreamError, StreamFailure, StreamReport,
+    };
     pub use crate::{
         BlockDef, BlockEdit, BlockId, BlockPos, BlockRegistry, CHUNK_SIZE, CHUNK_VOLUME, Chunk,
         ChunkInsertError, ChunkPos, ChunkStamp, CollisionKind, DirtyChunks, Face, GridRay,
