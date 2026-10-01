@@ -272,12 +272,26 @@ impl VoxelWorld {
         options: RaycastOptions,
         mut select: impl FnMut(BlockId, &BlockDef) -> bool,
     ) -> Result<Raycast, VoxelError> {
-        ray.cast(options, |pos| match self.block(pos) {
-            Some(id) if select(id, self.registry().get(id).expect("validated resident ID")) => {
-                RayCell::Hit(id)
+        // Immutable world access makes a resident borrow valid for this cast.
+        // Resolve the hash entry only when traversal crosses a chunk boundary,
+        // including caching absent chunks for explicit MissingPolicy::Skip.
+        let mut cached_position = None;
+        let mut cached_chunk = None;
+        ray.cast(options, |pos| {
+            let (chunk_pos, local) = pos.split();
+            if cached_position != Some(chunk_pos) {
+                cached_position = Some(chunk_pos);
+                cached_chunk = self.chunk(chunk_pos);
             }
-            Some(_) => RayCell::Empty,
-            None => RayCell::Missing,
+            let Some(chunk) = cached_chunk else {
+                return RayCell::Missing;
+            };
+            let id = chunk.get(local);
+            if select(id, self.registry().get(id).expect("validated resident ID")) {
+                RayCell::Hit(id)
+            } else {
+                RayCell::Empty
+            }
         })
     }
 }

@@ -441,3 +441,86 @@ fn seeded_random_rays_match_exhaustive_box_intersections() {
         }
     }
 }
+
+#[test]
+fn resident_cache_matches_uncached_queries_with_missing_and_cutout_cells() {
+    let mut definitions = BlockRegistry::new();
+    let stone = definitions.register(BlockDef::new("stone")).unwrap();
+    let mut foliage = BlockDef::new("foliage");
+    foliage.render = RenderKind::Cutout;
+    foliage.collision = CollisionKind::None;
+    let foliage = definitions.register(foliage).unwrap();
+    let definitions = Arc::new(definitions);
+    let mut world = VoxelWorld::new(definitions.clone(), 8);
+    for x in -1..=0 {
+        for y in -1..=0 {
+            for z in -1..=0 {
+                let pos = ChunkPos::new(x, y, z);
+                let mut blocks = vec![BlockId::AIR; crate::CHUNK_VOLUME];
+                for (index, block) in blocks.iter_mut().enumerate() {
+                    let cell = pos
+                        .block(crate::LocalPos::from_index(index).unwrap())
+                        .unwrap();
+                    let key = (cell.x * 17 + cell.y * 13 + cell.z * 7).rem_euclid(47);
+                    *block = match key {
+                        0 => stone,
+                        1 => foliage,
+                        _ => BlockId::AIR,
+                    };
+                }
+                world
+                    .insert_chunk(
+                        pos,
+                        Chunk::from_blocks(definitions.clone(), blocks).unwrap(),
+                    )
+                    .unwrap();
+            }
+        }
+    }
+    let mut seed = 0x75b4_74a3_b5f1_0929_u64;
+    let mut random = || {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        (seed >> 32) as f64 / f64::from(u32::MAX)
+    };
+    for _ in 0..300 {
+        let ray = GridRay::new(
+            DVec3::new(
+                random() * 40.0 - 20.0,
+                random() * 40.0 - 20.0,
+                random() * 40.0 - 20.0,
+            ),
+            DVec3::new(
+                random() * 2.0 - 1.0,
+                random() * 2.0 - 1.0,
+                random() * 2.0 - 1.0,
+            ),
+        )
+        .unwrap();
+        for missing in [MissingPolicy::Stop, MissingPolicy::Skip] {
+            for solid_only in [false, true] {
+                let options = RaycastOptions {
+                    max_distance: 50.0,
+                    max_cells: 256,
+                    missing,
+                };
+                let select = |_: BlockId, block: &BlockDef| {
+                    if solid_only {
+                        block.collision == CollisionKind::Solid
+                    } else {
+                        block.render != RenderKind::Invisible
+                    }
+                };
+                let uncached = ray
+                    .cast(options, |position| match world.block(position) {
+                        Some(id) if select(id, world.registry().get(id).unwrap()) => {
+                            RayCell::Hit(id)
+                        }
+                        Some(_) => RayCell::Empty,
+                        None => RayCell::Missing,
+                    })
+                    .unwrap();
+                assert_eq!(world.raycast(ray, options, select).unwrap(), uncached);
+            }
+        }
+    }
+}

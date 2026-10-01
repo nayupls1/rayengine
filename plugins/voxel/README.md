@@ -133,7 +133,8 @@ Ray origins must have a representable forward starting cell.
 [`VoxelWorld::raycast`] accepts a predicate over registered block IDs/properties, so
 selection, collision, and interaction can use different rules. For procedural or
 external storage, [`GridRay::cast`] takes a cell callback returning [`RayCell`].
-Each visited cell invokes the source exactly once. No allocation occurs inside
+Each visited cell invokes the source exactly once. Resident queries cache the
+current chunk lookup while traversing its cells, including unavailable chunks. No allocation occurs inside
 traversal; a caller-supplied callback/predicate can still allocate or block.
 
 Rules:
@@ -170,7 +171,7 @@ Stable Criterion IDs and fixtures:
 
 | Workload | Fixture/measurement |
 | --- | --- |
-| `voxel_storage/allocate_filled_4096` | Registered uniform stone chunk, allocation/fill/validation/drop |
+| `voxel_storage/allocate_filled_4096` | Registered uniform stone chunk, allocation/fill/drop, with one fill-ID validation |
 | `voxel_storage/validate_import_4096` | Validate/adopt 4096 stone IDs; input clone and output drop outside timing |
 | `voxel_access/local` | One dense read at local (7,8,9) |
 | `voxel_access/world_reads_1024/{1,64}` | Fixed 1024-position sequence across 1/64 resident stone chunks |

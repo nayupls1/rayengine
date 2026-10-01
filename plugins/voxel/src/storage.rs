@@ -50,7 +50,14 @@ impl Chunk {
             .try_reserve_exact(CHUNK_VOLUME)
             .map_err(|_| VoxelError::Allocation)?;
         blocks.resize(CHUNK_VOLUME, block);
-        Self::from_blocks(registry, blocks)
+        // Every cell uses the single ID already validated above. Imported
+        // arbitrary buffers still go through from_blocks' complete scan.
+        Ok(Self {
+            registry,
+            blocks: blocks.into_boxed_slice(),
+            revision: 0,
+            saved_revision: None,
+        })
     }
     /// Consumes a dense buffer in X/Z/Y order after validating length and IDs.
     /// Excess Vec capacity is discarded when boxing; exact-capacity buffers
