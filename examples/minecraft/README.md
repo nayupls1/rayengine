@@ -537,7 +537,9 @@ failures before replacement and after directory flush, exact dirty-chunk evictio
 reload, modified-history backpressure, retained pickups and airborne fall damage.
 The native persistence probe mines a log through gameplay, saves inside inventory,
 waits for F10's latest checkpoint, checks final native-close saving and reopens the
-world to verify terrain, inventory, health and look. Screenshots are exported to
+world to verify terrain, inventory, health and look. A native final-write failure
+probe verifies the error reaches the caller and the old checkpoint survives.
+Screenshots are exported to
 `artifacts/smoke/minecraft-save-{write,reload}.png`.
 
 ```sh

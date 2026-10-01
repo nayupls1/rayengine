@@ -198,3 +198,74 @@ fn native_minecraft_save_f5_quit_native_close_and_reload() {
         assert!(*complete.lock().unwrap());
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires native OpenGL; scripts/native_smoke.sh runs serially"]
+fn native_minecraft_final_write_failure_reaches_caller_and_preserves_slot() {
+    struct UnavailableParent(PathBuf);
+    impl Drop for UnavailableParent {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+            let _ = fs::rename(self.0.with_extension("offline"), &self.0);
+        }
+    }
+    struct FailureProbe {
+        game: TerrainPreview,
+        parent: PathBuf,
+    }
+    impl Game for FailureProbe {
+        fn init(&mut self, ctx: &mut InitContext<'_, '_>) -> Result<(), Error> {
+            self.game.init(ctx)
+        }
+        fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+        fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+            self.game.draw(frame);
+            self.game.survival.inventory.insert(Item::Log, 1);
+            // Fail deterministically even when tests run as root: the canonical
+            // parent is temporarily unavailable, with the old slot retained.
+            fs::rename(&self.parent, self.parent.with_extension("offline")).unwrap();
+            fs::write(&self.parent, b"not a directory").unwrap();
+        }
+    }
+    let dir = Directory(std::env::temp_dir().join(
+        format!("rayengine-native-save-failure-{}-{}", std::process::id(),
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()),
+    ));
+    let parent = dir.0.join("live");
+    let store = Store::open(parent.join("world.save"), SaveOptions::default()).unwrap();
+    let game = TerrainPreview::with_save(None, TextureSet::fallback(), store.clone()).unwrap();
+    store
+        .write(game.saving.as_ref().unwrap().checkpoint())
+        .unwrap();
+    let original = fs::read(store.path()).unwrap();
+    let outcome = game.save_outcome();
+    let unavailable = UnavailableParent(parent.clone());
+    let mut config = Config::new("Minecraft final save failure probe");
+    config.audio = false;
+    config.vsync = false;
+    config.window_size = (128, 128);
+    App::new(config)
+        .with_options(RunOptions {
+            hidden: true,
+            uncapped: true,
+            frames: Some(1),
+            ..Default::default()
+        })
+        .run(FailureProbe { game, parent })
+        .unwrap();
+    drop(unavailable);
+    assert!(outcome.check().is_err());
+    assert_eq!(fs::read(store.path()).unwrap(), original);
+    assert_eq!(
+        store
+            .load()
+            .unwrap()
+            .unwrap()
+            .survival()
+            .unwrap()
+            .inventory
+            .count(Item::Log),
+        0
+    );
+}
