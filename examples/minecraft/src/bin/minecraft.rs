@@ -1,4 +1,4 @@
-//! Native seeded terrain preview using the same generation recipe as the CPU tool.
+//! Native first-person voxel demo using the same generation recipe as the CPU tool.
 use rayengine::prelude::*;
 use rayengine_minecraft::preview::TerrainPreview;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let options = RunOptions::parse(native)?;
-    let mut config = Config::new("Minecraft terrain preview");
+    let mut config = Config::new("Minecraft voxel demo");
     config.audio = false;
     App::new(config)
         .with_options(options)

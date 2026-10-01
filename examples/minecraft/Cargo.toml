@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+rayengine-core.workspace = true
 rayengine-voxel = { path = "../../plugins/voxel" }
 rayengine = { workspace = true, optional = true }
 serde.workspace = true

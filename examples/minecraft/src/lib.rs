@@ -2,3 +2,5 @@
 #[cfg(feature = "render")]
 pub mod preview;
 pub mod terrain;
+
+pub mod gameplay;

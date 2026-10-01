@@ -3,7 +3,11 @@
 pub use rayengine_core::glam;
 
 pub mod block;
+pub mod collision;
 pub mod coords;
+pub use collision::{
+    ColliderError, ColliderReport, MissingColliders, block_bounds, controller_bounds,
+};
 pub mod generation;
 pub use generation::{ChunkGenerator, GenerationContext, GeneratorInfo, generate_chunk};
 pub mod meshing;
@@ -90,6 +94,9 @@ impl std::error::Error for VoxelError {}
 
 /// Common voxel imports; gameplay content and survival rules remain game-owned.
 pub mod prelude {
+    pub use crate::collision::{
+        ColliderError, ColliderReport, MissingColliders, block_bounds, controller_bounds,
+    };
     pub use crate::generation::{ChunkGenerator, GenerationContext, GeneratorInfo, generate_chunk};
     pub use crate::meshing::{
         ChunkMesh, FaceShading, MeshBatch, MeshDependencies, MeshInput, MeshLayer, MeshLimits,
