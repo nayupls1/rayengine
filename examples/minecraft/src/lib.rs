@@ -1,8 +1,9 @@
 #![doc = include_str!("../README.md")]
+pub mod breaking;
+pub mod gameplay;
+pub mod hud;
 #[cfg(feature = "render")]
 pub mod preview;
+pub mod survival;
 pub mod terrain;
-
-pub mod gameplay;
-
 pub mod textures;

@@ -67,8 +67,9 @@ uploads, preserves old whole-chunk geometry on failure, and counts temporary
 old/new GPU coexistence. The generation interface validates registry identity and
 cooperative cancellation; concrete seed/settings, noise, caves, trees, ores and
 safe spawn belong to `examples/minecraft`. Versioned integer fixtures make untouched
-terrain reproducible independently of request order. Propagated lighting and
-survival rules remain separate follow-ups.
+terrain reproducible independently of request order. Survival inventory, tools,
+pickups, crafting, health and the modal HUD stay game-owned. Propagated lighting
+remains deferred; disk saves are the next follow-up.
 
 ## First release
 

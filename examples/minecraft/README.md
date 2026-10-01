@@ -28,12 +28,12 @@ chunk coordinates, raw-ID fingerprint, block counts, generation wall time, and a
 safe support/feet position near that chunk's X/Z origin. Negative coordinates use
 Euclidean chunk/lattice division. It needs no display, raylib, or C toolchain.
 
-The native game starts at a safe spawn and streams a 5×5×5 region around the
-player. WASD moves, mouse looks, Space jumps, Shift sprints, and Escape exits.
-Hold left mouse to mine; right mouse places the selected block. Keys 1/2/3 select
-dirt/stone/wood. Hand mining takes hardness seconds (stone/ores: two seconds);
-bedrock is unbreakable. Blocks are unlimited for this interaction demo; tools,
-drops, inventory, crafting, health and saves are later roadmap issues.
+The native game starts at a safe spawn with an **empty inventory** and streams
+terrain around the player. WASD moves, mouse looks, Space jumps and Shift sprints.
+Hold left mouse to mine; right mouse places one held block. Keys 1–9 select the
+hotbar. E or Escape opens/closes inventory; F10, the Quit button or native close
+exits. Start by gathering two logs, crafting planks and sticks, then a wooden
+pickaxe to harvest stone. Bedrock is unbreakable.
 
 The crosshair selects visible cells within five blocks of the current simulation
 eye. A black outline and HUD identify the target and mining progress. Releasing
@@ -66,6 +66,97 @@ let report = interaction.step(&mut world, &player, false, false, 1.0 / 60.0, ter
 assert!(report.edit.is_none());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Survival, inventory and crafting
+
+Survival rules live in `survival.rs`; CPU interaction/layout live in `hud.rs`.
+The engine core and voxel plugin do not depend on items, recipes or health.
+Inventory contains nine hotbar slots and 27 reserve slots. Blocks/ingredients
+stack to 64; each tool occupies a separate slot. Compatible stacks fill before
+empty slots. Click two inventory slots to exchange their entire stacks. Closing
+or losing focus cancels the selection without removing any items. Tab/Up/Down
+moves focus, Enter/Space activates. Available recipes are enabled automatically;
+crafting searches the entire inventory and commits costs/results atomically.
+A full inventory or missing ingredients changes nothing.
+
+| Recipe result | Ingredients |
+| --- | --- |
+| 4 planks | 1 log |
+| 4 sticks | 2 planks |
+| Wooden pickaxe / wooden axe | 3 planks + 2 sticks |
+| Stone pickaxe / stone axe | 3 stone + 2 sticks |
+
+Hand mining takes block hardness seconds (stone/ores: two; other blocks: one).
+Matching wooden tools mine three times faster; stone tools mine six times faster.
+Pickaxes match stone and ores; axes match logs. Changing tools cancels progress.
+Five original crack meshes progressively cover the target as mining advances;
+they are uploaded once, reused across targets, and disappear on cancellation or
+successful breaking. This adds five mesh handles and 79,488 logical buffer bytes
+outside the terrain renderer's resource quota (including the SDK's default UV
+buffers); no per-tick GPU uploads occur.
+
+| Broken block | Pickup requirement / result |
+| --- | --- |
+| Dirt or grass | Any held item / 1 dirt |
+| Log | Any held item / 1 log |
+| Leaves | Any held item / 1 leaves |
+| Stone | Either pickaxe / 1 stone |
+| Coal ore | Either pickaxe / 1 coal |
+| Iron ore | Stone pickaxe / 1 iron ore |
+
+Wrong tools can destroy rock but yield no resource. Dirt, stone, logs and leaves
+can be placed. Planks, sticks, coal, iron and tools are inventory items only;
+smelting and additional registered block types are deferred. Placement consumes
+one item only after a successful world mutation; blocked/body-overlapping or
+unloaded placement consumes nothing.
+
+Mined items appear as small colored world cubes. Move within two blocks of a
+pickup's center to collect it automatically. Full inventories retain unaccepted
+items. Pickups are stationary, session-local and never silently despawn. At 128
+live pickups, mining pauses before changing terrain until room is freed by
+collection. Draw distance is bounded to 64 blocks; there is no dropped-item
+physics, tool durability, hunger, passive regeneration or death inventory loss
+in this minimal demo.
+
+Health starts at 20 half-heart units. Landing after falling more than three
+blocks deals `ceil(distance - 3)` units, with a small collision-rounding tolerance.
+Fall tracking follows global height through origin rebasing and pauses while
+terrain is unavailable or inventory is open. Falling below Y=-16 is lethal.
+Death releases the cursor and pauses gameplay. Choose Respawn to recover full
+health and retain inventory. Respawn searches edited, loaded terrain within eight
+columns of the original spawn, checking support and headroom. If unavailable,
+streaming refocuses on spawn and retries at most four times a second; it never
+spawns inside the original support blindly.
+
+Inventory/death screens pause movement, look, mining, placement, pickups and fall
+tracking while streaming/rendering continue. Opening and closing ticks stay
+masked. Mining, placement and jump held across a modal tick remain suppressed
+until physical release, preventing an inventory click/Space activation from
+becoming an accidental attack or jump. The responsive panel and hotbar share
+resolved bounds between hit testing and drawing; the usual fitted viewport
+keeps them usable in wide and portrait windows.
+
+```rust
+use rayengine_minecraft::survival::{Inventory, Item, Recipe, Health};
+let mut inventory = Inventory::default();
+assert_eq!(inventory.insert(Item::Log, 2), 0);
+inventory.craft(Recipe::Planks)?;
+inventory.craft(Recipe::Planks)?;
+inventory.craft(Recipe::Sticks)?;
+inventory.craft(Recipe::WoodenPickaxe)?;
+assert_eq!(inventory.count(Item::WoodenPickaxe), 1);
+assert_eq!(inventory.count(Item::Planks), 3);
+let mut health = Health::default();
+health.movement(10.0, false);
+assert_eq!(health.movement(4.0, true), 3);
+assert_eq!(health.value(), 17);
+health.respawn();
+assert_eq!(health.value(), 20);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+World edits, inventory and pickups remain in memory for this session. Disk saves
+are the next roadmap issue; quitting currently discards progress.
 
 ## Textures and local Minecraft assets
 
@@ -217,8 +308,9 @@ candidates; it polls cancellation at Y slices and tree passes. It validates the
 receiving registry allocation and never schedules work itself.
 
 The scene uses four outstanding jobs/mesh slots, two workers, at most 160
-resident chunks, and 160 installed render chunks. GPU limits include temporary
-old/new geometry: 4,096 mesh handles and 64 MiB logical buffers. Staging is bounded
+resident chunks, and 160 installed render chunks. Terrain GPU limits include temporary
+old/new geometry: 4,096 mesh handles and 64 MiB logical buffers. The five cached
+crack meshes add 79,488 bytes outside that quota. Staging is bounded
 by 256 requests/4 MiB per transaction; each presented frame attempts at most
 eight uploads/2 MiB, checking a 3 ms threshold between calls. Native allocation
 and driver overhead are additional. Errors remain visible in the HUD.
@@ -294,3 +386,40 @@ packing, gutters, upright rows and original fallback consistency. Native image
 probes check all four side orientations, grass top/bottom, log bark/ends and leaf
 holes exposing terrain behind them. The headless `textures` binary prints schema1
 source-directory/tile dimensions, normalized regions and atlas byte counts; it writes no PNGs.
+
+## Survival validation and benchmark fixtures
+
+CPU tests cover stack limits, full/partial insertions, atomic crafting failures,
+all six recipes, harvest tiers/speeds, tool changes, placement count conservation,
+pickup backpressure, health/respawn and modal input boundaries. Layout checks
+cover a 320×480 minimum logical viewport, narrow expanded viewports, and the
+standard fitted wide/portrait layout. The native survival probe runs the actual
+game update/draw paths: gather two logs, craft/equip a wooden pickaxe using UI
+clicks, mine/place stone, pause a fall in inventory, take damage, die and respawn.
+It checks resource teardown, exports inventory/death/crack screenshots, and
+compares early/late crack pixels to verify visible animation growth.
+
+```sh
+scripts/benchmark.sh save minecraft-survival-v1 minecraft_survival_v1
+scripts/benchmark.sh compare minecraft-survival-v1 minecraft_survival_v1
+scripts/render_benchmark.sh save minecraft-survival-render-v1 minecraft_survival_render_v1
+scripts/render_benchmark.sh compare minecraft-survival-render-v1 minecraft_survival_render_v1
+```
+
+Six fixed CPU `minecraft_survival_v1` cases measure: insert into 36 full dirt
+stacks (2,304 items); craft a wooden pickaxe from two 64-item ingredient stacks;
+reject the same recipe with all 36 slots occupied; collect 128 nearby one-log
+pickups into an empty inventory; hover a warmed 44-region inventory; and build
+the fifth crack stage (1,248 vertices). Fixture construction, clones, validation
+and output drops are untimed. UI response storage/pickup collection reuse
+capacity; timing includes real slot/recipe scans, admission and mesh construction.
+
+Two opt-in native `minecraft_survival_render_v1` cases draw the fifth cached
+crack mesh 16 times, and submit a panel with 36 populated slot buttons/count
+labels, six recipe buttons and Resume/Quit buttons. All inventory slots contain
+64 dirt items; recipes are disabled. Labels, layout and assets are prepared
+outside timing. The native harness uses a 960×960 logical view in a 64×64 target,
+vsync disabled; measurements include CPU submissions/driver stalls, not GPU
+elapsed time. No terrain streaming or texture uploads enter these workloads.
+Benchmark IDs/fixtures stay fixed across future implementations; scripts export
+commit/compiler/machine/renderer provenance and matching-workload comparisons.

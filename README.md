@@ -38,8 +38,10 @@ cargo run --release -p rayengine-minecraft --features render --bin minecraft -- 
 ```
 
 The demo streams hills, caves, trees and ores with original fallback textures.
-WASD/mouse moves and looks; Space jumps, held LMB mines, RMB places, and 1–3
-select dirt/stone/wood. Collision and reach queries use the resident edited world. Extract the supported local textures once with
+WASD/mouse moves and looks; Space jumps, held LMB mines, RMB places one owned
+block, and 1–9 select hotbar slots. E/Escape opens inventory and crafting; F10
+quits. Start with an empty inventory and gather logs to craft your first tools.
+Collision and reach queries use the resident edited world. Extract local textures once with
 `python3 scripts/import_minecraft_textures.py /path/to/client.jar`, then add
 `--textures examples/minecraft/local-assets/minecraft` to load the ordinary PNGs.
 The game has no archive dependency; `--bin textures` inspects a PNG folder as JSON.
@@ -82,7 +84,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
 - [Optional plugins and authoring](crates/rayengine/docs/plugins.md)
 - [Voxel storage, generation interfaces, meshing and streaming](plugins/voxel/README.md)
-- [Seeded Minecraft terrain, safe spawn, movement, mining and placement](examples/minecraft/README.md)
+- [Minecraft terrain, mining, survival inventory, crafting and respawn](examples/minecraft/README.md)
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)

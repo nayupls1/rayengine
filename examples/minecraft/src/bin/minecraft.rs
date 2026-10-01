@@ -24,6 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = RunOptions::parse(native)?;
     let mut config = Config::new("Minecraft voxel demo");
     config.audio = false;
+    config.exit_key = None; // Escape belongs to the inventory; F10/close/quit exits.
     App::new(config)
         .with_options(options)
         .run(TerrainPreview::with_textures(
