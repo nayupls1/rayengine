@@ -261,6 +261,7 @@ impl Snapshot {
             ));
         }
         let mut edits = BTreeMap::new();
+        let registry = terrain.registry();
         for chunk in disk.chunks.0 {
             let pos = ChunkPos::new(chunk.position[0], chunk.position[1], chunk.position[2]);
             pos.origin()?;
@@ -268,7 +269,7 @@ impl Snapshot {
                 .cells
                 .0
                 .iter()
-                .any(|&id| terrain.registry().get(BlockId::from_raw(id)).is_none())
+                .any(|&id| registry.get(BlockId::from_raw(id)).is_none())
             {
                 return Err(Error::Invalid("unknown saved block ID".into()));
             }
@@ -333,6 +334,7 @@ impl Snapshot {
         // local cell neighborhood using the same f32 bounds as collision.
         let bounds = player.controller.body.bounds();
         let origin = as_global(player.origin);
+        let registry = self.terrain.registry();
         let min = (origin + bounds.min.as_dvec3())
             .floor()
             .to_array()
@@ -350,7 +352,7 @@ impl Snapshot {
                         || self.terrain.block_at(position),
                         |cells| BlockId::from_raw(cells.0[local.index()]),
                     );
-                    if self.terrain.registry().get(id).unwrap().collision == CollisionKind::Solid
+                    if registry.get(id).unwrap().collision == CollisionKind::Solid
                         && block_bounds(position, player.origin)
                             .map_err(|e| Error::Invalid(e.to_string()))?
                             .intersects(&bounds)
