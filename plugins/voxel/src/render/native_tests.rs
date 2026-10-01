@@ -54,24 +54,24 @@ fn geometry(world: &VoxelWorld, mode: MeshingMode) -> ChunkMesh {
 }
 // Real first upload followed by rejected second upload. SDK native mesh tests
 // separately inject GL allocation failures; this checks whole-transaction rollback.
-struct FailingSink<'borrow, 'context, 'audio> {
-    context: &'borrow mut InitContext<'context, 'audio>,
+struct FailingSink<'borrow, S> {
+    context: &'borrow mut S,
     count: usize,
 }
-impl<'audio> MeshSink<'audio> for FailingSink<'_, '_, 'audio> {
+impl<'audio, S: MeshSink<'audio>> MeshSink<'audio> for FailingSink<'_, S> {
     fn upload(&mut self, data: &MeshData) -> Result<MeshId, Error> {
         self.count += 1;
         if self.count == 2 {
             Err(Error::Asset("injected second-batch upload failure".into()))
         } else {
-            self.context.mesh(data)
+            self.context.upload(data)
         }
     }
     fn assets(&self) -> &Assets<'audio> {
-        self.context.assets
+        self.context.assets()
     }
     fn assets_mut(&mut self) -> &mut Assets<'audio> {
-        self.context.assets
+        self.context.assets_mut()
     }
 }
 struct Probe {
@@ -251,6 +251,30 @@ impl Game for Probe {
                 .replace(&self.world, &mesh, &self.materials, frame)
                 .unwrap();
         }
+        // Draw immediately after a partial upload failure, so final image checks
+        // also exercise the retained geometry without an intervening success.
+        let mesh = geometry(&self.world, self.mode);
+        let before = frame.assets.resource_counts();
+        let old: Vec<_> = self.chunk.batches.iter().map(|b| b.mesh).collect();
+        let mut failing = FailingSink {
+            context: frame,
+            count: 0,
+        };
+        assert!(
+            self.chunk
+                .install(&self.world, &mesh, &self.materials, &mut failing)
+                .is_err()
+        );
+        assert_eq!(failing.count, 2);
+        assert_eq!(frame.assets.resource_counts(), before);
+        assert_eq!(
+            self.chunk
+                .batches
+                .iter()
+                .map(|b| b.mesh)
+                .collect::<Vec<_>>(),
+            old
+        );
         frame.clear(Color::BLACK);
         let camera = camera();
         let view = Frustum3D::from_camera(&camera, &frame.viewport, 0.05, 4000.0).unwrap();

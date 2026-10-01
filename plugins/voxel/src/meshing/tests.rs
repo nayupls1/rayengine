@@ -72,6 +72,24 @@ fn empty_and_uniform_chunks_have_exact_payloads_and_culled_face_counts() {
         })
         .unwrap();
     assert!(hidden.batches().is_empty());
+    for face in Face::ALL {
+        let pos = ChunkPos::default().neighbor(face).unwrap();
+        world
+            .insert_chunk(
+                pos,
+                Chunk::filled(world.shared_registry(), BlockId::AIR).unwrap(),
+            )
+            .unwrap();
+    }
+    // Loaded air is different from missing data, even with hidden unavailable borders.
+    let loaded = MeshInput::capture(&world, ChunkPos::default())
+        .unwrap()
+        .build(MeshingOptions {
+            missing: MissingFaces::Hide,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded.stats().visible_faces, 1536);
 }
 #[test]
 fn normals_winding_face_tiles_uv_orientation_and_shading() {

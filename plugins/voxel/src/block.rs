@@ -32,7 +32,7 @@ pub enum CollisionKind {
     /// Entire cell is a solid collision box.
     Solid,
 }
-/// Surface category for future mesh/material adapters.
+/// Surface category used by mesh/material adapters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderKind {
     /// No surface geometry.

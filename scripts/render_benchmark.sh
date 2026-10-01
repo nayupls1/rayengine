@@ -38,5 +38,8 @@ if sys.argv[2] == 'x11' and shutil.which('glxinfo'):
 path.write_text(json.dumps(data,indent=2)+'\n')
 PY
 cargo bench --locked -p rayengine "${features[@]}" --bench draw_submission -- "$flag" "$baseline" "$@"
+voxel_features=(--features render)
+if [[ "$backend" == wayland ]]; then voxel_features=(--features render,rayengine/wayland); fi
+cargo bench --locked -p rayengine-voxel "${voxel_features[@]}" --bench voxel_render -- "$flag" "$baseline" "$@"
 python3 scripts/benchmark_metadata.py after "$run_dir" "$mode" "$baseline"
 echo "Native benchmark snapshot: $rayengine_root/$run_dir"

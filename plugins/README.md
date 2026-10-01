@@ -8,8 +8,9 @@ The workspace lists members explicitly; adding a directory does not activate it.
 - `beacons/` (`rayengine-beacons`): small generated-mesh/ECS example with two
   independently configured instances and a runnable composition game.
 
-- `voxel/` (`rayengine-voxel`): CPU-only block definitions, bounded dense chunks,
-  signed coordinates, revision tracking, and budgeted grid queries.
+- `voxel/` (`rayengine-voxel`): CPU block definitions, bounded dense chunks,
+  grid queries and neighbor-aware meshing, with optional `render` support for
+  textured opaque/cutout batches and conservative chunk culling.
 
 Read [the plugin authoring guide](../crates/rayengine/docs/plugins.md) for lifecycle,
 public engine APIs, scaffolding, compatibility, ownership, and testing. Future

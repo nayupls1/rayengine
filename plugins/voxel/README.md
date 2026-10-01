@@ -1,11 +1,11 @@
 # rayengine-voxel
 
-CPU-only voxel definitions, bounded **16³ chunks**, signed grid coordinates,
-and budgeted ray traversal. This optional plugin lives under `plugins/voxel/`
-and depends only on `rayengine-core`: no raylib, native build toolchain, window,
-audio device, or graphics context. It supplies ordinary typed methods; SDK
-lifecycle/rendering adapters can be added when geometry and streaming land.
-The engine core has no dependency on this package.
+Voxel definitions, bounded **16³ chunks**, signed grid queries, and deterministic
+CPU meshing, with optional textured raylib rendering. This plugin lives under
+`plugins/voxel/`. Default features depend only on `rayengine-core`: no raylib,
+native build toolchain, window, audio device, or graphics context. Enable `render`
+for the SDK adapter. The engine core has no dependency on this package; games
+own instances, scheduling, call order, and resource teardown.
 
 Add it to a game with a path dependency from this checkout:
 
@@ -162,15 +162,154 @@ Rules:
   distinct [`RaycastOutcome`] variants. A hit at the grid edge may have no
   representable adjacent cell. Placement rules remain game code.
 
+## Neighbor-aware meshing
+
+```rust
+use rayengine_voxel::prelude::*;
+use std::sync::Arc;
+let mut definitions = BlockRegistry::new();
+let stone = definitions.register(BlockDef::new("demo:stone"))?;
+let mut world = VoxelWorld::new(Arc::new(definitions), 1);
+world.insert_chunk(ChunkPos::default(), Chunk::filled(world.shared_registry(), stone)?)?;
+let input = MeshInput::capture(&world, ChunkPos::default())?;
+let mesh = input.build(MeshingOptions::default())?;
+assert_eq!(mesh.stats().visible_faces, 1536);
+assert_eq!(mesh.stats().quads, 6); // Six repeating 16×16 faces.
+assert_eq!(mesh.stats().buffer_bytes, 936);
+assert!(mesh.dependencies().is_current(&world));
+for batch in mesh.batches() { batch.data().validate()?; }
+world.set_block(BlockPos::new(0, 0, 0), BlockId::AIR)?;
+assert!(!mesh.dependencies().is_current(&world));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+[`MeshInput::capture`] copies owner cells and six neighboring border slabs into
+an owned 18³ padded buffer (11,664 block bytes, excluding registry/metadata).
+It performs seven chunk lookups and can be moved to the existing CPU job system.
+Building reads the snapshot, never live world state. Receipts retain world
+identity and owner/neighbor installation/revision stamps, including absent
+neighbors. [`MeshDependencies::is_current`] rejects changed owners/neighbors,
+reinstallations, new neighbor arrivals, or a different world sharing the same
+registry. Any neighbor edit conservatively invalidates the receipt; no border
+revision optimization is assumed.
+
+Opaque neighbors hide faces irrespective of block ID. Invisible and cutout
+neighbors never occlude: retain geometry behind alpha holes, including internal
+foliage faces. Opaque neighbors also hide touching cutout faces. Collision does
+not determine geometry. Blended `RenderKind::Transparent` blocks in the owner
+are explicitly rejected until a blended meshing/sorting policy is implemented;
+they are not silently rendered opaque or omitted. Transparent neighbors do not
+occlude. [`MissingFaces::Expose`] draws unavailable border faces by default;
+`Hide` is an explicit alternative. Both track missing dependencies so arrivals
+require a rebuild. Missing data is still distinct from loaded air in storage.
+
+[`MeshingMode::Greedy`] scans face masks into rectangles sharing plane, tile and
+alpha layer. Normals and counterclockwise winding point outward. Face UVs cover
+one unit per block, including merged rectangles: a 16×16 face uses 0..16 UVs.
+Side textures have V=0 at the top; opposite sides face outward without horizontal
+mirroring. Top/bottom map U to +X and V to +Z. Batches sort opaque before cutout,
+then tile, face and grid position, making output reproducible. Custom materials
+must repeat these UVs; the supplied renderer does this inside each atlas region.
+`Culled` emits individual unit faces for comparison or highly fragmented data.
+
+[`FaceShading`] bakes directional sunlight/ambient intensities into vertex colors:
+-X/+X 204, bottom 140, top 255, -Z/+Z 178. It does not propagate skylight, shadow
+columns, torches or AO. Uniform per-face shading keeps merges valid. Configurable
+[`MeshLimits`] bound quads and batches; indexed batches split at 65,532 vertices
+or a smaller requested multiple of four. Dense cutout data can exceed a single
+16-bit mesh. Invalid limits/over-budget output fail before upload. Empty geometry
+is a successful result with zero batches. [`MeshStats`] reports exact logical
+buffer bytes, excluding allocator/driver overhead and shared materials/textures.
+
+Edits already return owner/touched-neighbor candidates. Invalidate those meshes
+on an edit. Invalidate all six neighbors on chunk insertion/removal/replacement,
+including transitions between missing and resident. Recheck receipts before
+accepting work. Draws intentionally keep previously accepted geometry during
+rebuilds; worker scheduling, residency, cancellation and frame upload budgets
+belong to the streaming follow-up (#22).
+
+## Optional rendering
+
+```toml
+rayengine-voxel = { path = "../rayengine/plugins/voxel", features = ["render"] }
+```
+
+This initialization fragment is checked with the rendering feature enabled:
+
+```no_run
+# #[cfg(feature = "render")]
+# fn setup(ctx: &mut rayengine::prelude::InitContext<'_, '_>, world: &rayengine_voxel::VoxelWorld)
+#     -> Result<(), Box<dyn std::error::Error>> {
+use rayengine_voxel::prelude::*;
+let texture = ctx.texture("assets/stone.png")?;
+let mut materials = VoxelMaterials::create(ctx,
+    &[TileTexture::whole(TileId(0), texture)], 0.5)?;
+let mesh = MeshInput::capture(world, ChunkPos::default())?.build(MeshingOptions::default())?;
+let mut chunk = RenderedChunk::new(ChunkPos::default())?;
+chunk.upload_init(world, &mesh, &materials, ctx)?;
+// Store both in the game, then draw through chunk.draw in a camera pass.
+// On explicit detachment, release chunk buffers before its materials.
+chunk.unload(ctx.assets);
+materials.unload(ctx.assets); // Does not unload the game's texture.
+# Ok(())
+# }
+```
+
+`VoxelMaterials` owns one repeat shader and opaque/cutout descriptions per tile,
+with a configurable alpha cutoff. `TileTexture::rect` maps normalized
+(left, top, width, height) within a texture; `whole` uses the full image. The
+shader applies `fract(UV)` before atlas mapping, preserving repetition on merged
+faces without requiring texture-wrap state. Use nearest filtering for pixel art.
+With linear filtering/mipmaps, provide tile gutters/insets and suitable mipmaps;
+the adapter does not pack atlases or make neighboring pixels disappear.
+`VoxelMaterials::bind` accepts borrowed custom materials for other shading and
+UV policies. Their alpha mode must match the batch layer. Built-in and borrowed
+resources are validated before committing geometry; the SDK's
+`Assets::validate_material` exposes this read-only check to other plugins too.
+
+`RenderedChunk::replace` runs before drawing, accepts only current receipts,
+uploads **all** replacement batches, then commits and unloads old meshes. A stale
+result, missing/invalid material, or any failed batch upload preserves all old
+geometry; partial new uploads are released. A valid empty result removes old
+geometry. This deliberately allows old/new buffers to coexist temporarily:
+logical bytes are reported, but VRAM/time admission belongs to the streamer.
+Mesh slots are reusable; SDK material/shader slots retain their high-water table
+capacity until the run ends, so reuse a shared material table across chunks.
+
+Draw with a `Frustum3D` captured from the same camera/viewport and render origin.
+`RenderedChunk::draw` tests the full chunk bounds before submitting batches and
+returns culled/submitted/unavailable counts. It allocates no CPU geometry or draw
+queue. The game owns the collection of chunks (there is no automatic spatial
+index); draws do not access the world or recheck stamps. Build/draw positions are
+local 0..16. `meshing::chunk_translation` subtracts an i32 render origin using i64
+before conversion to f32; shift the camera into that same space to keep unit
+precision near large grid coordinates. This is explicit origin handling, not
+automatic large-world rebasing. With the SDK's native clipping defaults use
+near 0.05 / far 4000 when constructing the frustum.
+
+Keep chunks, materials and textures in the same SDK run. External resource
+unload/mutation is explicit and can invalidate subsequent draws, which report
+unavailable dependencies. Call `unload` when detaching a chunk/material table.
+Dropping a plugin leaves resources in `Assets` until that run ends; it cannot
+implicitly perform render-thread teardown. There is no automatic `Plugin` hook
+implementation because the game owns its camera, update and upload policy.
+The runnable `render` example supplies original procedural tiles, opaque/cutout
+geometry, per-face shading, culling, border edits and resource counts.
+
 ## Run, test, and benchmark
 
 ```sh
 cargo run --locked -p rayengine-voxel --example query
 cargo test --locked -p rayengine-voxel
-cargo doc --workspace --no-deps
+cargo test --locked -p rayengine-voxel --features render
+cargo run --locked -p rayengine-voxel --features render --example render
+cargo doc --workspace --no-deps --features rayengine-voxel/render
 # target/doc/rayengine_voxel/index.html
-scripts/benchmark.sh save voxel-v1 voxel_
-scripts/benchmark.sh compare voxel-v1 voxel_
+# New mesh workloads need a new baseline; retain previous voxel-v1 snapshots.
+scripts/benchmark.sh save voxel-meshing-v1 voxel_
+scripts/benchmark.sh compare voxel-meshing-v1 voxel_
+scripts/render_benchmark.sh save voxel-render-v1 voxel_
+scripts/render_benchmark.sh compare voxel-render-v1 voxel_
 ```
 
 Stable Criterion IDs and fixtures:
@@ -185,6 +324,8 @@ Stable Criterion IDs and fixtures:
 | `voxel_raycast/empty_axis/{16,256}` | Traverse exactly 16/256 unselected cells via callback |
 | `voxel_raycast/resident_hit_256` | Lookup/predicate across 16 resident air chunks, selected stone at x=255 |
 | `voxel_raycast/empty_corner_256` | 256 exact diagonal cells, simultaneous corner crossings |
+| `voxel_meshing/{solid,terrain,checkerboard,mixed_tiles,cutout}/{culled,greedy}` | Build the same 4096-cell fixtures in both modes; snapshot setup and output drop outside timing |
+| `voxel_snapshot/capture_7_chunks` | Copy owner + six loaded border slabs, receipt creation; output drop outside timing |
 
 Fixtures are constructed outside timed access/edit/query loops. Default world
 hash seeding can contribute run-to-run noise; use confidence intervals and repeated
@@ -193,5 +334,23 @@ exports named baselines, samples, revision, toolchain, and machine metadata.
 These are CPU measurements, not GPU performance or whole-game FPS. Tests include
 signed boundaries/extremes, admission/revision failures, all 16-bit IDs, ray faces,
 missing/budget outcomes, and seeded comparison with an exhaustive box oracle.
-Meshing, terrain generation, streaming, save schemas, and survival content are
-separate roadmap issues.
+Mesh fixtures use uniform solid; stepped terrain height `4+x/4+z/4`; alternating
+solid/air checkerboard; solid tile regions alternating every two cells; and dense
+cutout foliage (retaining internal faces). Each prints counts/payload outside
+measurement. Snapshot/registry setup is untimed. Greedy face merging can add CPU
+work on fragmented surfaces without reducing geometry; compare both modes for
+your content rather than assuming a benefit from merging alone.
+
+Native `voxel_draw/{solid,terrain,checkerboard,cutout}/{culled,greedy}` cases submit
+16 identical overlapping chunks inside one camera pass, including culling and
+material lookup, at the same 64×64 target. They are a repeatable submission/driver
+workload, not a playable scene or FPS measurement. `voxel_upload` uses the same
+fixtures/modes for atomic complete replacement (validation, new uploads and old
+unload included); CPU generation is untimed. `voxel_culling/rejected_64` rejects
+64 chunk bounds with no GPU submissions. Native cutout benchmark texels are white
+and survive; the image probe separately verifies holes, repetition and depth.
+Record GPU/driver/backend via the existing native metadata workflow. Tests include
+all-face winding/tiles, all six neighbor slabs, an independent seeded unit-face
+oracle, worst-case splits, receipt identity, and native failure rollback/pixels.
+Terrain generation, streaming, save schemas, and survival content remain separate
+roadmap issues.
