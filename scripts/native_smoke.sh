@@ -40,4 +40,9 @@ cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example s
 cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example stream_render -- --hidden --frames 120 --size 800x1000 --screenshot "artifacts/smoke/$backend/voxel-stream-portrait.png"
 cargo run -p rayengine-minecraft --features render "${demo_features[@]}" --bin minecraft -- --seed 42 --hidden --frames 240 --size 1280x720 --screenshot "artifacts/smoke/$backend/minecraft-terrain-wide.png"
 cargo run -p rayengine-minecraft --features render "${demo_features[@]}" --bin minecraft -- --seed 42 --hidden --frames 240 --size 800x1000 --screenshot "artifacts/smoke/$backend/minecraft-terrain-portrait.png"
+if [[ -n "${RAYENGINE_MINECRAFT_TEXTURES:-}" ]]; then
+    for size in 1280x720 800x1000; do
+        cargo run -p rayengine-minecraft --features render "${demo_features[@]}" --bin minecraft -- --textures "$RAYENGINE_MINECRAFT_TEXTURES" --seed 42 --hidden --frames 240 --size "$size" --screenshot "artifacts/smoke/$backend/minecraft-import-$size.png"
+    done
+fi
 echo "Native smoke screenshots: artifacts/smoke/$backend"

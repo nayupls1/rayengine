@@ -37,9 +37,12 @@ cargo run -p rayengine-minecraft --bin terrain -- --seed 42 --chunk=-1,2,0
 cargo run --release -p rayengine-minecraft --features render --bin minecraft -- --seed 42
 ```
 
-The demo streams hills, caves, trees and ores with original fallback colors.
+The demo streams hills, caves, trees and ores with original fallback textures.
 WASD/mouse moves and looks; Space jumps, held LMB mines, RMB places, and 1–3
-select dirt/stone/wood. Collision and reach queries use the resident edited world.
+select dirt/stone/wood. Collision and reach queries use the resident edited world. Extract the supported local textures once with
+`python3 scripts/import_minecraft_textures.py /path/to/client.jar`, then add
+`--textures examples/minecraft/local-assets/minecraft` to load the ordinary PNGs.
+The game has no archive dependency; `--bin textures` inspects a PNG folder as JSON.
 Its game-owned recipe and CPU fixtures are documented in
 [the terrain guide](examples/minecraft/README.md).
 

@@ -20,6 +20,7 @@ jobs:
           cargo run --locked -p rayengine-voxel --example query
           cargo run --locked -p rayengine-voxel --example stream
           cargo run --locked -p rayengine-minecraft --bin terrain -- --seed 42 --chunk=-1,2,0
+          cargo run --locked -p rayengine-minecraft --bin textures
 
   linux:
     runs-on: ubuntu-latest

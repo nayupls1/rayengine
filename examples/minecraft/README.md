@@ -44,12 +44,12 @@ pauses if its conservative local swept region is incomplete, while look remains
 responsive. Edits affect collision immediately; chunk rendering updates through
 bounded asynchronous remeshing and retains old geometry until replacement succeeds.
 
-Original flat colors mean a clean checkout needs no Minecraft installation.
+Original built-in pixel textures mean a clean checkout needs no Minecraft installation.
 Standard SDK `--hidden`, `--frames`, `--size`, `--screenshot` and diagnostics flags
 work after `--seed`. Camera and physics share a chunk-relative integer origin,
 rebased during movement without resetting velocity, look, or interpolation;
 resizing retains the normal fitted viewport and stable vertical field of view.
-Texture import is a separate roadmap issue.
+Use `--textures PATH` for the supported explicit local import described below.
 
 ```rust
 use rayengine_minecraft::{gameplay::{Player, Interaction}, terrain::{Terrain, TerrainSettings}};
@@ -64,6 +64,102 @@ let _selection = player.selection(&world)?;
 let mut interaction = Interaction::default();
 let report = interaction.step(&mut world, &player, false, false, 1.0 / 60.0, terrain.blocks().dirt)?;
 assert!(report.edit.is_none());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+## Textures and local Minecraft assets
+
+With no asset flag, the game uses original, MIT-licensed procedural 16×16 pixel
+art from `src/textures/fallback.rs`. It needs no installation, download or runtime
+file write. Grass top/side/bottom and log bark/end faces have separate mappings;
+foliage uses alpha cutout. Generated cell fingerprints and block IDs remain
+version one: these tile keys only affect rendering.
+
+The game loads an explicit **PNG directory** with `--textures PATH`: either the
+direct block directory or an extracted pack root containing
+`assets/minecraft/textures/block/`. The eleven files below are required;
+missing/invalid files name the source and texture. Partial sets do not silently
+mix with fallback. The runtime has no JAR/ZIP reader or archive dependency.
+Installation/profile directories, Bedrock packs and legacy Alpha/Beta
+`terrain.png` sheets are unsupported.
+
+Extract the supported subset **once** from an explicitly selected Java client
+archive with `scripts/import_minecraft_textures.py`. This separate Python standard
+library utility reads only the eleven named PNGs and writes ordinary files to a
+new directory; it refuses to overwrite an existing directory and validates all
+required entries before writing. Its default output is the ignored
+`examples/minecraft/local-assets/minecraft/` folder. It does not inspect other
+installation data. The Rust game only reads the resulting PNGs.
+
+| Demo face | Tile key | Required PNG in `assets/minecraft/textures/block/` |
+| --- | --- | --- |
+| Bedrock | 0 | `bedrock.png` |
+| Stone | 1 | `stone.png` |
+| Dirt / grass bottom | 2 | `dirt.png` |
+| Grass top | 3 | `grass_block_top.png` |
+| Coal ore | 4 | `coal_ore.png` |
+| Iron ore | 5 | `iron_ore.png` |
+| Log sides | 6 | `oak_log.png` |
+| Leaves | 7 | `oak_leaves.png` |
+| Grass sides | 8 | `grass_block_side.png` + `grass_block_side_overlay.png` |
+| Log top/bottom | 9 | `oak_log_top.png` |
+
+Static power-of-two square PNGs from 16×16 through 256×256 are supported, including
+indexed, grayscale, RGB and RGBA encodings. APNG and vertical animation strips
+are rejected. Mixed resolutions scale to the largest input by nearest sampling.
+Grass and leaves use a fixed palette (`GRASS_TINT`/`LEAF_TINT`); the grass overlay
+is tinted and composited onto its side texture. Opaque blocks force alpha 255;
+leaves preserve alpha and use cutoff 0.5. Custom models, biome color maps, PBR,
+pack layering and animation metadata are outside this subset.
+
+The ten final tiles pack into one five-column/two-row atlas with one-pixel edge
+gutters, nearest filtering and per-block shader repetition on greedy faces.
+At 16 pixels this is 90×36 (12,960 RGBA bytes); at 256 it is 1,290×516 (2,662,560
+bytes). There are no generated mipmaps. The CPU atlas, encoded PNG and decoded
+raylib image are dropped after initialization; drawing retains one texture,
+one repeat shader and twenty opaque/cutout material descriptions. Loaded PNGs
+are limited to 4 MiB each and decoder allocation to 4 MiB per image. The separate
+extraction utility limits source archives to 512 MiB / 100,000 entries. These are admission limits, not a total
+process-memory or driver-overhead guarantee.
+
+```sh
+# Inspect fallback assets as JSON using CPU-only dependencies:
+cargo run -p rayengine-minecraft --bin textures
+# Extract once, then inspect/play using ordinary PNG files:
+python3 scripts/import_minecraft_textures.py /path/to/client.jar
+cargo run -p rayengine-minecraft --bin textures -- --source examples/minecraft/local-assets/minecraft
+cargo run --release -p rayengine-minecraft --features render --bin minecraft -- --seed 42 --textures examples/minecraft/local-assets/minecraft
+```
+
+For Modrinth on Linux, client archives can live under
+`~/.local/share/ModrinthApp/meta/versions/<version>/<version>.jar`; some modded
+profiles keep resources in a separate `meta/libraries/net/minecraft/client/.../*-extra.jar`.
+Choose a file containing the documented entries, rather than a mod-loader JAR.
+The local 26.3 and 1.21.1 texture subsets have been checked against this
+mapping. No installation path is automatically searched or embedded in the game.
+
+Extracted Minecraft assets stay local and must not be committed or included in
+releases. The game writes no asset files. If manually staging a source in this
+checkout, `examples/minecraft/local-assets/` is ignored by Git; generated screenshots
+and benchmark samples belong in ignored `artifacts/`. Only the original fallback
+implementation and original test fixtures are distributed.
+
+```rust
+use rayengine_minecraft::textures::{TextureSet, Tile};
+let textures = TextureSet::fallback();
+let atlas = textures.pack();
+assert_eq!((atlas.width, atlas.height), (90, 36));
+assert_eq!(textures.tile(Tile::Leaves).size(), 16);
+assert_eq!(atlas.rgba.len(), 12_960);
+let encoded = atlas.png()?;
+assert!(encoded.starts_with(b"\x89PNG\r\n\x1a\n"));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+```rust,no_run
+use rayengine_minecraft::textures::TextureSet;
+let textures = TextureSet::load("/path/to/block-pngs")?;
+let atlas = textures.pack();
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
@@ -170,3 +266,31 @@ output capacity; query time includes grid/chunk lookups and policy checks.
 scripts/benchmark.sh save voxel-interaction-v1 'voxel_(colliders|interaction)_v1'
 scripts/benchmark.sh compare voxel-interaction-v1 'voxel_(colliders|interaction)_v1'
 ```
+
+
+`minecraft_textures_v1` CPU workloads cover RGBA16/256 and indexed16 decoding,
+fallback16 and maximum256 packing, and fallback atlas PNG encoding. Setup,
+fixture validation and output destruction are untimed. `minecraft_texture_render_v1`
+measures replacement and sixteen draw submissions for seed42/chunk(0,3,0) with
+its six resident neighbors, ten fallback tiles and one shared atlas. The fixture
+asserts 485 visible faces, 183 quads, 732 vertices, 366 triangles, five batches
+and 28,548 logical mesh bytes; its atlas has 12,960 RGBA bytes. Native
+window/texture/material creation and CPU terrain/meshing are untimed; native
+measurements include driver work/stalls rather than GPU timers. Preserve recipe,
+texture fixtures, mesh counts, renderer/backend and sample settings when comparing.
+
+```sh
+scripts/benchmark.sh save minecraft-textures-v1 minecraft_textures_v1
+scripts/benchmark.sh compare minecraft-textures-v1 minecraft_textures_v1
+scripts/render_benchmark.sh save minecraft-textures-render-v1 minecraft_texture_render_v1
+scripts/render_benchmark.sh compare minecraft-textures-render-v1 minecraft_texture_render_v1
+# Optional local import smoke alongside the standard fallback/native checks:
+RAYENGINE_MINECRAFT_TEXTURES=/path/to/block-pngs scripts/native_smoke.sh
+```
+
+Texture tests cover direct/extracted-directory mapping, incomplete and unsupported
+inputs, palette/grayscale/RGB decoding, alpha, tint compositing, mixed-resolution
+packing, gutters, upright rows and original fallback consistency. Native image
+probes check all four side orientations, grass top/bottom, log bark/ends and leaf
+holes exposing terrain behind them. The headless `textures` binary prints schema1
+source-directory/tile dimensions, normalized regions and atlas byte counts; it writes no PNGs.

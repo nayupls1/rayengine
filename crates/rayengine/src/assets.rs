@@ -325,6 +325,20 @@ impl<'audio> Assets<'audio> {
         self.sound_paths.retain(|_, handle| *handle != id);
     }
 
+    pub(crate) fn upload_texture_image(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        image: &Image,
+    ) -> Result<TextureId, Error> {
+        let texture = raylib
+            .load_texture_from_image(thread, image)
+            .map_err(|e| Error::Asset(format!("generated texture: {e}")))?;
+        let id = TextureId(self.textures.len());
+        self.textures.push(Some(texture));
+        Ok(id)
+    }
+
     pub(crate) fn load_texture(
         &mut self,
         raylib: &mut RaylibHandle,

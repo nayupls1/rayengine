@@ -41,5 +41,8 @@ cargo bench --locked -p rayengine "${features[@]}" --bench draw_submission -- "$
 voxel_features=(--features render)
 if [[ "$backend" == wayland ]]; then voxel_features=(--features render,rayengine/wayland); fi
 cargo bench --locked -p rayengine-voxel "${voxel_features[@]}" --bench voxel_render -- "$flag" "$baseline" "$@"
+minecraft_features=(--features render)
+if [[ "$backend" == wayland ]]; then minecraft_features=(--features render,rayengine/wayland); fi
+cargo bench --locked -p rayengine-minecraft "${minecraft_features[@]}" --bench textures_render -- "$flag" "$baseline" "$@"
 python3 scripts/benchmark_metadata.py after "$run_dir" "$mode" "$baseline"
 echo "Native benchmark snapshot: $rayengine_root/$run_dir"

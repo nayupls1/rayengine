@@ -1,3 +1,5 @@
 /target/
 /artifacts/
 **/target/
+/examples/minecraft/local-assets/
+**/__pycache__/
