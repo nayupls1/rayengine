@@ -182,7 +182,7 @@ pub fn select(world: &VoxelWorld, eye: DVec3, direction: DVec3) -> Result<Raycas
 }
 /// Placement rule for this demo: loaded air only, a registered non-air block,
 /// and no positive-volume overlap with the player's current collision body.
-/// Touching the player's feet is allowed. Inventory will be added separately.
+/// Touching the player's feet is allowed. Inventory admission is applied by the survival caller.
 pub fn can_place(world: &VoxelWorld, position: BlockPos, block: BlockId, player: &Player) -> bool {
     block != BlockId::AIR
         && world.registry().get(block).is_some()
@@ -193,9 +193,21 @@ pub fn can_place(world: &VoxelWorld, position: BlockPos, block: BlockId, player:
 /// Held hand-mining state. Release, target changes, and chunk revisions reset it.
 #[derive(Default)]
 pub struct Interaction {
-    target: Option<(BlockPos, BlockId, ChunkStamp)>,
+    target: Option<(BlockPos, BlockId, ChunkStamp, u32)>,
     elapsed: f32,
     progress: f32,
+}
+/// One routed interaction request; survival adds inventory admission around this.
+#[derive(Clone, Copy, Debug)]
+pub struct InteractionInput {
+    /// Held mining request.
+    pub mining: bool,
+    /// Placement edge; takes priority over mining.
+    pub place: bool,
+    /// Finite nonnegative seconds.
+    pub dt: f32,
+    /// Registered placement block; AIR makes placement unavailable.
+    pub block: BlockId,
 }
 /// One interaction tick's selected cell and committed edit, if any.
 #[derive(Clone, Copy, Debug, Default)]
@@ -220,6 +232,33 @@ impl Interaction {
         dt: f32,
         block: BlockId,
     ) -> Result<InteractionReport, VoxelError> {
+        self.apply(
+            world,
+            player,
+            InteractionInput {
+                mining,
+                place,
+                dt,
+                block,
+            },
+            |_| 1.0,
+        )
+    }
+    /// Apply a tool speed policy; changing speed resets the mining timer as does
+    /// changing the cell/revision. World edits still use the same loaded/body checks.
+    pub fn apply(
+        &mut self,
+        world: &mut VoxelWorld,
+        player: &Player,
+        input: InteractionInput,
+        speed: impl Fn(BlockId) -> f32,
+    ) -> Result<InteractionReport, VoxelError> {
+        let InteractionInput {
+            mining,
+            place,
+            dt,
+            block,
+        } = input;
         assert!(dt.is_finite() && dt >= 0.0);
         let selected = match player.selection(world)?.outcome {
             RaycastOutcome::Hit(hit) => Some(hit),
@@ -246,7 +285,9 @@ impl Interaction {
             let stamp = world
                 .stamp(hit.position.split().0)
                 .expect("resident ray hit");
-            let target = (hit.position, hit.block, stamp);
+            let speed = speed(hit.block);
+            assert!(speed.is_finite() && speed > 0.0);
+            let target = (hit.position, hit.block, stamp, speed.to_bits());
             if self.target != Some(target) {
                 self.reset();
                 self.target = Some(target);
@@ -257,7 +298,7 @@ impl Interaction {
                 .expect("registered hit")
                 .hardness
             {
-                self.elapsed += dt;
+                self.elapsed += dt * speed;
                 self.progress = if hardness == 0.0 {
                     1.0
                 } else {
@@ -272,7 +313,8 @@ impl Interaction {
         }
         Ok(report)
     }
-    fn reset(&mut self) {
+    /// Cancel a held mining gesture when UI, tool selection, or respawn changes.
+    pub fn reset(&mut self) {
         self.target = None;
         self.elapsed = 0.0;
         self.progress = 0.0;
