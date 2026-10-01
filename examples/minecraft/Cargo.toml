@@ -1,0 +1,34 @@
+[package]
+name = "rayengine-minecraft"
+description = "Minimal Minecraft-style survival demo; game-owned terrain and rules"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rayengine-voxel = { path = "../../plugins/voxel" }
+rayengine = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+
+[features]
+default = []
+render = ["dep:rayengine", "rayengine-voxel/render"]
+
+[[bin]]
+name = "minecraft"
+required-features = ["render"]
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "generation"
+harness = false
+
+[lints]
+workspace = true
