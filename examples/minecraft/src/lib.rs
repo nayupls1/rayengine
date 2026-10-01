@@ -4,3 +4,5 @@ pub mod preview;
 pub mod terrain;
 
 pub mod gameplay;
+
+pub mod textures;

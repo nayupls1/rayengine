@@ -128,6 +128,15 @@ fn definitions() -> Result<(Arc<BlockRegistry>, DemoBlocks), VoxelError> {
         if name == "leaves" {
             def.render = RenderKind::Cutout;
         }
+        if name == "grass" {
+            def.textures = [crate::textures::Tile::GrassSide.id(); 6];
+            def.textures[Face::PosY.index()] = crate::textures::Tile::GrassTop.id();
+            def.textures[Face::NegY.index()] = crate::textures::Tile::Dirt.id();
+        }
+        if name == "wood" {
+            def.textures[Face::PosY.index()] = crate::textures::Tile::LogTop.id();
+            def.textures[Face::NegY.index()] = crate::textures::Tile::LogTop.id();
+        }
         ids.push(registry.register(def)?);
     }
     Ok((

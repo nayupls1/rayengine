@@ -1,7 +1,9 @@
-//! Playable first-person voxel scene; survival, textures and saves arrive later.
+//! Playable first-person voxel scene; survival and saves arrive later.
 use crate::gameplay::{Interaction, InteractionReport, Player};
 use crate::terrain::{GENERATOR_VERSION, Terrain, TerrainSettings};
+use crate::textures::{Atlas, TextureSet, Tile};
 use rayengine::raylib::prelude::MouseButton;
+use rayengine::raylib::prelude::{Image, RaylibTexture2D, TextureFilter};
 use rayengine::{prelude::*, upload::UploadBudget};
 use rayengine_voxel::prelude::*;
 use std::{sync::Arc, time::Duration};
@@ -27,13 +29,15 @@ const ACTIONS: FirstPersonActions = FirstPersonActions {
     turn_right: None,
 };
 /// Streamed first-person scene of the recipe used by the headless tools.
-/// Original flat fallback colors require no installed Minecraft assets.
+/// Original fallback textures require no installed Minecraft assets.
 pub struct TerrainPreview {
     terrain: Arc<Terrain>,
     world: VoxelWorld,
     cpu: ChunkStreamer,
     gpu: StreamRenderer,
     materials: VoxelMaterials,
+    atlas: Option<Atlas>,
+    texture: Option<TextureId>,
     focus: ChunkPos,
     player: Player,
     interaction: Interaction,
@@ -47,6 +51,13 @@ pub struct TerrainPreview {
 impl TerrainPreview {
     /// Chooses a safe spawn and starts bounded CPU generation workers.
     pub fn new(seed: u64) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::with_textures(seed, TextureSet::fallback())
+    }
+    /// Starts the game with an explicitly validated imported or fallback texture set.
+    pub fn with_textures(
+        seed: u64,
+        textures: TextureSet,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let terrain = Arc::new(Terrain::new(seed, TerrainSettings::default())?);
         let spawn = terrain.find_spawn(0, 0, 16, 1089)?;
         let support = spawn.support;
@@ -81,6 +92,8 @@ impl TerrainPreview {
                 ..Default::default()
             })?,
             materials: VoxelMaterials::new(),
+            atlas: Some(textures.pack()),
+            texture: None,
             focus,
             report: StreamReport::default(),
             render_report: StreamRenderReport::default(),
@@ -115,42 +128,31 @@ impl Game for TerrainPreview {
             .bind(WOOD, KeyboardKey::KEY_THREE)
     }
     fn init(&mut self, ctx: &mut InitContext<'_, '_>) -> Result<(), Error> {
-        for (i, color) in [
-            Color::new(63, 63, 69, 255),
-            Color::new(126, 130, 137, 255),
-            Color::new(130, 91, 58, 255),
-            Color::new(92, 158, 62, 255),
-            Color::new(68, 72, 78, 255),
-            Color::new(173, 142, 115, 255),
-            Color::new(116, 83, 48, 255),
-            Color::new(47, 119, 49, 255),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let layer = if i == 7 {
-                MeshLayer::Cutout
-            } else {
-                MeshLayer::Opaque
-            };
-            let alpha = if i == 7 {
-                AlphaMode::Cutout(0.5)
-            } else {
-                AlphaMode::Opaque
-            };
-            let material = ctx.material(MaterialDesc {
-                tint: color,
-                alpha,
-                ..Default::default()
-            })?;
-            self.materials.bind(
-                SurfaceKey {
-                    tile: TileId(i as u16),
-                    layer,
-                },
-                material,
-            )?;
+        let atlas = self
+            .atlas
+            .take()
+            .ok_or_else(|| Error::Asset("texture atlas already initialized".into()))?;
+        let bytes = atlas.png().map_err(|e| Error::Asset(e.to_string()))?;
+        let image =
+            Image::load_image_from_mem(".png", &bytes).map_err(|e| Error::Asset(e.to_string()))?;
+        let texture = ctx.texture_from_image(&image)?;
+        ctx.assets
+            .texture(texture)
+            .unwrap()
+            .set_texture_filter(ctx.thread, TextureFilter::TEXTURE_FILTER_POINT);
+        let tiles = Tile::ALL.map(|tile| TileTexture {
+            tile: tile.id(),
+            texture,
+            rect: atlas.rects[tile as usize],
+        });
+        match VoxelMaterials::create(ctx, &tiles, 0.5) {
+            Ok(materials) => self.materials = materials,
+            Err(error) => {
+                ctx.assets.unload_texture(texture);
+                return Err(error);
+            }
         }
+        self.texture = Some(texture);
         Ok(())
     }
     fn fixed_update(&mut self, ctx: &mut Update<'_, '_>) {
@@ -479,7 +481,14 @@ mod tests {
             *self.result.lock().unwrap() = Some((r.meshes, r.buffer_bytes));
             self.game.gpu.unload(&mut self.game.cpu, frame.assets);
             self.game.cpu.shutdown();
-            assert_eq!(frame.assets.resource_counts().meshes, 0);
+            self.game.materials.unload(frame.assets);
+            frame
+                .assets
+                .unload_texture(self.game.texture.take().unwrap());
+            let counts = frame.assets.resource_counts();
+            assert_eq!(counts.meshes, 0);
+            assert_eq!(counts.textures, 0);
+            assert_eq!(counts.texture_bytes, 0);
         }
     }
     #[test]

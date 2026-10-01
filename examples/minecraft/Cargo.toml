@@ -15,6 +15,7 @@ rayengine = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true
+png = "0.18.1"
 
 [features]
 default = []
