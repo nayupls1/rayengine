@@ -212,3 +212,5 @@ fn native_minecraft_mining_placement_collision_remesh_and_teardown() {
     assert!(result.lock().unwrap().is_some());
 }
 mod survival_tests;
+
+mod persistence_tests;

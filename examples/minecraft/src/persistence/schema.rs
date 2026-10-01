@@ -76,6 +76,12 @@ impl PlayerState {
         }
         player.origin = origin;
         player.controller.teleport(center).map_err(|_| invalid())?;
+        let bounds = player.controller.body.bounds();
+        if (as_global(origin) + bounds.min.as_dvec3()).min_element() < f64::from(i32::MIN)
+            || (as_global(origin) + bounds.max.as_dvec3()).max_element() > f64::from(i32::MAX) + 1.0
+        {
+            return Err(invalid());
+        }
         player.controller.body.velocity = velocity;
         player.controller.body.grounded = self.grounded;
         player
@@ -422,9 +428,20 @@ impl Write for Limited {
         if bytes.len() > self.limit.saturating_sub(self.bytes.len()) {
             return Err(io::Error::other("Minecraft save payload limit exceeded"));
         }
-        self.bytes
-            .try_reserve(bytes.len())
-            .map_err(io::Error::other)?;
+        let needed = self.bytes.len() + bytes.len();
+        if needed > self.bytes.capacity() {
+            // Keep geometric growth efficient without requesting capacity beyond
+            // the payload budget. Allocator bookkeeping remains additional.
+            let capacity = self
+                .bytes
+                .capacity()
+                .saturating_mul(2)
+                .max(needed)
+                .min(self.limit);
+            self.bytes
+                .try_reserve_exact(capacity - self.bytes.len())
+                .map_err(io::Error::other)?;
+        }
         self.bytes.extend_from_slice(bytes);
         Ok(bytes.len())
     }

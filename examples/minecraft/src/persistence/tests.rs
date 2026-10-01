@@ -372,3 +372,39 @@ fn modified_chunk_budget_allows_existing_histories_but_rejects_new_ones() {
     world.set_block(p, BlockId::AIR).unwrap();
     assert!(base.capture(&world, &player, &survival).is_err());
 }
+
+#[test]
+fn uncollected_pickups_and_airborne_fall_peak_survive_reload() {
+    let (base, mut world, mut player, mut survival, _) = fixture();
+    let support_chunk = base.spawn().split().0;
+    let above = ChunkPos::new(support_chunk.x, support_chunk.y + 1, support_chunk.z);
+    world
+        .insert_chunk(above, base.terrain.chunk(above).unwrap())
+        .unwrap();
+    survival.inventory.insert(Item::Dirt, 36 * 64);
+    player.controller.set_look(0.0, -1.5).unwrap();
+    let report = survival
+        .interact(
+            &mut crate::gameplay::Interaction::default(),
+            &mut world,
+            &player,
+            crate::survival::SurvivalInput {
+                mining: true,
+                dt: 1.1,
+                ..Default::default()
+            },
+            base.terrain.blocks(),
+        )
+        .unwrap();
+    assert!(report.edit.is_some());
+    assert_eq!(survival.pickups().len(), 1);
+    survival.health.movement(player.position().y + 9.0, false);
+    let (snapshot, _) = base.capture(&world, &player, &survival).unwrap();
+    let restored = Snapshot::decode(&snapshot.encode().unwrap()).unwrap();
+    let mut loaded = restored.survival().unwrap();
+    assert_eq!(loaded.snapshot(), survival.snapshot());
+    assert_eq!(loaded.collect(player.position()), 0);
+    assert_eq!(loaded.pickups().len(), 1);
+    assert_eq!(loaded.health.movement(player.position().y, true), 6);
+    assert_eq!(loaded.health.value(), 14);
+}

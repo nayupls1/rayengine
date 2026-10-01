@@ -24,6 +24,12 @@ impl<'de, T: Deserialize<'de>, const N: usize> Deserialize<'de> for Bounded<T, N
                     if entries.len() == N {
                         return Err(de::Error::custom("sequence exceeds save budget"));
                     }
+                    if entries.len() == entries.capacity() {
+                        let capacity = entries.capacity().saturating_mul(2).max(1).min(N);
+                        entries
+                            .try_reserve_exact(capacity - entries.len())
+                            .map_err(de::Error::custom)?;
+                    }
                     entries.push(entry);
                 }
                 Ok(Bounded(entries))

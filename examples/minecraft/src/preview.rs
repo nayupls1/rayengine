@@ -1,6 +1,7 @@
-//! Playable first-person survival scene; disk saves arrive in the next issue.
+//! Playable first-person survival scene with optional bounded disk checkpoints.
 use crate::gameplay::as_global;
 use crate::gameplay::{Interaction, InteractionReport, Player};
+use crate::persistence::{Saving, Store};
 use crate::terrain::{Terrain, TerrainSettings};
 use crate::{
     breaking,
@@ -13,7 +14,10 @@ use rayengine::raylib::prelude::MouseButton;
 use rayengine::raylib::prelude::{Image, RaylibTexture2D, TextureFilter};
 use rayengine::{prelude::*, upload::UploadBudget};
 use rayengine_voxel::{glam::Mat4, prelude::*};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 const LEFT: Action = Action(0);
 const RIGHT: Action = Action(1);
 const FORWARD: Action = Action(2);
@@ -39,6 +43,22 @@ const PREVIOUS: Action = Action(19);
 const ACTIVATE: Action = Action(20);
 const CANCEL: Action = Action(21);
 const QUIT: Action = Action(22);
+const SAVE: Action = Action(23);
+const AUTOSAVE_SECONDS: f32 = 10.0;
+
+/// Retain this handle before passing the game to App::run to report final native-
+/// close failures after the scene is dropped. No result means init never completed.
+#[derive(Clone, Default)]
+pub struct SaveOutcome(Arc<Mutex<Option<Result<(), String>>>>);
+impl SaveOutcome {
+    /// Surface the final checkpoint error to the caller/CLI after App::run.
+    pub fn check(&self) -> Result<(), crate::persistence::Error> {
+        match &*self.0.lock().unwrap_or_else(|e| e.into_inner()) {
+            Some(Err(error)) => Err(crate::persistence::Error::Invalid(error.clone())),
+            _ => Ok(()),
+        }
+    }
+}
 const UI_ACTIONS: UiActions = UiActions {
     primary: MINE,
     next: NEXT,
@@ -80,6 +100,11 @@ pub struct TerrainPreview {
     report: StreamReport,
     render_report: StreamRenderReport,
     error: Option<String>,
+    saving: Option<Saving>,
+    save_timer: f32,
+    closing: bool,
+    initialized: bool,
+    save_outcome: SaveOutcome,
 }
 impl TerrainPreview {
     /// Chooses a safe spawn and starts bounded CPU generation workers.
@@ -93,8 +118,46 @@ impl TerrainPreview {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let terrain = Arc::new(Terrain::new(seed, TerrainSettings::default())?);
         let spawn = terrain.find_spawn(0, 0, 16, 1089)?;
-        let support = spawn.support;
-        let focus = support.split().0;
+        Self::build(
+            terrain,
+            spawn.support,
+            Player::new(spawn.feet())?,
+            Survival::default(),
+            textures,
+            None,
+        )
+    }
+    /// Load an explicitly chosen slot before native init. Missing slots use seed42
+    /// unless a seed is supplied; incompatible/corrupt files return an error.
+    pub fn with_save(
+        seed: Option<u64>,
+        textures: TextureSet,
+        store: Store,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let saving = Saving::open(store, seed)?;
+        let checkpoint = saving.checkpoint();
+        Self::build(
+            checkpoint.terrain(),
+            checkpoint.spawn(),
+            checkpoint.player()?,
+            checkpoint.survival()?,
+            textures,
+            Some(saving),
+        )
+    }
+    /// Handle for the final close-time checkpoint, including filesystem failures.
+    pub fn save_outcome(&self) -> SaveOutcome {
+        self.save_outcome.clone()
+    }
+    fn build(
+        terrain: Arc<Terrain>,
+        spawn: BlockPos,
+        player: Player,
+        survival: Survival,
+        textures: TextureSet,
+        saving: Option<Saving>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let focus = player.focus();
         let config = StreamConfig {
             radius: 2,
             vertical_radius: 2,
@@ -102,22 +165,26 @@ impl TerrainPreview {
             ..Default::default()
         };
         let recipe = terrain.clone();
+        let saved = saving.as_ref().map(Saving::loader);
         let cpu = ChunkStreamer::new(config, move |pos, registry, token| {
-            let cancelled = || token.is_cancelled();
-            generate_chunk(
-                recipe.as_ref(),
-                pos,
-                &GenerationContext::new(registry, &cancelled),
-            )
+            if let Some(saved) = &saved {
+                saved.load(pos, registry, token)
+            } else {
+                generate_chunk(
+                    recipe.as_ref(),
+                    pos,
+                    &GenerationContext::new(registry, &|| token.is_cancelled()),
+                )
+            }
         })?;
         Ok(Self {
             world: VoxelWorld::new(terrain.registry(), config.max_resident),
-            player: Player::new(spawn.feet())?,
+            player,
             interaction: Interaction::default(),
             interaction_report: InteractionReport::default(),
-            survival: Survival::default(),
+            survival,
             menu: Menu::default(),
-            spawn: support,
+            spawn,
             respawn_pending: false,
             respawn_retry: 0.0,
             cracks: Vec::with_capacity(breaking::STAGES),
@@ -136,6 +203,11 @@ impl TerrainPreview {
             report: StreamReport::default(),
             render_report: StreamRenderReport::default(),
             error: None,
+            saving,
+            save_timer: 0.0,
+            closing: false,
+            initialized: false,
+            save_outcome: SaveOutcome::default(),
         })
     }
     /// Latest bounded CPU scheduling counters.
@@ -171,6 +243,25 @@ impl TerrainPreview {
 }
 impl TerrainPreview {
     fn advance(&mut self, input: &Input, ui_input: UiInput, size: Vec2, dt: f32) -> bool {
+        if self.closing {
+            self.player.controller.previous = self.player.controller.body.position;
+            let saving = self.saving.as_ref().expect("persistent quit");
+            if saving.error().is_some() {
+                self.closing = false;
+            } else {
+                return saving.settled();
+            }
+        }
+        if let Some(saving) = &mut self.saving {
+            if input.pressed(SAVE) {
+                saving.retry();
+            }
+            self.save_timer += dt;
+            if self.save_timer >= AUTOSAVE_SECONDS {
+                self.save_timer = 0.0;
+                saving.request();
+            }
+        }
         let report = self.menu.update(
             size,
             MenuInput {
@@ -183,6 +274,17 @@ impl TerrainPreview {
             &mut self.survival,
         );
         let quit = report.quit || input.pressed(QUIT);
+        if quit {
+            if let Some(saving) = &mut self.saving {
+                saving.retry();
+                self.closing = true;
+                self.interaction.reset();
+                self.interaction_report = InteractionReport::default();
+                self.player.controller.previous = self.player.controller.body.position;
+                return false;
+            }
+            return true;
+        }
         if report.respawn {
             self.respawn_pending = true;
             self.respawn_retry = 0.0;
@@ -234,16 +336,29 @@ impl TerrainPreview {
             self.interaction_report = InteractionReport::default();
             return quit;
         }
-        match self.survival.interact(
+        let interaction_input = SurvivalInput {
+            mining: report.mining_allowed && input.down(MINE),
+            place: report.place_allowed && input.pressed(PLACE),
+            dt,
+        };
+        let admission = if interaction_input.mining || interaction_input.place {
+            self.saving
+                .as_ref()
+                .map(|saving| saving.admission(&self.world))
+        } else {
+            None
+        };
+        match self.survival.interact_admitted(
             &mut self.interaction,
             &mut self.world,
             &self.player,
-            SurvivalInput {
-                mining: report.mining_allowed && input.down(MINE),
-                place: report.place_allowed && input.pressed(PLACE),
-                dt,
-            },
+            interaction_input,
             self.terrain.blocks(),
+            |p| {
+                admission
+                    .as_ref()
+                    .is_none_or(|admission| admission.allows(p))
+            },
         ) {
             Ok(report) => self.interaction_report = report,
             Err(e) => self.error = Some(e.to_string()),
@@ -254,7 +369,7 @@ impl TerrainPreview {
 }
 impl Game for TerrainPreview {
     fn cursor_mode(&self) -> CursorMode {
-        if self.menu.open() || self.survival.health.value() == 0 {
+        if self.closing || self.menu.open() || self.survival.health.value() == 0 {
             CursorMode::Free
         } else {
             CursorMode::Captured
@@ -278,7 +393,8 @@ impl Game for TerrainPreview {
             .bind(ACTIVATE, KeyboardKey::KEY_ENTER)
             .bind(ACTIVATE, KeyboardKey::KEY_SPACE)
             .bind(CANCEL, KeyboardKey::KEY_BACKSPACE)
-            .bind(QUIT, KeyboardKey::KEY_F10);
+            .bind(QUIT, KeyboardKey::KEY_F10)
+            .bind(SAVE, KeyboardKey::KEY_F5);
         for (action, key) in HOTBAR.into_iter().zip([
             KeyboardKey::KEY_ONE,
             KeyboardKey::KEY_TWO,
@@ -333,6 +449,10 @@ impl Game for TerrainPreview {
             }
         }
         self.texture = Some(texture);
+        self.initialized = true;
+        if let Some(saving) = &mut self.saving {
+            saving.request();
+        }
         Ok(())
     }
     fn fixed_update(&mut self, ctx: &mut Update<'_, '_>) {
@@ -347,12 +467,21 @@ impl Game for TerrainPreview {
     }
 
     fn draw(&mut self, frame: &mut Frame<'_, '_>) {
-        match self
-            .cpu
-            .tick(&mut self.world, self.focus, |_, _, _| Eviction::Keep)
-        {
+        if let Some(saving) = &mut self.saving {
+            saving.poll(&mut self.world);
+        }
+        let saving = &mut self.saving;
+        match self.cpu.tick(&mut self.world, self.focus, |_, _, _| {
+            if let Some(saving) = saving {
+                saving.request();
+            }
+            Eviction::Keep
+        }) {
             Ok(report) => self.report = report,
             Err(e) => self.error = Some(e.to_string()),
+        }
+        if let Some(saving) = &mut self.saving {
+            saving.start(&mut self.world, &self.player, &self.survival);
         }
         self.render_report = self.gpu.pump(
             &self.world,
@@ -403,6 +532,22 @@ impl Game for TerrainPreview {
             }
         });
         self.draw_hud(frame);
+    }
+}
+impl Drop for TerrainPreview {
+    fn drop(&mut self) {
+        if self.initialized
+            && let Some(saving) = &mut self.saving
+        {
+            let result = saving
+                .finish(&mut self.world, &self.player, &self.survival)
+                .map_err(|e| e.to_string());
+            *self
+                .save_outcome
+                .0
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(result);
+        }
     }
 }
 #[cfg(test)]

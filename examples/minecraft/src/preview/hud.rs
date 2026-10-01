@@ -168,7 +168,7 @@ impl TerrainPreview {
                 let small = (width / 45.0).min(14.0);
                 ui.text(
                     if dead {
-                        "Respawn keeps inventory. World edits stay for this session."
+                        "Respawn keeps inventory and world edits."
                     } else {
                         "Click two slots to swap. First row is the hotbar."
                     },
@@ -247,8 +247,34 @@ impl TerrainPreview {
                     }
                 }
             }
+            if let Some(saving) = &self.saving {
+                use crate::persistence::SaveStatus;
+                let status = if self.closing {
+                    "Saving before exit..."
+                } else {
+                    match saving.status() {
+                        SaveStatus::Idle => "Save ready | F5 save",
+                        SaveStatus::Requested => "Save queued | F5 save",
+                        SaveStatus::Writing => "Saving... | F5 queue latest",
+                        SaveStatus::Saved => "Last checkpoint saved | F5 save",
+                        SaveStatus::Failed => "Save failed: chunks kept loaded | F5 retry",
+                    }
+                };
+                ui.text(status, Vec2::new(16.0, 118.0), 12.0, Color::YELLOW);
+                if let Some(error) = saving.error() {
+                    ui.text(&error.to_string(), Vec2::new(16.0, 138.0), 12.0, Color::RED);
+                }
+                if saving.history_full(&self.world) {
+                    ui.text(
+                        "World edit limit reached: existing edited areas remain editable",
+                        Vec2::new(16.0, 158.0),
+                        12.0,
+                        Color::YELLOW,
+                    );
+                }
+            }
             if let Some(error) = &self.error {
-                ui.text(error, Vec2::new(16.0, 118.0), 12.0, Color::RED);
+                ui.text(error, Vec2::new(16.0, 178.0), 12.0, Color::RED);
             }
         });
     }

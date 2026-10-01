@@ -318,3 +318,54 @@ fn partial_pickup_collection_retains_the_unaccepted_remainder() {
     assert_eq!(survival.collect(DVec3::ZERO), 4);
     assert!(survival.pickups().is_empty());
 }
+
+#[test]
+fn persistence_admission_rejects_mining_and_placement_before_any_mutation() {
+    let (mut world, blocks, player) = fixture();
+    let target = BlockPos::new(0, 2, -2);
+    world.set_block(target, blocks.wood).unwrap();
+    let mut survival = Survival::default();
+    survival.inventory.insert(Item::Dirt, 4);
+    let before = survival.snapshot();
+    let stamp = world.stamp(target.split().0).unwrap();
+    let mut interaction = Interaction::default();
+    for input in [
+        SurvivalInput {
+            mining: true,
+            dt: 2.0,
+            ..Default::default()
+        },
+        SurvivalInput {
+            place: true,
+            dt: 0.01,
+            ..Default::default()
+        },
+    ] {
+        let report = survival
+            .interact_admitted(&mut interaction, &mut world, &player, input, blocks, |_| {
+                false
+            })
+            .unwrap();
+        assert!(report.edit.is_none());
+        assert_eq!(report.progress, 0.0);
+        assert_eq!(survival.snapshot(), before);
+        assert_eq!(world.stamp(target.split().0).unwrap(), stamp);
+    }
+    assert_eq!(world.block(target), Some(blocks.wood));
+    assert_eq!(world.block(BlockPos::new(0, 2, -1)), Some(BlockId::AIR));
+    let report = survival
+        .interact_admitted(
+            &mut interaction,
+            &mut world,
+            &player,
+            SurvivalInput {
+                mining: true,
+                dt: 0.1,
+                ..Default::default()
+            },
+            blocks,
+            |_| true,
+        )
+        .unwrap();
+    assert!((report.progress - 0.1).abs() < 0.0001);
+}

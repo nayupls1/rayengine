@@ -419,9 +419,21 @@ impl Survival {
         input: SurvivalInput,
         blocks: DemoBlocks,
     ) -> Result<InteractionReport, VoxelError> {
+        self.interact_admitted(interaction, world, player, input, blocks, |_| true)
+    }
+    /// Apply a game-owned edit admission policy before block or inventory mutation.
+    pub fn interact_admitted(
+        &mut self,
+        interaction: &mut Interaction,
+        world: &mut VoxelWorld,
+        player: &Player,
+        input: SurvivalInput,
+        blocks: DemoBlocks,
+        allowed: impl Fn(BlockPos) -> bool,
+    ) -> Result<InteractionReport, VoxelError> {
         let held = self.held().map(Stack::item);
         let block = held.and_then(|i| i.block(blocks)).unwrap_or(BlockId::AIR);
-        let report = interaction.apply(
+        let report = interaction.apply_admitted(
             world,
             player,
             InteractionInput {
@@ -431,6 +443,7 @@ impl Survival {
                 block,
             },
             |id| held.map_or(1.0, |i| i.mining_speed(id, blocks)),
+            allowed,
         )?;
         if let Some(edit) = report.edit {
             if edit.current == BlockId::AIR {

@@ -190,13 +190,17 @@ impl Saving {
     pub fn settled(&self) -> bool {
         self.pending.is_none() && !self.requested && self.error.is_none() && self.has_file
     }
-    /// Build an admission view. With room, no dirty-position allocation is needed.
-    pub fn admission(&self, world: &VoxelWorld) -> EditAdmission {
+    /// Whether modified history is full, without allocating a per-edit admission view.
+    pub fn history_full(&self, world: &VoxelWorld) -> bool {
         let extra = world
             .chunks()
             .filter(|(p, c)| c.is_dirty() && !self.checkpoint.edits.contains_key(&[p.x, p.y, p.z]))
             .count();
-        let full = self.checkpoint.edits.len() + extra >= MAX_EDITED_CHUNKS;
+        self.checkpoint.edits.len() + extra >= MAX_EDITED_CHUNKS
+    }
+    /// Build an admission view. With room, no dirty-position allocation is needed.
+    pub fn admission(&self, world: &VoxelWorld) -> EditAdmission {
+        let full = self.history_full(world);
         let dirty = if full {
             world
                 .chunks()
