@@ -146,7 +146,8 @@ Rules:
 - Exact floating-point edge/corner ties advance all tied axes simultaneously,
   skipping side cells with zero-length contact. X, then Y, then Z selects the
   reported face. Nearby, distinct floating-point crossings are not merged by an
-  arbitrary epsilon.
+  arbitrary epsilon. Crossing times are recomputed from the original ray to avoid
+  accumulated drift at repeated corners and inclusive reach limits.
 - Reach is finite, nonnegative, and inclusive. The visited-cell budget is
   1..=1,048,576; defaults are 8 units and 256 cells. A zero reach still tests the
   forward starting cell.

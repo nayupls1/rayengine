@@ -95,12 +95,12 @@ impl GridRay {
         });
         let axes = [position.x, position.y, position.z];
         let mut next = [f64::INFINITY; 3];
-        let mut delta = [f64::INFINITY; 3];
+        let mut inverse = [f64::INFINITY; 3];
         for axis in 0..3 {
             if step[axis] != 0 {
                 let boundary = f64::from(axes[axis]) + if step[axis] > 0 { 1.0 } else { 0.0 };
                 next[axis] = (boundary - self.origin[axis]) / self.direction[axis];
-                delta[axis] = 1.0 / self.direction[axis].abs();
+                inverse[axis] = 1.0 / self.direction[axis];
             }
         }
         let mut distance = 0.0;
@@ -146,7 +146,10 @@ impl GridRay {
                     if face.is_none() {
                         face = Some(Face::entering(axis, step[axis]));
                     }
-                    next[axis] += delta[axis];
+                    // Recompute from the original ray to avoid accumulating
+                    // rounding error at repeated corner crossings/reach limits.
+                    let boundary = f64::from(value) + if step[axis] > 0 { 1.0 } else { 0.0 };
+                    next[axis] = (boundary - self.origin[axis]) * inverse[axis];
                 }
             }
             position = BlockPos::new(target[0], target[1], target[2]);

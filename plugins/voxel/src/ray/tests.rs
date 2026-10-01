@@ -524,3 +524,49 @@ fn resident_cache_matches_uncached_queries_with_missing_and_cutout_cells() {
         }
     }
 }
+
+#[test]
+fn repeated_rational_corner_crossings_preserve_inclusive_reach() {
+    let ray = GridRay::new(DVec3::new(0.0, 0.0, 0.5), DVec3::new(3.0, 4.0, 0.0)).unwrap();
+    for scale in [1, 10, 100, 1000] {
+        let target = BlockPos::new(3 * scale, 4 * scale, 0);
+        let reach = f64::from(5 * scale);
+        let options = RaycastOptions {
+            max_distance: reach,
+            max_cells: 16384,
+            ..Default::default()
+        };
+        let result = ray
+            .cast(options, |cell| {
+                if cell == target {
+                    RayCell::Hit(SOLID)
+                } else {
+                    RayCell::Empty
+                }
+            })
+            .unwrap();
+        let contact = hit(result);
+        assert_eq!(contact.position, target);
+        assert_eq!(contact.distance, reach);
+        assert_eq!(contact.face, Some(Face::NegX));
+    }
+}
+
+#[test]
+fn tiny_coordinate_gap_can_cross_an_axis_with_an_infinite_reciprocal() {
+    let gap = f64::from_bits(1);
+    let direction = 1e-320;
+    let ray = GridRay::new(DVec3::new(0.5, -gap, 0.5), DVec3::new(1.0, direction, 0.0)).unwrap();
+    let contact = hit(ray
+        .cast(options(0.01), |cell| {
+            if cell.y == 0 {
+                RayCell::Hit(SOLID)
+            } else {
+                RayCell::Empty
+            }
+        })
+        .unwrap());
+    assert_eq!(contact.position, BlockPos::default());
+    assert_eq!(contact.face, Some(Face::NegY));
+    assert_eq!(contact.distance, gap / direction);
+}
