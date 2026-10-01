@@ -8,3 +8,7 @@ pub mod gameplay;
 pub mod textures;
 
 pub mod survival;
+
+pub mod hud;
+
+pub mod breaking;
