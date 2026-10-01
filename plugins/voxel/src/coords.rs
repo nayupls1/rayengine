@@ -198,4 +198,7 @@ impl Face {
             Self::PosZ => Self::NegZ,
         }
     }
+    pub(crate) fn entering(axis: usize, step: i32) -> Self {
+        Self::ALL[axis * 2 + usize::from(step < 0)]
+    }
 }

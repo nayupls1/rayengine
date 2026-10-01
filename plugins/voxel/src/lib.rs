@@ -4,10 +4,12 @@ pub use rayengine_core::glam;
 
 pub mod block;
 pub mod coords;
+pub mod ray;
 pub mod storage;
 
 pub use block::{BlockDef, BlockId, BlockRegistry, CollisionKind, RenderKind, TileId};
 pub use coords::{BlockPos, CHUNK_SIZE, CHUNK_VOLUME, ChunkPos, Face, LocalPos};
+pub use ray::{GridRay, MissingPolicy, RayCell, Raycast, RaycastOptions, RaycastOutcome, VoxelHit};
 pub use storage::{BlockEdit, Chunk, ChunkInsertError, ChunkStamp, DirtyChunks, VoxelWorld};
 
 /// Rejected input, capacity exhaustion, or mutation admission failure.
@@ -72,7 +74,8 @@ impl std::error::Error for VoxelError {}
 pub mod prelude {
     pub use crate::{
         BlockDef, BlockEdit, BlockId, BlockPos, BlockRegistry, CHUNK_SIZE, CHUNK_VOLUME, Chunk,
-        ChunkInsertError, ChunkPos, ChunkStamp, CollisionKind, DirtyChunks, Face, LocalPos,
-        RenderKind, TileId, VoxelError, VoxelWorld,
+        ChunkInsertError, ChunkPos, ChunkStamp, CollisionKind, DirtyChunks, Face, GridRay,
+        LocalPos, MissingPolicy, RayCell, Raycast, RaycastOptions, RaycastOutcome, RenderKind,
+        TileId, VoxelError, VoxelHit, VoxelWorld,
     };
 }
