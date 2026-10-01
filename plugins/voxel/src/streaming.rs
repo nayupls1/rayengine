@@ -124,6 +124,9 @@ type Loader = dyn Fn(ChunkPos, Arc<BlockRegistry>, Cancellation) -> Result<Chunk
     + Send
     + Sync
     + 'static;
+// The bounded pool holds only max_jobs entries; keeping results inline avoids
+// a separate allocation for every completed mesh.
+#[allow(clippy::large_enum_variant)]
 enum Output {
     Load(Result<Chunk, VoxelError>),
     Mesh(Result<ChunkMesh, MeshingError>),
@@ -227,7 +230,7 @@ impl ChunkStreamer {
     }
     /// Whether a position belongs to the current focus region.
     pub fn wants(&self, position: ChunkPos) -> bool {
-        self.desired.contains(&position)
+        !self.stopped && self.desired.contains(&position)
     }
     /// Paused failure for this position. The game can inspect before retrying.
     pub fn failure(&self, position: ChunkPos) -> Option<&StreamFailure> {

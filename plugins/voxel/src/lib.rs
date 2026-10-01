@@ -90,7 +90,10 @@ pub mod prelude {
         MeshStats, MeshingError, MeshingMode, MeshingOptions, MissingFaces, SurfaceKey,
     };
     #[cfg(feature = "render")]
-    pub use crate::render::{ChunkDraw, RenderedChunk, TileTexture, VoxelMaterials};
+    pub use crate::render::{
+        ChunkDraw, RenderedChunk, StreamRenderConfig, StreamRenderReport, StreamRenderer,
+        StreamResources, TileTexture, VoxelMaterials,
+    };
     pub use crate::streaming::{
         ChunkStreamer, Eviction, StreamConfig, StreamError, StreamFailure, StreamReport,
     };

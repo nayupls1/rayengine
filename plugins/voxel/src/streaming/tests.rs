@@ -249,3 +249,58 @@ fn mesher_cooperates_with_cancellation() {
     assert!(matches!(result, Err(MeshingError::Cancelled)));
     assert_eq!(polls, 3);
 }
+
+#[test]
+fn editing_a_running_job_cancels_its_completion_before_rebuilding() {
+    let (mut world, mut s, stone) = fixture(0, 1);
+    let p = ChunkPos::default();
+    world
+        .insert_chunk(p, Chunk::filled(world.shared_registry(), stone).unwrap())
+        .unwrap();
+    let input = MeshInput::capture(&world, p).unwrap();
+    let dependencies = Some(input.dependencies().clone());
+    let (started_tx, started_rx) = mpsc::channel();
+    let handle = s
+        .pool
+        .try_submit(move |cancel| {
+            started_tx.send(()).unwrap();
+            while !cancel.is_cancelled() {
+                thread::yield_now();
+            }
+            Output::Mesh(input.build(MeshingOptions::default()))
+        })
+        .unwrap();
+    s.active.push(Active {
+        position: p,
+        handle,
+        dependencies,
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    world.set_block(BlockPos::default(), BlockId::AIR).unwrap();
+    tick(&mut s, &mut world, p);
+    wait(&mut s, &mut world, p, |s, _| !s.ready.is_empty());
+    let mesh = s.take_mesh(&world).unwrap();
+    assert!(mesh.dependencies().is_current(&world));
+    assert!(mesh.stats().quads > 6);
+}
+#[test]
+fn mesh_budget_failure_is_paused_until_a_new_generation_can_succeed() {
+    let (mut world, mut s, _) = fixture(0, 1);
+    s.config.meshing.limits.max_quads = 1;
+    let p = ChunkPos::default();
+    wait(&mut s, &mut world, p, |s, _| s.failure(p).is_some());
+    assert_eq!(
+        s.failure(p),
+        Some(&StreamFailure::Mesh(MeshingError::LimitExceeded))
+    );
+    assert_eq!(tick(&mut s, &mut world, p).submitted, 0);
+    world
+        .insert_chunk(
+            p,
+            Chunk::filled(world.shared_registry(), BlockId::AIR).unwrap(),
+        )
+        .unwrap();
+    wait(&mut s, &mut world, p, |s, _| !s.ready.is_empty());
+    assert!(s.failure(p).is_none());
+    assert_eq!(s.take_mesh(&world).unwrap().stats().buffer_bytes, 0);
+}

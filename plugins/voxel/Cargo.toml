@@ -33,3 +33,7 @@ harness = false
 
 [lints]
 workspace = true
+
+[[example]]
+name = "stream_render"
+required-features = ["render"]
