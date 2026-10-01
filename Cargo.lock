@@ -546,6 +546,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayengine-minecraft"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "criterion",
+ "rayengine",
+ "rayengine-voxel",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rayengine-voxel"
 version = "0.0.1"
 dependencies = [

@@ -16,6 +16,8 @@ are optional targets; browser and mobile are outside the current scope.
   never depend on these. `plugins/beacons` demonstrates typed lifecycle hooks,
   generated meshes, and independently configured instances.
 - `rayengine-demos`: a 2D arena fighter and a 3D exploration platformer.
+- `examples/minecraft`: game-owned integer terrain recipe, concrete blocks,
+  safe spawn and an optional native streamed preview; CPU-only by default.
 
 ## Design contract
 
@@ -57,8 +59,11 @@ receipts and nearest-first focus regions with explicit job/mesh/resident bounds.
 The game owns load/generation and persistence-aware eviction callbacks; dirty
 chunks stay resident until saved. Render streaming stages bounded multi-frame
 uploads, preserves old whole-chunk geometry on failure, and counts temporary
-old/new GPU coexistence. Terrain generation, propagated lighting and survival
-rules remain separate follow-ups.
+old/new GPU coexistence. The generation interface validates registry identity and
+cooperative cancellation; concrete seed/settings, noise, caves, trees, ores and
+safe spawn belong to `examples/minecraft`. Versioned integer fixtures make untouched
+terrain reproducible independently of request order. Propagated lighting and
+survival rules remain separate follow-ups.
 
 ## First release
 

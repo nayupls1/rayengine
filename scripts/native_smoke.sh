@@ -21,6 +21,7 @@ cargo test -p rayengine "${features[@]}" native_diagnostics -- --ignored --test-
 cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored --test-threads=1
 cargo test -p rayengine-beacons "${demo_features[@]}" native_plugin -- --ignored --test-threads=1
 cargo test -p rayengine-voxel --features render "${demo_features[@]}" native_voxel -- --ignored --test-threads=1
+cargo test -p rayengine-minecraft --features render "${demo_features[@]}" native_minecraft -- --ignored --test-threads=1
 cargo build -p rayengine-demos "${demo_features[@]}" --bins
 rayengine_target=${CARGO_TARGET_DIR:-"$rayengine_root/target"}
 for game in arena meadow; do
@@ -37,4 +38,6 @@ cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example r
 cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example render -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/voxel-portrait.png"
 cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example stream_render -- --hidden --frames 120 --size 1280x720 --screenshot "artifacts/smoke/$backend/voxel-stream-wide.png"
 cargo run -p rayengine-voxel --features render "${demo_features[@]}" --example stream_render -- --hidden --frames 120 --size 800x1000 --screenshot "artifacts/smoke/$backend/voxel-stream-portrait.png"
+cargo run -p rayengine-minecraft --features render "${demo_features[@]}" --bin minecraft -- --seed 42 --hidden --frames 240 --size 1280x720 --screenshot "artifacts/smoke/$backend/minecraft-terrain-wide.png"
+cargo run -p rayengine-minecraft --features render "${demo_features[@]}" --bin minecraft -- --seed 42 --hidden --frames 240 --size 800x1000 --screenshot "artifacts/smoke/$backend/minecraft-terrain-portrait.png"
 echo "Native smoke screenshots: artifacts/smoke/$backend"
