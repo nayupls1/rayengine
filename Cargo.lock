@@ -550,6 +550,7 @@ name = "rayengine-voxel"
 version = "0.0.1"
 dependencies = [
  "criterion",
+ "rayengine",
  "rayengine-core",
 ]
 

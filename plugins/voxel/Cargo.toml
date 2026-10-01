@@ -1,6 +1,6 @@
 [package]
 name = "rayengine-voxel"
-description = "CPU voxel blocks, bounded chunk storage, and grid queries for rayengine"
+description = "Voxel storage, queries, CPU meshing and optional raylib rendering for rayengine"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,20 @@ repository.workspace = true
 
 [dependencies]
 rayengine-core.workspace = true
+rayengine = { workspace = true, optional = true }
+
+[features]
+default = []
+render = ["dep:rayengine"]
+
+[[example]]
+name = "render"
+required-features = ["render"]
+
+[[bench]]
+name = "voxel_render"
+harness = false
+required-features = ["render"]
 
 [dev-dependencies]
 criterion.workspace = true

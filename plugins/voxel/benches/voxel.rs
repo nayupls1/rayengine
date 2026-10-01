@@ -2,6 +2,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use rayengine_voxel::{glam::DVec3, prelude::*};
 use std::{hint::black_box, sync::Arc, time::Duration};
+mod meshing;
 
 fn fixture() -> (Arc<BlockRegistry>, BlockId) {
     let mut registry = BlockRegistry::new();
@@ -178,6 +179,6 @@ fn workloads(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default().warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(3));
-    targets = workloads
+    targets = workloads, meshing::workloads
 }
 criterion_main!(benches);

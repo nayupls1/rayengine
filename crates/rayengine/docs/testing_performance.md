@@ -211,12 +211,22 @@ before adding parallelism, a spatial index or more rendering infrastructure.
 ## Optional voxel workloads
 
 The CPU snapshot script also runs `rayengine-voxel`'s stable storage, access,
-edit, and traversal workloads. Filter with `voxel_` to record this plugin alone:
+edit, traversal, snapshot and chunk meshing workloads. Filter with `voxel_`:
 
 ```sh
-scripts/benchmark.sh save voxel-v1 voxel_
-scripts/benchmark.sh compare voxel-v1 voxel_
+scripts/benchmark.sh save voxel-meshing-v1 voxel_
+scripts/benchmark.sh compare voxel-meshing-v1 voxel_
+scripts/render_benchmark.sh save voxel-render-v1 voxel_
+scripts/render_benchmark.sh compare voxel-render-v1 voxel_
 ```
 
-The plugin rustdoc records fixture sizes, cell layout, query policies, and timing
-boundaries. These workloads initialize no renderer or filesystem save I/O.
+New mesh IDs need a new baseline; existing storage/query IDs and fixtures retain
+their definitions. CPU generation compares culled and greedy modes on solid,
+stepped terrain, checkerboard, mixed-tile and cutout chunks. Native upload/draw
+cases use the same solid/terrain/checkerboard/cutout geometry, a 64×64 target,
+and explicit resource byte reports. Greedy merging preserves tile repetition;
+fragmented surfaces can cost more CPU without reducing geometry. Check both
+counts and timings rather than assuming merging always improves performance.
+The [plugin guide](https://github.com/nayupls1/rayengine/blob/master/plugins/voxel/README.md)
+records fixtures and timing boundaries. CPU cases initialize no renderer or
+save I/O; native cases include driver work/stalls and are not GPU timers or FPS.

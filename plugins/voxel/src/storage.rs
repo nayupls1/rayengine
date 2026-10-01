@@ -199,6 +199,8 @@ struct Resident {
 /// Missing data is not air. Reads never allocate; edits never create chunks.
 /// This is storage, not an automatic streaming/persistence service.
 pub struct VoxelWorld {
+    // Distinguishes dependency stamps from separate worlds sharing a registry.
+    pub(crate) identity: Arc<()>,
     registry: Arc<BlockRegistry>,
     chunks: HashMap<ChunkPos, Resident>,
     max_chunks: usize,
@@ -211,6 +213,7 @@ impl VoxelWorld {
     /// process-memory/VRAM limit. No chunk capacity is allocated in this call.
     pub fn new(registry: Arc<BlockRegistry>, max_chunks: usize) -> Self {
         Self {
+            identity: Arc::new(()),
             registry,
             chunks: HashMap::new(),
             max_chunks,
@@ -241,6 +244,19 @@ impl VoxelWorld {
     /// Immutable resident chunk, or None for missing data.
     pub fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
         self.chunks.get(&pos).map(|c| &c.chunk)
+    }
+    /// Borrows a resident and captures its identity/content stamp with one map
+    /// lookup. Useful when copying chunk data and recording worker dependencies.
+    pub fn chunk_with_stamp(&self, pos: ChunkPos) -> Option<(&Chunk, ChunkStamp)> {
+        self.chunks.get(&pos).map(|c| {
+            (
+                &c.chunk,
+                ChunkStamp {
+                    generation: c.generation,
+                    revision: c.chunk.revision(),
+                },
+            )
+        })
     }
     /// Current resident generation/revision, or None when missing.
     pub fn stamp(&self, pos: ChunkPos) -> Option<ChunkStamp> {
