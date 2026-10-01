@@ -34,3 +34,12 @@ harness = false
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "textures"
+harness = false
+
+[[bench]]
+name = "textures_render"
+harness = false
+required-features = ["render"]
