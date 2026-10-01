@@ -1,0 +1,21 @@
+[package]
+name = "rayengine-voxel"
+description = "CPU voxel blocks, bounded chunk storage, and grid queries for rayengine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rayengine-core.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "voxel"
+harness = false
+
+[lints]
+workspace = true
