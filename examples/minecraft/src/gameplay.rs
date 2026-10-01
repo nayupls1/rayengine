@@ -94,8 +94,14 @@ impl Player {
     fn rebase(&mut self) {
         let next = origin_at(self.position()).expect("query kept player within grid");
         let delta = (as_global(self.origin) - as_global(next)).as_vec3();
-        self.controller.body.position += delta;
-        self.controller.previous += delta;
+        if next == self.origin {
+            return;
+        }
+        let half = self.controller.body.half_size;
+        self.controller.body.position =
+            shift_center(self.controller.body.position, half, delta, &self.colliders);
+        self.controller.previous =
+            shift_center(self.controller.previous, half, delta, &self.colliders);
         self.origin = next;
     }
     /// Current eye ray (no interpolation), stopped by unloaded terrain.
@@ -107,6 +113,45 @@ impl Player {
             (camera.target - camera.position).as_dvec3(),
         )
     }
+}
+// A contact resolved in one f32 coordinate system can overlap after translation:
+// e.g. 16.7 + 0.3 rounds to 17, but (16.7 - 16) + 0.3 can exceed 1.
+// Retain the separating planes from the old bounds when moving the origin.
+fn shift_center(position: Vec3, half: Vec3, delta: Vec3, solids: &[Aabb3]) -> Vec3 {
+    let old = Aabb3 {
+        min: position - half,
+        max: position + half,
+    };
+    let mut center = position + delta;
+    for solid in solids {
+        let shifted = Aabb3 {
+            min: solid.min + delta,
+            max: solid.max + delta,
+        };
+        let bounds = Aabb3 {
+            min: center - half,
+            max: center + half,
+        };
+        if !bounds.intersects(&shifted) {
+            continue;
+        }
+        for axis in 0..3 {
+            if old.max[axis] <= solid.min[axis] && center[axis] + half[axis] > shifted.min[axis] {
+                center[axis] = shifted.min[axis] - half[axis];
+                if center[axis] + half[axis] > shifted.min[axis] {
+                    center[axis] = center[axis].next_down();
+                }
+            } else if old.min[axis] >= solid.max[axis]
+                && center[axis] - half[axis] < shifted.max[axis]
+            {
+                center[axis] = shifted.max[axis] + half[axis];
+                if center[axis] - half[axis] < shifted.max[axis] {
+                    center[axis] = center[axis].next_up();
+                }
+            }
+        }
+    }
+    center
 }
 fn origin_at(position: DVec3) -> Option<BlockPos> {
     if !position.is_finite()

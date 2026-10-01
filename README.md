@@ -40,7 +40,7 @@ cargo run --release -p rayengine-minecraft --features render --bin minecraft -- 
 The demo streams hills, caves, trees and ores with original fallback colors.
 WASD/mouse moves and looks; Space jumps, held LMB mines, RMB places, and 1–3
 select dirt/stone/wood. Collision and reach queries use the resident edited world.
-Arrows move the focus. Its game-owned recipe and CPU fixtures are documented in
+Its game-owned recipe and CPU fixtures are documented in
 [the terrain guide](examples/minecraft/README.md).
 
 Create a game:

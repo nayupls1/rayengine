@@ -237,3 +237,44 @@ fn far_origin_movement_preserves_global_selection_and_interpolation() {
         assert!(Player::new(feet).is_err());
     }
 }
+
+#[test]
+fn rebasing_keeps_resolved_contacts_outside_solids() {
+    let (mut world, stone, mut player) = fixture();
+    // Cross the X chunk boundary and resolve against the next cell's wall
+    // during the same step, before moving the physics origin.
+    let wall = BlockPos::new(1, 2, 0);
+    world.set_block(wall, stone).unwrap();
+    player.controller.body.velocity.x = 100.0;
+    player
+        .step(&world, FirstPersonInput::default(), 0.03)
+        .unwrap();
+    assert_eq!(player.origin.x, 0);
+    let bounds = block_bounds(wall, player.origin).unwrap();
+    assert!(
+        !player.controller.body.bounds().intersects(&bounds),
+        "{:?} overlaps {bounds:?}",
+        player.controller.body.bounds()
+    );
+
+    // A normal jump can reach a ceiling on the same tick it crosses Y=16.
+    let ceiling = BlockPos::new(-1, 17, 0);
+    world.set_block(ceiling, stone).unwrap();
+    let mut player = Player::new(DVec3::new(-0.5, 15.0, 0.5)).unwrap();
+    player
+        .controller
+        .teleport(Vec3::new(15.5, 15.98, 0.5))
+        .unwrap();
+    player.controller.body.velocity.y = 8.0;
+    player
+        .step(&world, FirstPersonInput::default(), 1.0 / 60.0)
+        .unwrap();
+    assert_eq!(player.origin.y, 16);
+    assert!(
+        !player
+            .controller
+            .body
+            .bounds()
+            .intersects(&block_bounds(ceiling, player.origin).unwrap())
+    );
+}
