@@ -151,7 +151,7 @@ pub struct InteractionReport {
     pub selected: Option<VoxelHit>,
     /// Successful mutation; collision sees it immediately, rendering remeshes asynchronously.
     pub edit: Option<BlockEdit>,
-    /// Fraction of hand-mining duration completed, in [0,1].
+    /// Fraction of hand-mining duration completed, in `0..=1`.
     pub progress: f32,
 }
 impl Interaction {
