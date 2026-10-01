@@ -14,11 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: CPU-only primitives require no raylib toolchain
-        run: cargo test --locked -p rayengine-core -p rayengine-voxel
+        run: cargo test --locked -p rayengine-core -p rayengine-voxel -p rayengine-minecraft
       - name: Headless voxel examples
         run: |
           cargo run --locked -p rayengine-voxel --example query
           cargo run --locked -p rayengine-voxel --example stream
+          cargo run --locked -p rayengine-minecraft --bin terrain -- --seed 42 --chunk=-1,2,0
 
   linux:
     runs-on: ubuntu-latest
@@ -39,7 +40,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
       - name: Benchmark harnesses compile
-        run: cargo bench --locked --workspace --features rayengine-voxel/render --no-run
+        run: cargo bench --locked --workspace --features rayengine-voxel/render,rayengine-minecraft/render --no-run
 
   msrv:
     runs-on: ubuntu-latest
@@ -52,4 +53,4 @@ jobs:
       - name: Minimum Rust version
         run: |
           rustup toolchain install 1.89.0 --profile minimal
-          cargo +1.89.0 check --locked --workspace --all-targets --features rayengine-voxel/render
+          cargo +1.89.0 check --locked --workspace --all-targets --features rayengine-voxel/render,rayengine-minecraft/render

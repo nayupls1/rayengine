@@ -514,8 +514,8 @@ and survive; the image probe separately verifies holes, repetition and depth.
 Record GPU/driver/backend via the existing native metadata workflow. Tests include
 all-face winding/tiles, all six neighbor slabs, an independent seeded unit-face
 oracle, worst-case splits, receipt identity, and native failure rollback/pixels.
-Terrain generation, save schemas, and survival content remain separate
-roadmap issues.
+The versioned terrain recipe and safe spawn live in `examples/minecraft`;
+save schemas and survival content remain separate roadmap issues.
 
 Streaming benchmarks use versioned fixtures:
 `voxel_stream_v1/idle_9` measures steady scheduling with nine installed receipts,
