@@ -310,6 +310,16 @@ impl InitContext<'_, '_> {
         self.assets
             .load_texture(self.raylib, self.thread, path.as_ref())
     }
+    /// Uploads a CPU image into a new run-owned texture without filesystem I/O.
+    /// Does not cache by image identity. The image may be dropped immediately
+    /// afterward; explicit unloading permanently invalidates the returned handle.
+    pub fn texture_from_image(
+        &mut self,
+        image: &raylib::prelude::Image,
+    ) -> Result<TextureId, Error> {
+        self.assets
+            .upload_texture_image(self.raylib, self.thread, image)
+    }
     /// Loads/caches a model by canonical path.
     pub fn model(&mut self, path: impl AsRef<Path>) -> Result<ModelId, Error> {
         self.assets
@@ -855,7 +865,16 @@ mod tests {
                 let fresh = context.texture(&path)?;
                 assert_ne!(fresh, first);
                 assert!(context.assets.texture(first).is_none());
-                self.texture = Some(fresh);
+                let image = Image::gen_image_color(8, 8, Color::GREEN);
+                let generated = context.texture_from_image(&image)?;
+                assert_eq!(context.assets.texture(generated).unwrap().width, 8);
+                context.assets.unload_texture(generated);
+                let replacement = context.texture_from_image(&image)?;
+                assert_ne!(replacement, generated);
+                assert!(context.assets.texture(generated).is_none());
+                context.assets.unload_texture(fresh);
+                // The CPU image is dropped after init; the uploaded texture survives.
+                self.texture = Some(replacement);
                 let path = self.directory.join("triangle.obj");
                 let model = context.model(&path)?;
                 assert_eq!(model, context.model(&path)?);

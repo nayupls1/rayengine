@@ -80,3 +80,18 @@ For fonts or other native resources, use `InitContext::raylib` and
 raylib access. Bounded CPU jobs and staged mesh uploads are covered in
 [background work](crate::guides::background_work); automatic file asset pipelines
 and hot reload remain outside 0.0.1.
+
+Generated or imported CPU images can upload directly during initialization:
+
+```rust,no_run
+use rayengine::{prelude::*, raylib::prelude::Image};
+fn upload(ctx: &mut InitContext<'_, '_>) -> Result<TextureId, Error> {
+    let image = Image::gen_image_color(16, 16, Color::GREEN);
+    ctx.texture_from_image(&image)
+}
+```
+
+`texture_from_image` creates a new run-owned handle on every call. It does not
+cache or write a file. The CPU image may be dropped after uploading; unload the
+texture through `Assets::unload_texture` when it is no longer used. Materials
+borrow texture handles, so unload dependent meshes/materials first.
