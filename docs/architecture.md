@@ -19,7 +19,10 @@ are optional targets; browser and mobile are outside the current scope.
 - `examples/minecraft`: game-owned integer terrain recipe, concrete blocks,
   safe spawn, CPU-tested movement/interaction rules and an optional native
   first-person scene; CPU-only by default. Local collision adapters live in the
-  voxel plugin, while mining duration, placement and block choices stay in the game.
+  voxel plugin, while mining duration, placement, block choices and the small
+  PNG asset-subset loader stay in the game. Textures default to original pixel
+  art; external images are extracted once by a separate Python helper, read from
+  an explicit local directory and never distributed.
 
 ## Design contract
 
