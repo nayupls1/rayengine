@@ -174,6 +174,12 @@ fn all_six_neighbor_slabs_and_signed_border_edits_invalidate_mesh_dependencies()
             .unwrap();
         assert!(!before.dependencies().is_current(&world));
         let input = MeshInput::capture(&world, owner).unwrap();
+        let stamps = input.dependencies().stamps();
+        assert_eq!(stamps[0], world.stamp(owner));
+        for face in Face::ALL {
+            let pos = owner.neighbor(face).unwrap();
+            assert_eq!(stamps[face.index() + 1], world.stamp(pos));
+        }
         let after = input.build(Default::default()).unwrap();
         assert_eq!(after.stats().visible_faces, 1280);
         assert_eq!(after.stats().quads, 5);

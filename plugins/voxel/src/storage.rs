@@ -245,6 +245,19 @@ impl VoxelWorld {
     pub fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
         self.chunks.get(&pos).map(|c| &c.chunk)
     }
+    /// Borrows a resident and captures its identity/content stamp with one map
+    /// lookup. Useful when copying chunk data and recording worker dependencies.
+    pub fn chunk_with_stamp(&self, pos: ChunkPos) -> Option<(&Chunk, ChunkStamp)> {
+        self.chunks.get(&pos).map(|c| {
+            (
+                &c.chunk,
+                ChunkStamp {
+                    generation: c.generation,
+                    revision: c.chunk.revision(),
+                },
+            )
+        })
+    }
     /// Current resident generation/revision, or None when missing.
     pub fn stamp(&self, pos: ChunkPos) -> Option<ChunkStamp> {
         self.chunks.get(&pos).map(|c| ChunkStamp {

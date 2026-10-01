@@ -185,7 +185,7 @@ assert!(!mesh.dependencies().is_current(&world));
 
 [`MeshInput::capture`] copies owner cells and six neighboring border slabs into
 an owned 18³ padded buffer (11,664 block bytes, excluding registry/metadata).
-It performs seven chunk lookups and can be moved to the existing CPU job system.
+It performs at most seven chunk lookups and can be moved to the existing CPU job system.
 Building reads the snapshot, never live world state. Receipts retain world
 identity and owner/neighbor installation/revision stamps, including absent
 neighbors. [`MeshDependencies::is_current`] rejects changed owners/neighbors,

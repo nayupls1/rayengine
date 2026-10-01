@@ -164,13 +164,15 @@ pub struct MeshInput {
     dependencies: MeshDependencies,
 }
 impl MeshInput {
-    /// Copies 4096 owner cells and up to 1536 neighboring cells, with seven map
+    /// Copies 4096 owner cells and up to 1536 neighboring cells, with at most seven map
     /// lookups. Missing owner is an error; neighboring absence is recorded.
     pub fn capture(world: &VoxelWorld, position: ChunkPos) -> Result<Self, MeshingError> {
         position.origin()?;
-        let owner = world
-            .chunk(position)
+        let (owner, stamp) = world
+            .chunk_with_stamp(position)
             .ok_or(VoxelError::MissingChunk(position))?;
+        let mut stamps = [None; 7];
+        stamps[0] = Some(stamp);
         let mut blocks = reserved(PAD * PAD * PAD)?;
         blocks.resize(PAD * PAD * PAD, BlockId::AIR);
         for y in 0..16 {
@@ -181,9 +183,13 @@ impl MeshInput {
             }
         }
         for face in Face::ALL {
-            let Some(neighbor) = position.neighbor(face).and_then(|p| world.chunk(p)) else {
+            let Some((neighbor, stamp)) = position
+                .neighbor(face)
+                .and_then(|p| world.chunk_with_stamp(p))
+            else {
                 continue;
             };
+            stamps[face.index() + 1] = Some(stamp);
             let (axis, u, v, positive) = axes(face);
             for b in 0..16 {
                 for a in 0..16 {
@@ -204,7 +210,7 @@ impl MeshInput {
             dependencies: MeshDependencies {
                 identity: world.identity.clone(),
                 position,
-                stamps: dependency_stamps(world, position),
+                stamps,
             },
         })
     }
