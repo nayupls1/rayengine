@@ -52,3 +52,7 @@ harness = false
 name = "survival_render"
 harness = false
 required-features = ["render"]
+
+[[bench]]
+name = "persistence"
+harness = false

@@ -112,7 +112,7 @@ unloaded placement consumes nothing.
 
 Mined items appear as small colored world cubes. Move within two blocks of a
 pickup's center to collect it automatically. Full inventories retain unaccepted
-items. Pickups are stationary, session-local and never silently despawn. At 128
+items. Pickups are stationary and never silently despawn; checkpoints retain uncollected items. At 128
 live pickups, mining pauses before changing terrain until room is freed by
 collection. Draw distance is bounded to 64 blocks; there is no dropped-item
 physics, tool durability, hunger, passive regeneration or death inventory loss
@@ -155,8 +155,111 @@ assert_eq!(health.value(), 20);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-World edits, inventory and pickups remain in memory for this session. Disk saves
-are the next roadmap issue; quitting currently discards progress.
+## World saves
+
+Choose a slot with `--save PATH`. Without it, progress stays in memory for the
+current session. The ignored `local-saves/` directory is suitable for local worlds:
+
+```sh
+cargo run --release -p rayengine-minecraft --features render --bin minecraft -- --seed 42 --save examples/minecraft/local-saves/world.save
+# Reopen using the saved seed/settings; --textures can be chosen independently.
+cargo run --release -p rayengine-minecraft --features render --bin minecraft -- --save examples/minecraft/local-saves/world.save
+```
+
+A new slot starts with seed42 unless `--seed` is supplied. An existing slot
+restores the recorded seed; a conflicting explicit seed fails before native init.
+Only a missing file creates a new world. Corrupt containers, unsupported container
+or game schemas, generator/version/registry mismatches, malformed settings and
+invalid gameplay state return errors and preserve the slot. There is no automatic
+migration or fallback to a fresh world. Back up a rejected slot and choose a new
+path to start over. Interrupted sibling temporary files are ignored; the named
+slot is the only authoritative checkpoint.
+
+The first frame queues a checkpoint; autosave requests occur every ten seconds
+of fixed simulation time, including inventory/death screens. F5 saves or retries
+a failed write. Dirty out-of-range chunks also request a checkpoint. Requests
+coalesce while the single worker is busy. Quit/F10 freezes gameplay, releases the
+cursor and waits for the newest requested state before exit; failure resumes the
+scene with an error and leaves dirty chunks loaded. Native window close/`--frames`
+also captures the latest state during scene destruction; the CLI reports final
+save errors with a failing exit status. Final shutdown waits for disk I/O, which
+can block if the filesystem is stalled. Forced termination can lose progress
+since the last successful checkpoint.
+
+Game schema **1** uses the core's format-one `RAYSAVE` container and CRC32. Its
+bounded JSON records generator name/version/seed/settings, ordered block names,
+original respawn support, chunk-relative simulation position/velocity/look,
+health/airborne fall peak, selected slot/all 36 inventory slots, all uncollected
+pickups, and dense cells for every historically modified chunk. Untouched terrain
+regenerates from the original recipe. Strict loading checks coordinates, raw IDs,
+counts, finite poses, body clearance and spawn identity before installing state.
+Transient mining progress, jump grace/buffers, UI focus, renderer resources and
+queued generation work restart fresh. Textures are selected separately on launch.
+
+Snapshots capture blocks and survival state together at one simulation point;
+encoding, checksums, temporary writes, flushes and replacement run on one worker,
+with one outstanding job/result. Only dirty resident cell buffers are copied;
+unchanged saved history shares immutable buffers. After a successful write, the
+loader installs that checkpoint **before** acknowledging each exact chunk
+installation/revision. Edits made while saving stay dirty. A failed write never
+marks chunks clean; even a successful rename followed by a failed directory flush
+keeps them pinned until an explicit retry succeeds. This retains core errors and
+their `NotCommitted`/`Unknown`/`Committed` recovery information.
+
+Limits are 160 resident/copied chunks per snapshot, 1,024 historical modified
+chunks (8 MiB dense u16 cells), 128 pickups, and 12 MiB encoded payload. The
+resident dirty cell copy is at most 1.25 MiB; snapshots, maps, JSON/container
+buffers and allocator overhead add to process memory. Saved history remains in
+memory, including evicted chunks. At the history cap, mining/placement may modify
+existing edited chunks, but new chunk histories are denied **before** changing a
+block, dropping or consuming an item. Restoring original cells does not reclaim a
+history slot in this version. Failed writes can pin all 160 resident chunks and
+pause movement/new loads; repair the filesystem and press F5 to resume. Chunk
+serialization never runs inside the eviction callback.
+
+Linux defaults to durable core replacement: sync the temporary file, replace the
+slot, sync its parent. Newly created save directories/entries are synced too.
+Use `--atomic-save` with `--save` to opt into replacement without power-loss
+flush guarantees; this is also the option for other desktops. See
+[engine save guarantees](../../crates/rayengine/docs/saves.md) for filesystem and
+commit-state limits. A persistent `PATH.lock` sidecar holds an exclusive advisory
+[OS file lock](https://doc.rust-lang.org/std/fs/struct.File.html#method.try_lock)
+throughout the session and all writes. A second cooperating game instance fails
+instead of sharing a slot. The OS releases the lock on process exit/crash; the
+empty sidecar may remain. Choose a regular file path; save/lock symlinks and names
+ending in `.lock` are rejected.
+
+The CPU snapshot API needs no display or raylib:
+
+```rust
+use std::sync::Arc;
+use rayengine_minecraft::{gameplay::Player, persistence::{Snapshot, SCHEMA_VERSION, LIMITS},
+    survival::{Survival, Item}, terrain::{Terrain, TerrainSettings}};
+use rayengine_core::save;
+use rayengine_voxel::prelude::*;
+let terrain = Arc::new(Terrain::new(42, TerrainSettings::default())?);
+let spawn = terrain.find_spawn(0, 0, 16, 1089)?;
+let player = Player::new(spawn.feet())?;
+let mut survival = Survival::default();
+let checkpoint = Snapshot::new(terrain.clone(), spawn.support, &player, &survival)?;
+let mut world = VoxelWorld::new(terrain.registry(), 160);
+let position = spawn.support.split().0;
+world.insert_chunk(position, terrain.chunk(position)?)?;
+world.set_block(spawn.support, BlockId::AIR)?;
+survival.inventory.insert(Item::Dirt, 1);
+let (snapshot, stamps) = checkpoint.capture(&world, &player, &survival)?;
+let container = save::encode(SCHEMA_VERSION, &snapshot.encode()?, LIMITS)?;
+let data = save::decode(&container, LIMITS)?;
+data.require_schema(SCHEMA_VERSION)?;
+let restored = Snapshot::decode(&data.payload)?;
+assert_eq!(restored.survival()?.inventory.count(Item::Dirt), 1);
+assert_eq!(restored.chunk(position)?.get(spawn.support.split().1), BlockId::AIR);
+// Encoding alone leaves chunks dirty. Saving acknowledges these exact stamps
+// only after the worker successfully replaces the file.
+assert_eq!(stamps.len(), 1);
+assert!(world.chunk(position).unwrap().is_dirty());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
 
 ## Textures and local Minecraft assets
 
@@ -280,17 +383,18 @@ at both horizontal and vertical seams and negative/far coordinates.
 The fixed block order after air is bedrock, stone, dirt, grass, coal ore, iron
 ore, wood, leaves. Leaves are solid cutout cells. Block identities, hardness and
 tiles are game-owned. A recipe version change is required for cell/noise,
-feature-precedence, or block-mapping changes. Future saves must record generator
+feature-precedence, or block-mapping changes. Checkpoints record generator
 key/version, **seed and validated settings**, plus the registry mapping and edits.
 A version alone does not identify worlds with different settings.
 
 Untouched generated chunks are explicitly marked saved because the recipe can
 regenerate them. An edit through `VoxelWorld::set_block` marks its chunk dirty;
 streaming retains it until the game acknowledges an exact saved stamp. The
-game's eviction policy keeps dirty chunks; it performs no file I/O. Edits survive
-travel within this session but not restart. Pinned dirty chunks consume the same
-160-chunk resident budget: enough distant edited chunks can block new loads, at
-which point movement pauses. A later save-system issue will resolve that limit.
+game's eviction callback requests a background checkpoint and keeps dirty chunks;
+it performs no file I/O. Successful writes make exact saved revisions evictable;
+the loader restores committed edits on return. Without `--save`, dirty chunks
+remain pinned for this session. Pinned dirty chunks consume the same 160-chunk
+resident budget and can block new loads until a successful save.
 
 ## Spawn and limits
 
@@ -423,3 +527,37 @@ vsync disabled; measurements include CPU submissions/driver stalls, not GPU
 elapsed time. No terrain streaming or texture uploads enter these workloads.
 Benchmark IDs/fixtures stay fixed across future implementations; scripts export
 commit/compiler/machine/renderer provenance and matching-workload comparisons.
+
+## Persistence validation and benchmark fixtures
+
+CPU tests cover strict schema/registry/generator admission, invalid player/item/
+chunk coordinates/counts, interrupted siblings, corrupt CRC, bounded encoding,
+single-slot exclusion, concurrent edits/reinstallation during blocked writes,
+failures before replacement and after directory flush, exact dirty-chunk eviction/
+reload, modified-history backpressure, retained pickups and airborne fall damage.
+The native persistence probe mines a log through gameplay, saves inside inventory,
+waits for F10's latest checkpoint, checks final native-close saving and reopens the
+world to verify terrain, inventory, health and look. Screenshots are exported to
+`artifacts/smoke/minecraft-save-{write,reload}.png`.
+
+```sh
+scripts/benchmark.sh save minecraft-persistence-v1 minecraft_persistence_v1
+scripts/benchmark.sh compare minecraft-persistence-v1 minecraft_persistence_v1
+# Optional existing core file benchmarks record filesystem/durability metadata:
+RAYENGINE_SAVE_IO_BENCH=1 scripts/benchmark.sh save save-io-v1 save_file
+RAYENGINE_SAVE_IO_BENCH=1 scripts/benchmark.sh compare save-io-v1 save_file
+```
+
+Nine `minecraft_persistence_v1` CPU cases measure capture of 1/160 dirty chunks,
+one dirty chunk with 1,024 prior histories, and encode/decode of 1/128/1,024 edited
+chunks. Fixtures use schema1/generator1/seed42/default settings and the original
+safe spawn, empty survival state, chunks `(i-512,10,-8)` and cell IDs `index % 9`.
+The raw-ID fingerprint is `2731d4deb7933cdd`. Canonical payloads contain
+8,929 / 1,053,885 / 8,425,443 bytes; benchmark assertions freeze their hashes.
+Setup, fixture validation and output
+drops are untimed; capture includes buffer/map copying and gameplay validation;
+encoding is bounded canonical JSON; decoding includes field/budget/compatibility
+checks and gameplay reconstruction. No disk/window/GPU work is timed. Preserve
+IDs and fixtures when optimizing; the standard scripts export clean-commit,
+compiler/machine provenance, estimates and matching-workload comparisons. Core
+save/container/file workloads cover the unchanged CRC/replacement/flush path.
