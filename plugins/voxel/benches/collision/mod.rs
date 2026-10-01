@@ -105,8 +105,8 @@ pub fn workloads(c: &mut Criterion) {
     ] {
         let ray = GridRay::new(DVec3::new(-0.5, 2.6, 0.5), direction).unwrap();
         let query = || {
-            world
-                .raycast(ray, options, |id, def| {
+            black_box(&world)
+                .raycast(black_box(ray), black_box(options), |id, def| {
                     id != BlockId::AIR && def.render != RenderKind::Invisible
                 })
                 .unwrap()

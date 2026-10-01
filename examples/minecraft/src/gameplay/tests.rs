@@ -180,3 +180,60 @@ fn missing_terrain_pauses_gravity_and_rebase_preserves_camera_velocity() {
     assert_eq!(player.position(), before);
     assert_eq!(player.controller.body.velocity, velocity);
 }
+
+#[test]
+fn far_origin_movement_preserves_global_selection_and_interpolation() {
+    let (base, stone, _) = fixture();
+    let mut world = VoxelWorld::new(base.shared_registry(), 4);
+    let edge = i32::MAX - 31; // Integer chunk origin, with one further chunk available.
+    for x in [edge, edge + 16] {
+        world
+            .insert_chunk(
+                BlockPos::new(x, 0, 0).split().0,
+                Chunk::filled(world.shared_registry(), BlockId::AIR).unwrap(),
+            )
+            .unwrap();
+    }
+    for x in edge..=edge + 31 {
+        for z in 0..=2 {
+            world.set_block(BlockPos::new(x, 0, z), stone).unwrap();
+        }
+    }
+    let mut player = Player::new(DVec3::new(f64::from(edge) + 15.5, 1.0, 1.5)).unwrap();
+    player.controller.set_look(0.0, 0.0).unwrap();
+    let dt = 1.0 / 60.0;
+    for _ in 0..20 {
+        let previous = player.position();
+        player
+            .step(
+                &world,
+                FirstPersonInput {
+                    movement: rayengine_voxel::glam::Vec2::X,
+                    ..Default::default()
+                },
+                dt,
+            )
+            .unwrap();
+        assert!(
+            (as_global(player.origin) + player.controller.previous.as_dvec3() - previous).length()
+                < 0.00001
+        );
+        assert!(player.controller.body.grounded);
+    }
+    assert_eq!(player.origin.x, edge + 16);
+    assert!((player.position().y - 1.9).abs() < 0.0001);
+    let floor_x = player.position().x.floor() as i32;
+    let target = BlockPos::new(floor_x, 2, 0);
+    world.set_block(target, stone).unwrap();
+    assert!(
+        matches!(player.selection(&world).unwrap().outcome,RaycastOutcome::Hit(hit) if hit.position==target)
+    );
+    for feet in [
+        DVec3::splat(f64::NAN),
+        DVec3::new(f64::from(i32::MAX) + 0.9, 1.0, 0.5),
+        DVec3::new(0.5, f64::from(i32::MAX), 0.5),
+        DVec3::new(f64::from(i32::MIN) + 0.1, 1.0, 0.5),
+    ] {
+        assert!(Player::new(feet).is_err());
+    }
+}

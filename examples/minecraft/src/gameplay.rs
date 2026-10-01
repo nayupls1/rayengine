@@ -36,6 +36,14 @@ impl Player {
                 ..Default::default()
             },
         )?;
+        let bounds = controller.body.bounds();
+        let global_min = as_global(origin) + bounds.min.as_dvec3();
+        let global_max = as_global(origin) + bounds.max.as_dvec3();
+        if global_min.min_element() < f64::from(i32::MIN)
+            || global_max.max_element() > f64::from(i32::MAX) + 1.0
+        {
+            return Err(FirstPersonError("spawn body outside block grid"));
+        }
         controller.set_look(0.0, -0.15)?;
         Ok(Self {
             origin,
