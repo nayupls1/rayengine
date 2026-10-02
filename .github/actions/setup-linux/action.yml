@@ -1,0 +1,18 @@
+name: Linux build environment
+description: Install the release toolchain and native SDK build prerequisites
+inputs:
+  toolchain:
+    description: Rust toolchain (publishing requires Cargo 1.90 or later)
+    default: '1.98.1'
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: rustfmt, clippy
+    - name: Native raylib build prerequisites
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake clang libclang-dev pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev wayland-protocols libegl1-mesa-dev xvfb

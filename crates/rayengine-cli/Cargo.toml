@@ -6,6 +6,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rayengine-cli"
+keywords = ["game", "raylib", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "docs/**", "examples/**", "benches/**", "tests/**"]
 
 [[bin]]
 name = "rayengine"

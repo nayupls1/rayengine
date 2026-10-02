@@ -2,6 +2,13 @@
 
 ## 0.0.1
 
+- Manually dispatched crates.io releases gated by the full CI suite, coordinated
+  crate dry runs, package contents/license checks and installed consumer probes.
+- CLI starters use the matching crates.io SDK version by default, with explicit
+  `--sdk-path` support for checkout development.
+- Optional voxel plugin with CPU storage, signed queries, meshing and streaming,
+  plus the SDK render adapter; repository-only Minecraft survival demo and saves.
+
 - Linux-first Cargo workspace with a display-independent core, raylib SDK,
   project CLI, and playable 2D/3D examples.
 - Dense typed components, optional validated transform hierarchy, stable entity

@@ -55,19 +55,22 @@ Create a game:
 
 ```sh
 cargo run -p rayengine-cli -- doctor
-cargo run -p rayengine-cli -- new ../my-game --kind 2d
+cargo run -p rayengine-cli -- new ../my-game --kind 2d --sdk-path "$PWD/crates/rayengine"
 # Or --kind 3d
 cargo run --manifest-path ../my-game/Cargo.toml
 ```
 
 The CLI supports `new`, `new-plugin`, `info`, `check`, `build`, `run`, and `doctor`. Add
 `--json` for a versioned result, structured errors and preserved Cargo diagnostics.
-Scaffolds use a local SDK path, inferred from this checkout or supplied with
-`--sdk-path /path/to/rayengine/crates/rayengine`; nothing is published to crates.io yet.
+Scaffolds use the matching crates.io SDK version by default. Once 0.0.1 is
+published, install with `cargo install rayengine-cli --version 0.0.1 --locked`
+and create a project with `rayengine new my-game --kind 2d`. Pass
+`--sdk-path /path/to/rayengine/crates/rayengine` for local engine development.
+See the [release workflow and checklist](docs/crates_io_release.md).
 
 Optional extensions live under `plugins/`; games select them through Cargo.
 Try `cargo run -p rayengine-beacons --example composition`, or create a library
-with `cargo run -p rayengine-cli -- new-plugin ../my-game/plugins/my-plugin`.
+with `cargo run -p rayengine-cli -- new-plugin ../my-game/plugins/my-plugin --sdk-path "$PWD/crates/rayengine"`.
 The game owns plugin instances and calls their typed hooks explicitly.
 
 Rust **1.89+**, CMake, a C compiler, libclang and Linux graphics/audio development

@@ -28,7 +28,7 @@ enum Action {
         /// Override the package name (default: directory name).
         #[arg(long)]
         name: Option<String>,
-        /// Path to the rayengine SDK crate; inferred when built from this repository.
+        /// Use a local SDK crate instead of the published SDK version.
         #[arg(long)]
         sdk_path: Option<PathBuf>,
     },
@@ -38,7 +38,7 @@ enum Action {
         /// Override the package name (default: directory name).
         #[arg(long)]
         name: Option<String>,
-        /// Path to the SDK crate; inferred when built from this repository.
+        /// Use a local SDK crate instead of the published SDK version.
         #[arg(long)]
         sdk_path: Option<PathBuf>,
     },
@@ -250,36 +250,43 @@ fn create_package(
         })
         .ok_or_else(|| Failure::new("invalid_name", "specify a package name with --name"))?;
     validate_name(&name)?;
-    let sdk = sdk_path.unwrap_or_else(|| {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("crate directory")
-            .join("rayengine")
-    });
-    let sdk = sdk.canonicalize().map_err(|_| {
-        Failure::new(
-            "missing_sdk",
-            "pass --sdk-path pointing to the rayengine SDK crate",
-        )
-    })?;
-    let sdk_manifest = fs::read_to_string(sdk.join("Cargo.toml"))
-        .map_err(|e| Failure::new("missing_sdk", e.to_string()))?;
-    if !sdk_manifest
-        .lines()
-        .map(str::trim)
-        .skip_while(|line| *line != "[package]")
-        .skip(1)
-        .take_while(|line| !line.starts_with('['))
-        .any(|line| line == "name = \"rayengine\"")
-    {
-        return Err(Failure::new(
-            "invalid_sdk",
-            "--sdk-path must point to crates/rayengine, not the workspace root",
-        ));
-    }
-    let sdk_string = sdk
-        .to_str()
-        .ok_or_else(|| Failure::new("invalid_sdk", "SDK path must be UTF-8"))?;
+    let sdk = sdk_path
+        .map(|path| {
+            let sdk = path.canonicalize().map_err(|_| {
+                Failure::new(
+                    "missing_sdk",
+                    "--sdk-path must point to the rayengine SDK crate",
+                )
+            })?;
+            let sdk_manifest = fs::read_to_string(sdk.join("Cargo.toml"))
+                .map_err(|e| Failure::new("missing_sdk", e.to_string()))?;
+            if !sdk_manifest
+                .lines()
+                .map(str::trim)
+                .skip_while(|line| *line != "[package]")
+                .skip(1)
+                .take_while(|line| !line.starts_with('['))
+                .any(|line| line == "name = \"rayengine\"")
+            {
+                return Err(Failure::new(
+                    "invalid_sdk",
+                    "--sdk-path must point to crates/rayengine, not the workspace root",
+                ));
+            }
+            if sdk.to_str().is_none() {
+                return Err(Failure::new("invalid_sdk", "SDK path must be UTF-8"));
+            }
+            Ok(sdk)
+        })
+        .transpose()?;
+    let dependency = match &sdk {
+        Some(path) => format!(
+            "{{ path = {} }}",
+            serde_json::to_string(path.to_str().expect("validated UTF-8"))
+                .expect("string serialization")
+        ),
+        None => format!("\"{}\"", env!("CARGO_PKG_VERSION")),
+    };
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent).map_err(io_error)?;
     }
@@ -298,9 +305,8 @@ fn create_package(
         Template::Plugin => "[workspace]\n",
     };
     let cargo = format!(
-        "[package]\nname = {}\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\n\n[dependencies]\nrayengine = {{ path = {} }}\n\n{workspace}",
-        serde_json::to_string(&name).expect("string serialization"),
-        serde_json::to_string(sdk_string).expect("string serialization")
+        "[package]\nname = {}\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.89\"\n\n[dependencies]\nrayengine = {dependency}\n\n{workspace}",
+        serde_json::to_string(&name).expect("string serialization")
     );
     fs::write(path.join("Cargo.toml"), cargo).map_err(io_error)?;
     let (source_path, source, kind) = match template {
@@ -312,10 +318,10 @@ fn create_package(
     fs::write(path.join(".gitignore"), "/target/\n/artifacts/\n").map_err(io_error)?;
     let readme = match template {
         Template::Game(_) => format!(
-            "# {name}\n\nA rayengine game.\n\n```sh\ncargo run\ncargo check\ncargo run -- --frames 60 --screenshot artifacts/frame.png\n```\n\nThe SDK path is local and can be changed in Cargo.toml. Keep game state in\nordinary Rust components; fixed_update handles simulation and draw handles\ninterpolated rendering. See rayengine's rustdoc guides for the API.\n"
+            "# {name}\n\nA rayengine game.\n\n```sh\ncargo run\ncargo check\ncargo run -- --frames 60 --screenshot artifacts/frame.png\n```\n\nThe SDK dependency can be changed in Cargo.toml. Keep game state in\nordinary Rust components; fixed_update handles simulation and draw handles\ninterpolated rendering. See rayengine's rustdoc guides for the API.\n"
         ),
         Template::Plugin => format!(
-            "# {name}\n\nAn optional rayengine Cargo plugin.\n\n```sh\ncargo check\ncargo test\ncargo doc --no-deps\n```\n\nAdd this library as a path dependency in the consuming game's Cargo.toml.\nStore MyPlugin and PluginState in your game, then call its Plugin hooks\nexplicitly from Game. The engine does not register or invoke plugins.\nConfigure action IDs in the game; keep GPU work on the render thread.\nThe local SDK dependency must match the SDK source/version used by the game.\nIf nested in an existing workspace, exclude this path in its root workspace\nor remove this library's [workspace] and add it to the root members.\nGenerated rayengine games already exclude plugins.\nSee rayengine's plugins rustdoc guide for composition, ownership, and cleanup.\n"
+            "# {name}\n\nAn optional rayengine Cargo plugin.\n\n```sh\ncargo check\ncargo test\ncargo doc --no-deps\n```\n\nAdd this library as a path dependency in the consuming game's Cargo.toml.\nStore MyPlugin and PluginState in your game, then call its Plugin hooks\nexplicitly from Game. The engine does not register or invoke plugins.\nConfigure action IDs in the game; keep GPU work on the render thread.\nThe SDK dependency must match the SDK source/version used by the game.\nIf nested in an existing workspace, exclude this path in its root workspace\nor remove this library's [workspace] and add it to the root members.\nGenerated rayengine games already exclude plugins.\nSee rayengine's plugins rustdoc guide for composition, ownership, and cleanup.\n"
         ),
     };
     fs::write(path.join("README.md"), readme).map_err(io_error)?;

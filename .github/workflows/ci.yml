@@ -4,15 +4,19 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
   core:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
       - name: CPU-only primitives require no raylib toolchain
         run: cargo test --locked -p rayengine-core -p rayengine-voxel -p rayengine-minecraft
       - name: Headless voxel examples
@@ -23,13 +27,10 @@ jobs:
           cargo run --locked -p rayengine-minecraft --bin textures
 
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Native raylib build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang libclang-dev pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev wayland-protocols libegl1-mesa-dev xvfb
+      - uses: ./.github/actions/setup-linux
       - name: SDK, gameplay, CLI and docs
         run: scripts/check.sh
       - name: Generated projects compile
@@ -44,14 +45,42 @@ jobs:
         run: cargo bench --locked --workspace --features rayengine-voxel/render,rayengine-minecraft/render --no-run
 
   msrv:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Native build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang libclang-dev pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+      - uses: ./.github/actions/setup-linux
+        with:
+          toolchain: '1.89.0'
       - name: Minimum Rust version
-        run: |
-          rustup toolchain install 1.89.0 --profile minimal
-          cargo +1.89.0 check --locked --workspace --all-targets --features rayengine-voxel/render,rayengine-minecraft/render
+        run: cargo check --locked --workspace --all-targets --features rayengine-voxel/render,rayengine-minecraft/render
+
+  packages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-linux
+      - name: Release validation guards
+        run: python3 scripts/test_release_check.py
+      - name: Verify all four crates before any first publication
+        run: python3 scripts/release_check.py --package
+      - name: Install minimum Rust for fresh consumer checks
+        run: rustup toolchain install 1.89.0 --profile minimal
+      - name: Test installed CLI and fresh consumers on minimum Rust
+        run: python3 scripts/release_smoke.py --toolchain 1.89.0
+      - name: SDK documentation without native raylib linking
+        run: cargo doc --locked -p rayengine --no-deps --features raylib/nobuild
+        env:
+          RUSTDOCFLAGS: '-D warnings'
+      - name: Default CPU documentation
+        run: cargo doc --locked -p rayengine-core -p rayengine-voxel --no-deps
+        env:
+          RUSTDOCFLAGS: '-D warnings'
+      - name: Upload crate candidates and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: crate-candidates
+          path: |
+            target/package/*.crate
+            target/package/SHA256SUMS
+          if-no-files-found: error

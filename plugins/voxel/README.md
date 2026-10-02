@@ -7,12 +7,16 @@ native build toolchain, window, audio device, or graphics context. Enable `rende
 for the SDK adapter. The engine core has no dependency on this package; games
 own instances, scheduling, call order, and resource teardown.
 
-Add it to a game with a path dependency from this checkout:
+Add it to a game from crates.io:
 
 ```toml
 [dependencies]
-rayengine-voxel = { path = "../rayengine/plugins/voxel" }
+rayengine-voxel = "0.0.1"
 ```
+
+For the SDK rendering adapter, use `rayengine-voxel = { version = "0.0.1", features = ["render"] }`.
+The docs.rs reference covers the default CPU API; rendering is optional.
+During development, a local `path = "../rayengine/plugins/voxel"` dependency also works.
 
 ## Definitions and a loaded world
 

@@ -39,6 +39,7 @@ fn new_reports_files_and_preserves_existing_destination() {
                 .args(["--json", "new"])
                 .arg(&project)
                 .args(["--kind", kind])
+                .current_dir(&scratch.0)
                 .output()
                 .unwrap()
         };
@@ -47,6 +48,10 @@ fn new_reports_files_and_preserves_existing_destination() {
         let response: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(response["schema_version"], 1);
         assert_eq!(response["data"]["kind"], kind);
+        assert!(response["data"]["sdk_path"].is_null());
+        let manifest = fs::read_to_string(project.join("Cargo.toml")).unwrap();
+        assert!(manifest.contains(&format!("rayengine = \"{}\"", env!("CARGO_PKG_VERSION"))));
+        assert!(!manifest.contains("path ="));
         assert!(project.join("Cargo.toml").is_file());
         let previous = fs::read(project.join("src/main.rs")).unwrap();
         let output = invoke();
@@ -106,6 +111,9 @@ fn new_plugin_reports_library_and_rejects_existing_paths_and_invalid_sdk() {
     let response: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(response["command"], "new-plugin");
     assert_eq!(response["data"]["kind"], "plugin");
+    assert!(response["data"]["sdk_path"].is_null());
+    let manifest = fs::read_to_string(project.join("Cargo.toml")).unwrap();
+    assert!(manifest.contains(&format!("rayengine = \"{}\"", env!("CARGO_PKG_VERSION"))));
     assert!(
         response["data"]["files"]
             .as_array()
@@ -138,4 +146,44 @@ fn new_plugin_reports_library_and_rejects_existing_paths_and_invalid_sdk() {
         !rejected.exists(),
         "SDK validation precedes filesystem writes"
     );
+}
+
+#[test]
+fn explicit_sdk_path_is_validated_and_preserved() {
+    let scratch = Scratch::new("cli-local-sdk");
+    let sdk = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("rayengine")
+        .canonicalize()
+        .unwrap();
+    let project = scratch.0.join("local-game");
+    let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "new"])
+        .arg(&project)
+        .arg("--sdk-path")
+        .arg(&sdk)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["data"]["sdk_path"], sdk.to_str().unwrap());
+    let manifest = fs::read_to_string(project.join("Cargo.toml")).unwrap();
+    assert!(manifest.contains(&format!(
+        "rayengine = {{ path = {} }}",
+        serde_json::to_string(sdk.to_str().unwrap()).unwrap()
+    )));
+
+    let rejected = scratch.0.join("missing-sdk-game");
+    let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "new"])
+        .arg(&rejected)
+        .arg("--sdk-path")
+        .arg(scratch.0.join("missing"))
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["error"]["code"], "missing_sdk");
+    assert!(!rejected.exists());
 }
