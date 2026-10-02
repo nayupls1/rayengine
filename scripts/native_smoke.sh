@@ -15,6 +15,7 @@ fi
 cargo test -p rayengine "${features[@]}" native_render_smoke -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_mesh -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_material -- --ignored --test-threads=1
+cargo test -p rayengine "${features[@]}" native_lighting -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_upload -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_state -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_ui -- --ignored --test-threads=1
@@ -50,4 +51,5 @@ if [[ -n "${RAYENGINE_MINECRAFT_TEXTURES:-}" ]]; then
         cargo run -p rayengine-minecraft --features render "${demo_features[@]}" --bin minecraft -- --textures "$RAYENGINE_MINECRAFT_TEXTURES" --seed 42 --hidden --frames 240 --size "$size" --screenshot "artifacts/smoke/$backend/minecraft-import-$size.png"
     done
 fi
+cargo run -p rayengine "${features[@]}" --example lighting -- --hidden --frames 30 --screenshot "artifacts/smoke/$backend/lighting.png"
 echo "Native smoke screenshots: artifacts/smoke/$backend"

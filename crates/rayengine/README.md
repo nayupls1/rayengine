@@ -54,3 +54,8 @@ not rigid-body dynamics or an advanced 3D rendering pipeline. The interactive
 input/image/state testing protocol is deferred. The CLI's JSON project diagnostics
 are available now. Desktop Linux is the supported development target; Windows
 and macOS are optional and not yet verified by this project's CI.
+
+Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
+See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
+and run `cargo run -p rayengine --example lighting` for a generated/imported
+lit/unlit comparison with adjustable lights.
