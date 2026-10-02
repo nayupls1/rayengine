@@ -830,7 +830,7 @@ mod tests {
             let source = block.split("```").next().unwrap();
             std::fs::write(path.join("rayengine.toml"), source).unwrap();
             let manifest =
-                crate::manifest::ProjectManifest::load(&path.join("rayengine.toml")).unwrap();
+                crate::manifest::ProjectManifest::load(path.join("rayengine.toml")).unwrap();
             let project = manifest.resolve(None).unwrap();
             let config = Config::new("rayengine game")
                 .with_project(&project)
