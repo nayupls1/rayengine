@@ -558,7 +558,7 @@ one dirty chunk with 1,024 prior histories, and encode/decode of 1/128/1,024 edi
 chunks. Fixtures use schema1/generator1/seed42/default settings and the original
 safe spawn, empty survival state, chunks `(i-512,10,-8)` and cell IDs `index % 9`.
 The raw-ID fingerprint is `2731d4deb7933cdd`. Canonical payloads contain
-8,929 / 1,053,885 / 8,425,443 bytes; benchmark assertions freeze their hashes.
+8,955 / 1,053,911 / 8,425,469 bytes; benchmark assertions freeze their hashes.
 Setup, fixture validation and output
 drops are untimed; capture includes buffer/map copying and gameplay validation;
 encoding is bounded canonical JSON; decoding includes field/budget/compatibility
