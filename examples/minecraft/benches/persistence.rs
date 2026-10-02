@@ -45,9 +45,9 @@ fn workloads(c: &mut Criterion) {
             (h ^ u64::from(*b)).wrapping_mul(0x100000001b3)
         });
         let expected = match total {
-            1 => (8929, 0x6e67cfe3ed27f119),
-            128 => (1053885, 0x6fba90c860b516ab),
-            1024 => (8425443, 0x01bcbb29f2a8421e),
+            1 => (8955, 0x4b0ca2982406ee43),
+            128 => (1053911, 0xc7ea135797f5cec5),
+            1024 => (8425469, 0x6442b458f3cf24fc),
             _ => unreachable!(),
         };
         assert_eq!((bytes.len(), hash), expected);

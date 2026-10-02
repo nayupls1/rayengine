@@ -86,6 +86,44 @@ fn snapshot_round_trip_restores_edits_player_inventory_and_regenerates_untouched
     );
     assert!(!restored.chunk(p.split().0).unwrap().is_dirty());
 }
+
+#[test]
+fn checkpoints_preserve_player_dimensions_at_resolved_floor_contacts() {
+    use rayengine_core::collision::Aabb3;
+    use rayengine_voxel::glam::{DVec3, Vec3};
+    let (base, _, _, survival, _) = fixture();
+    let mut world = VoxelWorld::new(base.terrain.registry(), 160);
+    let support = BlockPos::new(0, 161, 0);
+    world
+        .insert_chunk(
+            support.split().0,
+            Chunk::filled(base.terrain.registry(), BlockId::AIR).unwrap(),
+        )
+        .unwrap();
+    world
+        .set_block(support, base.terrain.blocks().stone)
+        .unwrap();
+    let mut player = Player::new(DVec3::new(0.5, 162.0, 0.5)).unwrap();
+    let floor = Aabb3 {
+        min: Vec3::new(0.0, 1.0, 0.0),
+        max: Vec3::new(1.0, 2.0, 1.0),
+    };
+    player.controller.body.velocity.y = -1.0;
+    player.controller.body.move_and_slide(0.2, &[floor]);
+    assert!(!player.controller.body.bounds().intersects(&floor));
+    let (snapshot, _) = base.capture(&world, &player, &survival).unwrap();
+    let decoded = Snapshot::decode(&snapshot.encode().unwrap()).unwrap();
+    let loaded = decoded.player().unwrap();
+    assert_eq!(
+        loaded.controller.body.half_size,
+        player.controller.body.half_size
+    );
+    assert_eq!(
+        loaded.controller.body.bounds(),
+        player.controller.body.bounds()
+    );
+    assert!(loaded.controller.body.grounded);
+}
 #[test]
 fn named_slot_ignores_interrupted_siblings_and_rejects_corrupt_future_or_incompatible_saves() {
     let dir = Dir::new();
@@ -135,7 +173,7 @@ fn named_slot_ignores_interrupted_siblings_and_rejects_corrupt_future_or_incompa
 fn malformed_game_fields_counts_and_coordinates_are_rejected_before_live_state() {
     let (snapshot, _, _, _, _) = fixture();
     let base: serde_json::Value = serde_json::from_slice(&snapshot.encode().unwrap()).unwrap();
-    for case in 0..10 {
+    for case in 0..12 {
         let mut v = base.clone();
         match case {
             0 => v["survival"]["selected"] = serde_json::json!(9),
@@ -149,7 +187,9 @@ fn malformed_game_fields_counts_and_coordinates_are_rejected_before_live_state()
             6 => v["player"]["velocity"] = serde_json::json!([0.0, -1000.0, 0.0]),
             7 => v["player"]["pitch"] = serde_json::json!(10.0),
             8 => v["player"]["origin"][0] = serde_json::json!(3),
-            _ => v["survival"]["slots"] = serde_json::json!([]),
+            9 => v["survival"]["slots"] = serde_json::json!([]),
+            10 => v["player"]["half_size"] = serde_json::json!([0.0, 0.9, 0.3]),
+            _ => v["player"]["half_size"] = serde_json::json!([0.3, 1.0, 0.3]),
         }
         assert!(
             Snapshot::decode(&serde_json::to_vec(&v).unwrap()).is_err(),
@@ -301,6 +341,59 @@ fn write_failure_and_unconfirmed_directory_flush_pin_chunks_until_explicit_retry
         assert!(saving.settled());
         assert!(!world.chunk(p.split().0).unwrap().is_dirty());
     }
+}
+
+#[test]
+fn retry_rewrites_a_reverted_checkpoint_after_an_unconfirmed_replacement() {
+    let dir = Dir::new();
+    let store = dir.store();
+    let (base, mut world, player, survival, p) = fixture();
+    world.set_block(p, BlockId::AIR).unwrap();
+    let (base, stamps) = base.capture(&world, &player, &survival).unwrap();
+    store.write(&base).unwrap();
+    for (pos, stamp) in stamps {
+        assert!(world.mark_saved(pos, stamp));
+    }
+    let fail = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let state = fail.clone();
+    let writer = Arc::new(move |store: &Store, snapshot: &Snapshot| {
+        store.write(snapshot)?;
+        if state.load(Ordering::SeqCst) {
+            Err(Error::Container(SaveError::Io {
+                stage: save::SaveStage::SyncDirectory,
+                source: io::Error::other("unconfirmed directory flush"),
+            }))
+        } else {
+            Ok(())
+        }
+    });
+    let mut saving = Saving::with_writer(store.clone(), base, true, writer).unwrap();
+    world
+        .set_block(p, saving.checkpoint().terrain.blocks().dirt)
+        .unwrap();
+    saving.request();
+    saving.start(&mut world, &player, &survival);
+    settle(&mut saving, &mut world);
+    assert_eq!(saving.status(), SaveStatus::Failed);
+    // Revert the live state to the previous successful checkpoint. The file
+    // contains the newer failed replacement, so equality must not skip this write.
+    world.set_block(p, BlockId::AIR).unwrap();
+    fail.store(false, Ordering::SeqCst);
+    saving.retry();
+    saving.start(&mut world, &player, &survival);
+    settle(&mut saving, &mut world);
+    assert!(saving.settled());
+    assert_eq!(
+        store
+            .load()
+            .unwrap()
+            .unwrap()
+            .chunk(p.split().0)
+            .unwrap()
+            .get(p.split().1),
+        BlockId::AIR
+    );
+    assert!(!world.chunk(p.split().0).unwrap().is_dirty());
 }
 #[test]
 fn streaming_pins_unsaved_then_evicts_and_reloads_exact_saved_geometry() {

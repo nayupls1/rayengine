@@ -97,6 +97,7 @@ pub struct Saving {
     pending: Option<Pending>,
     requested: bool,
     has_file: bool,
+    checkpoint_matches_disk: bool,
     error: Option<Error>,
 }
 impl Saving {
@@ -146,6 +147,7 @@ impl Saving {
             pending: None,
             requested: false,
             has_file,
+            checkpoint_matches_disk: has_file,
             error: None,
         })
     }
@@ -230,7 +232,7 @@ impl Saving {
                 return;
             }
         };
-        if self.has_file && self.checkpoint.same_state(&snapshot) {
+        if self.checkpoint_matches_disk && self.checkpoint.same_state(&snapshot) {
             self.install(snapshot, stamps, world);
             return;
         }
@@ -255,6 +257,7 @@ impl Saving {
             .take()
             .expect("one completion per submitted snapshot");
         if completion.id != pending.handle.id() {
+            self.checkpoint_matches_disk = false;
             self.error = Some(Error::Worker);
             self.requested = false;
             return false;
@@ -268,11 +271,16 @@ impl Saving {
                 true
             }
             JobOutcome::Ready(Written { result: Err(e), .. }) => {
+                // Rename may have succeeded even though durability confirmation
+                // failed. Retrying must write, including when gameplay has reverted
+                // to the previous successful checkpoint.
+                self.checkpoint_matches_disk = false;
                 self.error = Some(e);
                 self.requested = false;
                 false
             }
             _ => {
+                self.checkpoint_matches_disk = false;
                 self.error = Some(Error::Worker);
                 self.requested = false;
                 false
@@ -294,6 +302,7 @@ impl Saving {
             .unwrap_or_else(|e| e.into_inner()) = snapshot.clone();
         self.checkpoint = snapshot;
         self.has_file = true;
+        self.checkpoint_matches_disk = true;
         if Arc::ptr_eq(
             &world.shared_registry(),
             &self.checkpoint.terrain.registry(),

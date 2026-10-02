@@ -188,7 +188,8 @@ since the last successful checkpoint.
 
 Game schema **1** uses the core's format-one `RAYSAVE` container and CRC32. Its
 bounded JSON records generator name/version/seed/settings, ordered block names,
-original respawn support, chunk-relative simulation position/velocity/look,
+original respawn support, chunk-relative simulation position/velocity/look and
+exact collision body dimensions,
 health/airborne fall peak, selected slot/all 36 inventory slots, all uncollected
 pickups, and dense cells for every historically modified chunk. Untouched terrain
 regenerates from the original recipe. Strict loading checks coordinates, raw IDs,
@@ -205,6 +206,8 @@ installation/revision. Edits made while saving stay dirty. A failed write never
 marks chunks clean; even a successful rename followed by a failed directory flush
 keeps them pinned until an explicit retry succeeds. This retains core errors and
 their `NotCommitted`/`Unknown`/`Committed` recovery information.
+After a worker failure, retries write a fresh checkpoint even if gameplay has
+reverted to the previous state, because the failed replacement may already be on disk.
 
 Limits are 160 resident/copied chunks per snapshot, 1,024 historical modified
 chunks (8 MiB dense u16 cells), 128 pickups, and 12 MiB encoded payload. The

@@ -27,6 +27,7 @@ impl<'de> Deserialize<'de> for Cells {
 pub struct PlayerState {
     origin: [i32; 3],
     center: [f32; 3],
+    half_size: [f32; 3],
     velocity: [f32; 3],
     yaw: f32,
     pitch: f32,
@@ -38,6 +39,7 @@ impl PlayerState {
         Self {
             origin: [player.origin.x, player.origin.y, player.origin.z],
             center: player.controller.body.position.to_array(),
+            half_size: player.controller.body.half_size.to_array(),
             velocity: player.controller.body.velocity.to_array(),
             yaw: player.controller.yaw(),
             pitch: player.controller.pitch(),
@@ -55,18 +57,24 @@ impl PlayerState {
         origin.split().0.origin()?;
         let center = Vec3::from_array(self.center);
         let velocity = Vec3::from_array(self.velocity);
+        let half_size = Vec3::from_array(self.half_size);
         if !center.is_finite()
             || center.min_element() < -1.0
             || center.max_element() > 17.0
             || !velocity.is_finite()
             || velocity.abs().max_element() > 128.0
+            || !half_size.is_finite()
+            || (half_size - Vec3::new(0.3, 0.9, 0.3)).abs().max_element() > 0.000002
             || !self.yaw.is_finite()
             || !self.pitch.is_finite()
         {
             return Err(invalid());
         }
-        let mut player = Player::new(as_global(origin) + center.as_dvec3() - DVec3::Y * 0.9)
-            .map_err(|_| invalid())?;
+        // Body3D derives its half dimensions from f32 bounds at construction.
+        // Reconstructing them at the saved center can enlarge a resolved contact
+        // into a solid. Initialize safely inside the chunk and retain exact dimensions.
+        let mut player =
+            Player::new(as_global(origin) + DVec3::splat(8.0)).map_err(|_| invalid())?;
         let config = player.controller.config();
         if self.pitch < config.min_pitch
             || self.pitch > config.max_pitch
@@ -75,6 +83,7 @@ impl PlayerState {
             return Err(invalid());
         }
         player.origin = origin;
+        player.controller.body.half_size = half_size;
         player.controller.teleport(center).map_err(|_| invalid())?;
         let bounds = player.controller.body.bounds();
         if (as_global(origin) + bounds.min.as_dvec3()).min_element() < f64::from(i32::MIN)
