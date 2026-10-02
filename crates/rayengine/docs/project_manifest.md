@@ -149,7 +149,8 @@ order. `asset("textures/player.png")` searches the same roots and returns the
 first selected match. Duplicate logical names use the first root. Missing roots
 are allowed, other discovery I/O errors are reported. Links within roots are
 skipped by discovery and lookup (the root itself may be a link). Lookup names
-must be relative and contain no `.`/`..` components. Neither API loads textures,
+must be relative with no `..` components. Redundant `.` components and separators
+are normalized before both exclusion matching and lookup. Neither API loads textures,
 models, audio or font atlases. Existing explicit native asset-loading APIs still
 accept explicit paths.
 

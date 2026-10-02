@@ -471,12 +471,19 @@ impl ResolvedManifest {
         validate_path(name, "asset name")?;
         if name
             .components()
-            .any(|c| !matches!(c, Component::Normal(_)))
+            .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir))
         {
-            return Err(error(
-                "asset name must be root-relative without '.' or '..'",
-            ));
+            return Err(error("asset name must be root-relative without '..'"));
         }
+        // Match and open the same logical spelling. Path::components removes
+        // internal '.' and repeated separators; raw spellings could otherwise
+        // bypass exclusions even though the OS opens the same file.
+        let normalized: PathBuf = name
+            .components()
+            .filter(|c| !matches!(c, Component::CurDir))
+            .collect();
+        validate_path(&normalized, "asset name")?;
+        let name = normalized.as_path();
         let excluded = exclusions(&self.settings.assets.exclude)?;
         if is_excluded(&excluded, name) {
             return Err(error(format!("asset `{}` is excluded", name.display())));
@@ -485,10 +492,15 @@ impl ResolvedManifest {
             let candidate = root.join(name);
             let mut path = root.clone();
             let mut found = true;
-            for component in name.components() {
+            let mut components = name.components().peekable();
+            while let Some(component) = components.next() {
                 path.push(component);
                 match fs::symlink_metadata(&path) {
-                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                    Ok(metadata)
+                        if metadata.file_type().is_symlink()
+                            || (components.peek().is_some() && !metadata.is_dir())
+                            || (components.peek().is_none() && !metadata.is_file()) =>
+                    {
                         found = false;
                         break;
                     }
@@ -500,7 +512,7 @@ impl ResolvedManifest {
                     Err(e) => return Err(error(format!("{}: {e}", path.display()))),
                 }
             }
-            if found && candidate.is_file() {
+            if found {
                 return Ok(candidate);
             }
         }

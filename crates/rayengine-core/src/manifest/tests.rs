@@ -304,3 +304,67 @@ fn discovery_and_lookup_skip_links_and_dangling_manifest_links_fail() {
     symlink("absent", dir.0.join(FILE_NAME)).unwrap();
     assert!(ProjectManifest::load_optional(&dir.0).is_err());
 }
+
+#[test]
+fn equivalent_asset_names_cannot_bypass_exclusions() {
+    let dir = Scratch::new();
+    fs::create_dir_all(dir.0.join("assets/nested")).unwrap();
+    fs::write(dir.0.join("assets/nested/secret.txt"), "excluded").unwrap();
+    fs::write(dir.0.join("assets/nested/public.txt"), "selected").unwrap();
+    let project = dir
+        .load("schema_version = 1\n[assets]\nexclude = ['nested/secret.txt']")
+        .unwrap()
+        .resolve(None)
+        .unwrap();
+    assert_eq!(
+        project.discover_assets().unwrap(),
+        [dir.0.join("assets/nested/public.txt")]
+    );
+    for name in [
+        "nested/secret.txt",
+        "nested/./secret.txt",
+        "nested//secret.txt",
+        "./nested/secret.txt",
+        "nested/secret.txt/",
+    ] {
+        assert!(project.asset(name).is_err(), "{name}");
+    }
+    for name in [
+        "nested/public.txt",
+        "nested/./public.txt",
+        "nested//public.txt",
+        "./nested/public.txt",
+    ] {
+        assert_eq!(
+            project.asset(name).unwrap(),
+            dir.0.join("assets/nested/public.txt")
+        );
+    }
+    assert!(project.asset(".").is_err());
+}
+
+#[test]
+fn an_intermediate_file_does_not_block_later_asset_roots() {
+    let dir = Scratch::new();
+    fs::create_dir(dir.0.join("first")).unwrap();
+    fs::create_dir_all(dir.0.join("second/nested")).unwrap();
+    fs::write(dir.0.join("first/nested"), "regular file").unwrap();
+    fs::write(dir.0.join("second/nested/file.txt"), "asset").unwrap();
+    let project = dir
+        .load("schema_version = 1\n[assets]\nroots = ['first', 'second']")
+        .unwrap()
+        .resolve(None)
+        .unwrap();
+    assert_eq!(
+        project.discover_assets().unwrap(),
+        [
+            dir.0.join("first/nested"),
+            dir.0.join("second/nested/file.txt")
+        ]
+    );
+    assert_eq!(
+        project.asset("nested/file.txt").unwrap(),
+        dir.0.join("second/nested/file.txt")
+    );
+    assert_eq!(project.asset("nested").unwrap(), dir.0.join("first/nested"));
+}
