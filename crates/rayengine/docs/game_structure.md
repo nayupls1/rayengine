@@ -78,5 +78,7 @@ hatch; valid transformed parent chains are checked during propagation.
 
 Drawing never changes simulation state. Store previous/current positions and
 interpolate in `draw`; see [timing](crate::guides::timing_input). For a menu or
-level change, use a game-owned enum and let each state perform its updates and
-passes. Asset IDs and explicit state transitions keep ownership visible.
+level change, use a game-owned enum or the optional
+[state stack](crate::guides::states), which provides deferred push/pop/replace
+transitions and independent update/draw/input routing. Asset IDs and explicit
+state transitions keep ownership visible.
