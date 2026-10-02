@@ -1,0 +1,143 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "utc": "2026-10-02T17:50:43.101697+00:00",
+    "commit": "2f3f73c4d087dece1805e254cb3675f9f2b2a573",
+    "dirty_files": [],
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logical_cpus": 20,
+    "rustflags": "",
+    "measurement": "Native OpenGL draw submission/upload wall time; includes driver stalls; no GPU timer",
+    "mode": "save",
+    "baseline": "lighting-45-mesa",
+    "criterion_arguments": [
+      "draw_submission/(opaque|lit)_100"
+    ],
+    "backend": "x11",
+    "render_target": [
+      64,
+      64
+    ],
+    "vsync": false,
+    "renderer_note": "Mesa llvmpipe on Xwayland, verified with glewinfo",
+    "gl_environment": {
+      "LIBGL_ALWAYS_SOFTWARE": "1",
+      "__GLX_VENDOR_LIBRARY_NAME": "mesa",
+      "MESA_LOADER_DRIVER_OVERRIDE": null
+    },
+    "glewinfo_header": "---------------------------\n    GLEW Extension Info\n---------------------------\n\nGLEW version 2.3.1\nReporting capabilities of display , visual 0x309\nRunning on a llvmpipe (LLVM 22.1.8, 256 bits) from Mesa\nOpenGL version 4.6 (Compatibility Profile) Mesa 26.2.2-arch1.1 is supported\n\nGL_VERSION_1_1:                                                OK ",
+    "glewinfo_status": 0
+  },
+  "results": {
+    "schema_version": 1,
+    "benchmarks": {
+      "draw_submission/lit_100": {
+        "mean_ns": 182854.21144412455,
+        "median_ns": 182365.9145256917,
+        "mean_confidence_interval": {
+          "confidence_level": 0.95,
+          "lower_bound": 179071.3109730072,
+          "upper_bound": 186890.01743336304
+        }
+      },
+      "draw_submission/opaque_100": {
+        "mean_ns": 170380.1392350288,
+        "median_ns": 162450.3888683432,
+        "mean_confidence_interval": {
+          "confidence_level": 0.95,
+          "lower_bound": 162091.76016252633,
+          "upper_bound": 182846.213078065
+        }
+      }
+    }
+  },
+  "fixture": {
+    "draws_per_iteration": 100,
+    "vertices": 4,
+    "indices": 6,
+    "normals": "+Z",
+    "transform": "identity",
+    "alpha": "opaque",
+    "tint": "white",
+    "texture": "default white",
+    "lit": {
+      "ambient": [
+        0.2,
+        0.2,
+        0.2
+      ],
+      "directional": {
+        "direction": [
+          0,
+          0,
+          -1
+        ],
+        "color": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "points": [
+        {
+          "position": [
+            0,
+            0,
+            2
+          ],
+          "color": [
+            0.1,
+            0.1,
+            0.1
+          ],
+          "range": 4
+        },
+        {
+          "position": [
+            0,
+            0,
+            2
+          ],
+          "color": [
+            0.1,
+            0.1,
+            0.1
+          ],
+          "range": 4
+        },
+        {
+          "position": [
+            0,
+            0,
+            2
+          ],
+          "color": [
+            0.1,
+            0.1,
+            0.1
+          ],
+          "range": 4
+        },
+        {
+          "position": [
+            0,
+            0,
+            2
+          ],
+          "color": [
+            0.1,
+            0.1,
+            0.1
+          ],
+          "range": 4
+        }
+      ]
+    },
+    "warm_up_seconds": 0.5,
+    "measurement_seconds": 2,
+    "sample_size": 30
+  }
+}

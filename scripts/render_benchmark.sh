@@ -31,10 +31,16 @@ from pathlib import Path
 path = Path(sys.argv[1]) / 'metadata.json'
 data = json.loads(path.read_text())
 data.update(measurement='Native OpenGL draw submission/upload wall time; includes driver stalls; no GPU timer', backend=sys.argv[2], render_target=[64,64], vsync=False, renderer_note=os.environ.get('RAYENGINE_RENDERER_INFO',''))
+data['gl_environment'] = {key: os.environ.get(key) for key in
+                          ('LIBGL_ALWAYS_SOFTWARE', '__GLX_VENDOR_LIBRARY_NAME', 'MESA_LOADER_DRIVER_OVERRIDE')}
 if sys.argv[2] == 'x11' and shutil.which('glxinfo'):
     result = subprocess.run(['glxinfo','-B'],capture_output=True,text=True,timeout=10)
     data['glxinfo'] = result.stdout
     data['glxinfo_status'] = result.returncode
+elif sys.argv[2] == 'x11' and shutil.which('glewinfo'):
+    result = subprocess.run(['glewinfo'],capture_output=True,text=True,timeout=10)
+    data['glewinfo_header'] = '\n'.join(result.stdout.splitlines()[:10])
+    data['glewinfo_status'] = result.returncode
 path.write_text(json.dumps(data,indent=2)+'\n')
 PY
 cargo bench --locked -p rayengine "${features[@]}" --bench draw_submission -- "$flag" "$baseline" "$@"

@@ -3,7 +3,7 @@
 use crate::{
     assets::{Assets, MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId, path_string},
     diagnostics::{DiagnosticsConfig, DiagnosticsReport, DrawCounters, RunSettings},
-    input::Bindings,
+    input::{Bindings, SamplingState},
     material::{MaterialDesc, UniformId, UniformValue},
     render::{Frame, rect},
 };
@@ -107,6 +107,77 @@ impl Config {
             audio: false,
             exit_key: Some(KeyboardKey::KEY_ESCAPE),
             bar_color: Color::new(9, 14, 24, 255),
+        }
+    }
+
+    /// Applies explicitly declared project/profile fields over these Rust defaults.
+    /// Missing fields preserve the caller's values. RunOptions overrides apply last.
+    pub fn with_project(
+        mut self,
+        project: &crate::manifest::ResolvedManifest,
+    ) -> Result<Self, Error> {
+        let settings = &project.settings;
+        macro_rules! apply {
+            ($section:literal, $field:ident, $value:expr) => {
+                if project.is_declared($section, stringify!($field)) {
+                    self.$field = $value;
+                }
+            };
+        }
+        apply!("window", title, settings.window.title.clone());
+        if project.is_declared("window", "size") {
+            self.window_size = (settings.window.size[0], settings.window.size[1]);
+        }
+        apply!(
+            "render",
+            reference_size,
+            Vec2::from_array(settings.render.reference_size)
+        );
+        apply!(
+            "render",
+            scale_mode,
+            match settings.render.scale_mode {
+                crate::manifest::ScaleMode::Fit => ScaleMode::Fit,
+                crate::manifest::ScaleMode::Expand => ScaleMode::Expand,
+                crate::manifest::ScaleMode::IntegerFit => ScaleMode::IntegerFit,
+            }
+        );
+        if project.is_declared("render", "render_scale") {
+            self.render_quality.render_scale = settings.render.render_scale;
+        }
+        if project.is_declared("render", "anti_aliasing") {
+            self.render_quality.anti_aliasing = settings.render.anti_aliasing;
+        }
+        apply!("render", target_fps, settings.render.target_fps);
+        apply!("render", vsync, settings.render.vsync);
+        let [r, g, b, a] = settings.render.bar_color;
+        apply!("render", bar_color, Color::new(r, g, b, a));
+        apply!("runtime", fixed_hz, settings.runtime.fixed_hz);
+        apply!("runtime", max_catch_up, settings.runtime.max_catch_up);
+        apply!("runtime", audio, settings.runtime.audio);
+        self.validate()?;
+        Ok(self)
+    }
+
+    /// Loads a project directory, Cargo manifest, or explicit rayengine.toml.
+    /// Absent optional manifests preserve the existing manifest-free workflow.
+    pub fn with_optional_project(
+        self,
+        path: impl AsRef<Path>,
+        profile: Option<&str>,
+    ) -> Result<Self, Error> {
+        let manifest = crate::manifest::ProjectManifest::load_optional(path)
+            .map_err(|e| Error::Config(e.to_string()))?;
+        match manifest {
+            Some(manifest) => self.with_project(
+                &manifest
+                    .resolve(profile)
+                    .map_err(|e| Error::Config(e.to_string()))?,
+            ),
+            None if profile.is_some() => {
+                Err(Error::Config("a profile requires rayengine.toml".into()))
+            }
+            None => Ok(self),
         }
     }
 
@@ -350,6 +421,12 @@ pub struct Update<'context, 'audio> {
     pub tick: Tick,
     /// Action states. Press/release edges are consumed after this update.
     pub input: &'context Input,
+    /// Live controls. Changes are reconciled after this tick; affected values
+    /// become neutral until the next render-frame sample. Unchanged inputs and
+    /// pending edges are preserved. Invalid edits return errors without changes.
+    /// Assigning an invalid set directly makes [`App::run`] return a configuration
+    /// error after this callback, before sampling the new set.
+    pub bindings: &'context mut Bindings,
     /// Current viewport, shared with UI and cameras.
     pub viewport: Viewport,
     /// Pointer in UI units, or `None` in bars, while captured, or while unfocused.
@@ -380,7 +457,8 @@ pub trait Game {
     fn cursor_mode(&self) -> CursorMode {
         CursorMode::Free
     }
-    /// Declares actions and physical buttons before entering the loop.
+    /// Declares initial button and analog bindings before window creation.
+    /// Change live controls through [`Update::bindings`].
     fn bindings(&self) -> Bindings {
         Bindings::new()
     }
@@ -388,6 +466,16 @@ pub trait Game {
     fn init(&mut self, _context: &mut InitContext<'_, '_>) -> Result<(), Error> {
         Ok(())
     }
+    /// Applies deferred lifecycle work after each fixed update and each draw,
+    /// outside render passes. Asset creation and teardown are safe here.
+    /// Errors stop the run; `shutdown` still runs while the backend is alive.
+    fn boundary(&mut self, _context: &mut InitContext<'_, '_>) -> Result<(), Error> {
+        Ok(())
+    }
+    /// Teardown while assets, audio, and graphics are alive. Called once after
+    /// initialization is attempted, on both successful and error returns.
+    /// Must tolerate partially completed initialization.
+    fn shutdown(&mut self, _context: &mut InitContext<'_, '_>) {}
     /// Advances game state by one fixed tick.
     fn fixed_update(&mut self, context: &mut Update<'_, '_>);
     /// Draws world passes and UI. Interpolate state using `frame.alpha`.
@@ -482,6 +570,8 @@ impl App {
             config.window_size = size;
         }
         config.validate()?;
+        let mut bindings = game.bindings();
+        bindings.validate()?;
         if let Some(diagnostics) = &options.diagnostics {
             diagnostics.validate()?;
         }
@@ -526,243 +616,266 @@ impl App {
         // This binding drops the game before assets, audio, and the window even
         // on early returns. Game-owned native resources also remain context-safe.
         let mut game = game;
-        let bindings = game.bindings();
-        let mut input = Input::with_capacity(bindings.capacity());
-        game.init(&mut InitContext {
+        let mut previous_bindings = bindings.clone();
+        let mut sampling = SamplingState::default();
+        let (actions, axes) = bindings.capacities();
+        let mut input = Input::with_capacities(actions, axes);
+        let initialized = game.init(&mut InitContext {
             raylib: &mut raylib,
             thread: &thread,
             assets: &mut assets,
-        })?;
-        let mut cursor = CursorState::default();
-        let mut fxaa = crate::quality::shader(&mut raylib, &thread, config.render_quality)?;
-        let mut targets: Option<crate::quality::QualityTargets> = None;
-        let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
-        let start = Instant::now();
-        let mut previous_frame = start;
-        let mut report = RunReport {
-            diagnostics: options.diagnostics.as_ref().map(|diagnostics| {
-                DiagnosticsReport::new(
-                    diagnostics,
-                    RunSettings {
-                        backend: if cfg!(target_os = "windows") {
-                            "glfw-win32"
-                        } else if cfg!(target_os = "macos") {
-                            "glfw-cocoa"
-                        } else if cfg!(all(unix, not(target_vendor = "apple")))
-                            && cfg!(feature = "wayland")
-                        {
-                            "glfw-x11+wayland"
-                        } else if cfg!(all(unix, not(target_vendor = "apple"))) {
-                            "glfw-x11"
-                        } else {
-                            "glfw"
+        });
+        let result = initialized.and_then(|()| {
+            let mut cursor = CursorState::default();
+            let mut fxaa = crate::quality::shader(&mut raylib, &thread, config.render_quality)?;
+            let mut targets: Option<crate::quality::QualityTargets> = None;
+            let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
+            let start = Instant::now();
+            let mut previous_frame = start;
+            let mut report = RunReport {
+                diagnostics: options.diagnostics.as_ref().map(|diagnostics| {
+                    DiagnosticsReport::new(
+                        diagnostics,
+                        RunSettings {
+                            backend: if cfg!(target_os = "windows") {
+                                "glfw-win32"
+                            } else if cfg!(target_os = "macos") {
+                                "glfw-cocoa"
+                            } else if cfg!(all(unix, not(target_vendor = "apple")))
+                                && cfg!(feature = "wayland")
+                            {
+                                "glfw-x11+wayland"
+                            } else if cfg!(all(unix, not(target_vendor = "apple"))) {
+                                "glfw-x11"
+                            } else {
+                                "glfw"
+                            },
+                            os: std::env::consts::OS,
+                            arch: std::env::consts::ARCH,
+                            sdk_version: env!("CARGO_PKG_VERSION"),
+                            graphics: crate::quality::graphics_info(&thread),
+                            window_size: config.window_size,
+                            reference_size: config.reference_size.to_array(),
+                            scale_mode: match config.scale_mode {
+                                ScaleMode::Fit => "fit",
+                                ScaleMode::Expand => "expand",
+                                ScaleMode::IntegerFit => "integer-fit",
+                            },
+                            fixed_hz: config.fixed_hz,
+                            max_catch_up: config.max_catch_up,
+                            target_fps: if options.uncapped {
+                                0
+                            } else {
+                                config.target_fps
+                            },
+                            vsync: config.vsync && !options.uncapped,
+                            render_size: (0, 0),
+                            render_scale: config.render_quality.render_scale,
+                            anti_aliasing: match config.render_quality.anti_aliasing {
+                                rayengine_core::quality::AntiAliasing::None => "none",
+                                rayengine_core::quality::AntiAliasing::Fxaa => "fxaa",
+                            },
+                            output_size: (0, 0),
+                            render_target_bytes: 0,
                         },
-                        os: std::env::consts::OS,
-                        arch: std::env::consts::ARCH,
-                        sdk_version: env!("CARGO_PKG_VERSION"),
-                        graphics: crate::quality::graphics_info(&thread),
-                        window_size: config.window_size,
-                        reference_size: config.reference_size.to_array(),
-                        scale_mode: match config.scale_mode {
-                            ScaleMode::Fit => "fit",
-                            ScaleMode::Expand => "expand",
-                            ScaleMode::IntegerFit => "integer-fit",
-                        },
-                        fixed_hz: config.fixed_hz,
-                        max_catch_up: config.max_catch_up,
-                        target_fps: if options.uncapped {
-                            0
-                        } else {
-                            config.target_fps
-                        },
-                        vsync: config.vsync && !options.uncapped,
-                        render_size: (0, 0),
-                        render_scale: config.render_quality.render_scale,
-                        anti_aliasing: match config.render_quality.anti_aliasing {
-                            rayengine_core::quality::AntiAliasing::None => "none",
-                            rayengine_core::quality::AntiAliasing::Fxaa => "fxaa",
-                        },
-                        output_size: (0, 0),
-                        render_target_bytes: 0,
-                    },
-                    assets.resource_counts(),
-                )
-            }),
-            ..RunReport::default()
-        };
-        let mut quit = false;
-        while !quit
-            && !raylib.window_should_close()
-            && options.frames.is_none_or(|limit| report.frames < limit)
-        {
-            let now = Instant::now();
-            let elapsed = now.duration_since(previous_frame);
-            previous_frame = now;
-            let window = Vec2::new(
-                raylib.get_screen_width() as f32,
-                raylib.get_screen_height() as f32,
-            );
-            let view = Viewport::new(window, config.reference_size, config.scale_mode);
-            if raylib.is_window_minimized() || view.is_none() {
-                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), false);
-                input.release_all();
-                // Keep backend event polling alive, but pause simulation while minimized.
-                raylib
-                    .begin_drawing(&thread)
-                    .clear_background(config.bar_color);
-                std::thread::sleep(Duration::from_millis(16));
-                continue;
-            }
-            let view = view.expect("non-minimized viewport");
-            let window_focused = raylib.is_window_focused();
-            sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
-            bindings.sample(&raylib, &mut input);
-            if cursor.take_motion() {
-                let delta = raylib.get_mouse_delta();
-                input.add_pointer_delta(Vec2::new(delta.x, delta.y));
-            }
-            let mouse = raylib.get_mouse_position();
-            let plan = clock.advance(elapsed);
-            report.dropped_time += plan.dropped;
-            if let Some(metrics) = &mut report.diagnostics {
-                metrics.dropped_ns = metrics
-                    .dropped_ns
-                    .saturating_add(plan.dropped.as_nanos().min(u128::from(u64::MAX)) as u64);
-            }
-            for step in 0..plan.steps {
-                let update_start = report.diagnostics.as_ref().map(|_| Instant::now());
-                game.fixed_update(&mut Update {
-                    tick: Tick {
-                        index: plan.first_tick + u64::from(step),
-                        dt: clock.step().as_secs_f32(),
-                    },
-                    input: &input,
-                    viewport: view,
-                    pointer: (window_focused && !cursor.captured)
-                        .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
-                        .flatten(),
-                    window_focused,
-                    assets: &assets,
-                    quit: &mut quit,
-                });
-                if let Some(metrics) = &mut report.diagnostics {
-                    metrics
-                        .update
-                        .record(update_start.expect("diagnostics enabled").elapsed());
-                    metrics.updates = metrics.updates.saturating_add(1);
-                }
-                input.consume_edges();
-                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
-                report.ticks += 1;
-                if quit {
-                    break;
-                }
-            }
-            let render_start = report.diagnostics.as_ref().map(|_| Instant::now());
-            let dpi = Vec2::new(
-                raylib.get_render_width() as f32,
-                raylib.get_render_height() as f32,
-            ) / window;
-            let target_plan = config
-                .render_quality
-                .plan(&view, dpi, config.scale_mode)
-                .map_err(|e| Error::Config(e.to_string()))?;
-            if targets
-                .as_ref()
-                .is_none_or(|targets| targets.plan != target_plan)
+                        assets.resource_counts(),
+                    )
+                }),
+                ..RunReport::default()
+            };
+            let mut quit = false;
+            while !quit
+                && !raylib.window_should_close()
+                && options.frames.is_none_or(|limit| report.frames < limit)
             {
-                // Drop old targets before allocating to keep the checked memory bound.
-                // Any failure exits cleanly while the graphics context remains alive.
-                drop(targets.take());
-                targets = Some(crate::quality::QualityTargets::new(
-                    &mut raylib,
-                    &thread,
-                    target_plan,
-                    config.scale_mode == ScaleMode::IntegerFit,
-                )?);
-            }
-            let targets = targets.as_mut().expect("created targets");
-            let size = target_plan.world;
-            let draws = {
-                let mut frame = Frame {
-                    counters: report.diagnostics.as_ref().map(|_| DrawCounters::default()),
+                let now = Instant::now();
+                let elapsed = now.duration_since(previous_frame);
+                previous_frame = now;
+                let window = Vec2::new(
+                    raylib.get_screen_width() as f32,
+                    raylib.get_screen_height() as f32,
+                );
+                let view = Viewport::new(window, config.reference_size, config.scale_mode);
+                if raylib.is_window_minimized() || view.is_none() {
+                    sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), false);
+                    input.release_all();
+                    sampling = SamplingState::default();
+                    // Keep backend event polling alive, but pause simulation while minimized.
+                    raylib
+                        .begin_drawing(&thread)
+                        .clear_background(config.bar_color);
+                    std::thread::sleep(Duration::from_millis(16));
+                    continue;
+                }
+                let view = view.expect("non-minimized viewport");
+                let window_focused = raylib.is_window_focused();
+                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
+                bindings.sample(&raylib, &mut input, &mut sampling);
+                if cursor.take_motion() {
+                    let delta = raylib.get_mouse_delta();
+                    input.add_pointer_delta(Vec2::new(delta.x, delta.y));
+                }
+                let mouse = raylib.get_mouse_position();
+                let plan = clock.advance(elapsed);
+                report.dropped_time += plan.dropped;
+                if let Some(metrics) = &mut report.diagnostics {
+                    metrics.dropped_ns = metrics
+                        .dropped_ns
+                        .saturating_add(plan.dropped.as_nanos().min(u128::from(u64::MAX)) as u64);
+                }
+                for step in 0..plan.steps {
+                    let update_start = report.diagnostics.as_ref().map(|_| Instant::now());
+                    game.fixed_update(&mut Update {
+                        tick: Tick {
+                            index: plan.first_tick + u64::from(step),
+                            dt: clock.step().as_secs_f32(),
+                        },
+                        input: &input,
+                        bindings: &mut bindings,
+                        viewport: view,
+                        pointer: (window_focused && !cursor.captured)
+                            .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
+                            .flatten(),
+                        window_focused,
+                        assets: &assets,
+                        quit: &mut quit,
+                    });
+                    if let Some(metrics) = &mut report.diagnostics {
+                        metrics
+                            .update
+                            .record(update_start.expect("diagnostics enabled").elapsed());
+                        metrics.updates = metrics.updates.saturating_add(1);
+                    }
+                    game.boundary(&mut InitContext {
+                        raylib: &mut raylib,
+                        thread: &thread,
+                        assets: &mut assets,
+                    })?;
+                    input.consume_edges();
+                    bindings.reconcile(&mut previous_bindings, &mut input)?;
+                    sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
+                    report.ticks += 1;
+                    if quit {
+                        break;
+                    }
+                }
+                let render_start = report.diagnostics.as_ref().map(|_| Instant::now());
+                let dpi = Vec2::new(
+                    raylib.get_render_width() as f32,
+                    raylib.get_render_height() as f32,
+                ) / window;
+                let target_plan = config
+                    .render_quality
+                    .plan(&view, dpi, config.scale_mode)
+                    .map_err(|e| Error::Config(e.to_string()))?;
+                if targets
+                    .as_ref()
+                    .is_none_or(|targets| targets.plan != target_plan)
+                {
+                    // Drop old targets before allocating to keep the checked memory bound.
+                    // Any failure exits cleanly while the graphics context remains alive.
+                    drop(targets.take());
+                    targets = Some(crate::quality::QualityTargets::new(
+                        &mut raylib,
+                        &thread,
+                        target_plan,
+                        config.scale_mode == ScaleMode::IntegerFit,
+                    )?);
+                }
+                let targets = targets.as_mut().expect("created targets");
+                let size = target_plan.world;
+                let draws = {
+                    let mut frame = Frame {
+                        counters: report.diagnostics.as_ref().map(|_| DrawCounters::default()),
+                        raylib: &mut raylib,
+                        thread: &thread,
+                        target: &mut targets.world,
+                        ui_target: targets.ui.as_mut(),
+                        assets: &mut assets,
+                        viewport: view,
+                        alpha: plan.alpha,
+                        index: report.frames,
+                    };
+                    frame.clear(Color::BLACK);
+                    game.draw(&mut frame);
+                    frame.draw_counters()
+                };
+                game.boundary(&mut InitContext {
                     raylib: &mut raylib,
                     thread: &thread,
-                    target: &mut targets.world,
-                    ui_target: targets.ui.as_mut(),
                     assets: &mut assets,
-                    viewport: view,
-                    alpha: plan.alpha,
-                    index: report.frames,
-                };
-                frame.clear(Color::BLACK);
-                game.draw(&mut frame);
-                frame.draw_counters()
-            };
-            targets.resolve(&mut raylib, &thread, fxaa.as_mut());
-            if let Some(metrics) = &mut report.diagnostics {
-                metrics
-                    .render
-                    .record(render_start.expect("diagnostics enabled").elapsed());
+                })?;
+                targets.resolve(&mut raylib, &thread, fxaa.as_mut());
+                if let Some(metrics) = &mut report.diagnostics {
+                    metrics
+                        .render
+                        .record(render_start.expect("diagnostics enabled").elapsed());
+                }
+                let present_start = report.diagnostics.as_ref().map(|_| Instant::now());
+                {
+                    let mut draw = raylib.begin_drawing(&thread);
+                    draw.clear_background(config.bar_color);
+                    draw.draw_texture_pro(
+                        targets.presented().texture(),
+                        Rectangle::new(
+                            0.0,
+                            0.0,
+                            target_plan.output.0 as f32,
+                            -(target_plan.output.1 as f32),
+                        ),
+                        rect(rayengine_core::collision::Aabb2 {
+                            min: view.origin,
+                            max: view.origin + view.size,
+                        }),
+                        Vector2::zero(),
+                        0.0,
+                        Color::WHITE,
+                    );
+                }
+                if let Some(metrics) = &mut report.diagnostics {
+                    metrics
+                        .present
+                        .record(present_start.expect("diagnostics enabled").elapsed());
+                    metrics.settings.render_size = size;
+                    metrics.settings.output_size = target_plan.output;
+                    metrics.settings.render_target_bytes = target_plan.target_bytes;
+                    metrics.record_frame(draws.unwrap_or_default(), assets.resource_counts());
+                    metrics.frame.record(now.elapsed());
+                }
+                report.frames += 1;
             }
-            let present_start = report.diagnostics.as_ref().map(|_| Instant::now());
+            if let Some(path) = &options.screenshot {
+                let image = raylib.load_image_from_screen(&thread);
+                let png = image
+                    .export_image_to_memory(".png")
+                    .map_err(|e| Error::Backend(e.to_string()))?;
+                std::fs::write(path, &*png)?;
+            }
+            report.elapsed = start.elapsed();
+            if let Some((path, metrics)) = options
+                .diagnostics
+                .as_ref()
+                .and_then(|d| d.output.as_ref())
+                .zip(report.diagnostics.as_ref())
             {
-                let mut draw = raylib.begin_drawing(&thread);
-                draw.clear_background(config.bar_color);
-                draw.draw_texture_pro(
-                    targets.presented().texture(),
-                    Rectangle::new(
-                        0.0,
-                        0.0,
-                        target_plan.output.0 as f32,
-                        -(target_plan.output.1 as f32),
-                    ),
-                    rect(rayengine_core::collision::Aabb2 {
-                        min: view.origin,
-                        max: view.origin + view.size,
-                    }),
-                    Vector2::zero(),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-            if let Some(metrics) = &mut report.diagnostics {
+                if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let file = std::fs::File::create(path)?;
+                let mut writer = std::io::BufWriter::new(file);
                 metrics
-                    .present
-                    .record(present_start.expect("diagnostics enabled").elapsed());
-                metrics.settings.render_size = size;
-                metrics.settings.output_size = target_plan.output;
-                metrics.settings.render_target_bytes = target_plan.target_bytes;
-                metrics.record_frame(draws.unwrap_or_default(), assets.resource_counts());
-                metrics.frame.record(now.elapsed());
+                    .write_json(&mut writer)
+                    .map_err(|error| Error::Io(std::io::Error::other(error)))?;
+                std::io::Write::flush(&mut writer)?;
             }
-            report.frames += 1;
-        }
-        if let Some(path) = &options.screenshot {
-            let image = raylib.load_image_from_screen(&thread);
-            let png = image
-                .export_image_to_memory(".png")
-                .map_err(|e| Error::Backend(e.to_string()))?;
-            std::fs::write(path, &*png)?;
-        }
-        report.elapsed = start.elapsed();
-        if let Some((path, metrics)) = options
-            .diagnostics
-            .as_ref()
-            .and_then(|d| d.output.as_ref())
-            .zip(report.diagnostics.as_ref())
-        {
-            if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-                std::fs::create_dir_all(parent)?;
-            }
-            let file = std::fs::File::create(path)?;
-            let mut writer = std::io::BufWriter::new(file);
-            metrics
-                .write_json(&mut writer)
-                .map_err(|error| Error::Io(std::io::Error::other(error)))?;
-            std::io::Write::flush(&mut writer)?;
-        }
-        Ok(report)
+            Ok(report)
+        });
+        game.shutdown(&mut InitContext {
+            raylib: &mut raylib,
+            thread: &thread,
+            assets: &mut assets,
+        });
+        result
     }
 }
 
@@ -779,6 +892,72 @@ fn validate_size(size: (u32, u32)) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manifest_examples_and_runtime_defaults_agree() {
+        let path =
+            std::env::temp_dir().join(format!("rayengine-runtime-manifest-{}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        let documentation = include_str!("../docs/project_manifest.md");
+        for block in documentation.split("```toml\n").skip(1) {
+            let source = block.split("```").next().unwrap();
+            std::fs::write(path.join("rayengine.toml"), source).unwrap();
+            let manifest =
+                crate::manifest::ProjectManifest::load(path.join("rayengine.toml")).unwrap();
+            let project = manifest.resolve(None).unwrap();
+            let config = Config::new("rayengine game")
+                .with_project(&project)
+                .unwrap();
+            assert_eq!(
+                config.window_size,
+                (
+                    project.settings.window.size[0],
+                    project.settings.window.size[1]
+                )
+            );
+            assert_eq!(
+                config.reference_size.to_array(),
+                project.settings.render.reference_size
+            );
+            assert_eq!(config.target_fps, project.settings.render.target_fps);
+            assert_eq!(config.vsync, project.settings.render.vsync);
+            assert_eq!(config.fixed_hz, project.settings.runtime.fixed_hz);
+            assert_eq!(config.max_catch_up, project.settings.runtime.max_catch_up);
+            assert_eq!(config.audio, project.settings.runtime.audio);
+            for profile in manifest.profiles() {
+                manifest.resolve(Some(profile)).unwrap();
+            }
+        }
+        std::fs::write(path.join("rayengine.toml"), "schema_version = 1\n[window]\nsize = [640, 480]\n[profiles.dev.render]\ntarget_fps = 30").unwrap();
+        let mut rust = Config::new("Custom title");
+        rust.fixed_hz = 60;
+        rust.audio = true;
+        let config = rust.with_optional_project(&path, Some("dev")).unwrap();
+        assert_eq!(config.title, "Custom title");
+        assert_eq!(config.window_size, (640, 480));
+        assert_eq!(config.target_fps, 30);
+        assert_eq!(config.fixed_hz, 60);
+        assert!(config.audio);
+        assert!(
+            Config::new("Test")
+                .with_optional_project(&path, Some("missing"))
+                .is_err()
+        );
+        std::fs::remove_file(path.join("rayengine.toml")).unwrap();
+        assert_eq!(
+            Config::new("No manifest")
+                .with_optional_project(&path, None)
+                .unwrap()
+                .title,
+            "No manifest"
+        );
+        assert!(
+            Config::new("No manifest")
+                .with_optional_project(&path, Some("dev"))
+                .is_err()
+        );
+        std::fs::remove_dir(path).unwrap();
+    }
 
     #[test]
     fn capture_releases_on_focus_loss_and_ignores_motion_at_focus_transitions() {
@@ -826,6 +1005,32 @@ mod tests {
         config.reference_size.x = 960.0;
         config.title = "bad\0title".into();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn invalid_initial_bindings_fail_before_native_window_creation() {
+        struct InvalidBindings;
+        impl Game for InvalidBindings {
+            fn bindings(&self) -> Bindings {
+                Bindings::new().bind(
+                    rayengine_core::input::Action(0),
+                    crate::input::Button::Gamepad {
+                        device: -1,
+                        button: GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB,
+                    },
+                )
+            }
+            fn fixed_update(&mut self, _: &mut Update<'_, '_>) {
+                panic!("must reject before updating");
+            }
+            fn draw(&mut self, _: &mut Frame<'_, '_>) {
+                panic!("must reject before drawing");
+            }
+        }
+        assert!(matches!(
+            App::new(Config::new("invalid bindings")).run(InvalidBindings),
+            Err(Error::Config(_))
+        ));
     }
 
     #[test]
@@ -1008,6 +1213,9 @@ mod ui_tests;
 
 #[cfg(test)]
 mod diagnostics_tests;
+
+#[cfg(test)]
+mod sprite_tests;
 
 #[cfg(test)]
 mod quality_tests;

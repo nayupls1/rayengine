@@ -98,30 +98,14 @@ fn main() -> Result<(), Error> {
     let mut args = std::env::args().skip(1);
     let profile = args.next().unwrap_or_else(|| "native".into());
     let mut config = Config::new("Rendering quality comparison");
-    config.render_quality = match profile.as_str() {
-        "native" => RenderQuality::default(),
-        "fxaa" => RenderQuality {
-            anti_aliasing: AntiAliasing::Fxaa,
-            ..Default::default()
-        },
-        "2x" => RenderQuality {
-            render_scale: 2.0,
-            ..Default::default()
-        },
-        "2x-fxaa" => RenderQuality {
-            render_scale: 2.0,
-            anti_aliasing: AntiAliasing::Fxaa,
-        },
-        "pixel" => {
-            config.scale_mode = ScaleMode::IntegerFit;
-            RenderQuality::default()
-        }
-        _ => {
-            return Err(Error::Config(
-                "profile must be native, fxaa, 2x, 2x-fxaa or pixel".into(),
-            ));
-        }
-    };
+    let manifest = rayengine::manifest::ProjectManifest::load(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/render_quality.toml"),
+    )
+    .map_err(|e| Error::Config(e.to_string()))?;
+    let resolved = manifest
+        .resolve(Some(&profile))
+        .map_err(|e| Error::Config(e.to_string()))?;
+    config = config.with_project(&resolved)?;
     let report = App::new(config)
         .with_options(RunOptions::parse(args)?)
         .run(Comparison::default())?;

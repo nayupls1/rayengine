@@ -11,6 +11,11 @@ proximity and camera-visibility queries, and cached
 texture/model/sound handles, generated meshes, and materials with typed shader
 parameters and explicit alpha policies. Raylib is available directly for specialized work.
 
+Optional project descriptions in `rayengine.toml` keep game assets, runtime
+defaults, named profiles and game/plugin settings separate from Cargo builds.
+New game scaffolds include one. See the [manifest guide](crates/rayengine/docs/project_manifest.md)
+for the versioned schema, path resolution and overrides.
+
 Try the games:
 
 ```sh
@@ -88,6 +93,7 @@ cargo doc --workspace --no-deps
 Guides are plain Markdown included in rustdoc, with checked Rust examples:
 
 - [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
+- [Optional scene switching and state stacks](crates/rayengine/docs/states.md)
 - [Optional plugins and authoring](crates/rayengine/docs/plugins.md)
 - [Voxel storage, generation interfaces, meshing and streaming](plugins/voxel/README.md)
 - [Minecraft terrain, survival, crafting, respawn and world saves](examples/minecraft/README.md)
@@ -97,6 +103,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
+- [Sprite sheets and CPU animation](crates/rayengine/docs/sprites.md)
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
@@ -119,6 +126,15 @@ scripts/benchmark.sh compare before-change
 scripts/render_benchmark.sh save materials-v1 # optional native draw benchmark
 ```
 
+Try the title/gameplay/pause state stack example:
+
+```sh
+cargo run -p rayengine --example states
+```
+
+Enter starts a session. Escape pauses with the world visible; Enter/Escape
+resumes, and T while paused returns to title and releases session resources.
+
 Try the draggable menu, keyboard focus, and dynamic cursor capture example:
 
 ```sh
@@ -128,6 +144,21 @@ cargo run -p rayengine --example menu
 Escape toggles the menu. Tab/Up/Down moves focus; Enter/Space selects. Drag the
 header to move the panel. Gameplay receives explicitly masked input while the
 menu is open.
+
+Try analog controller movement and live binding settings:
+
+```sh
+cargo run -p rayengine --example controls
+```
+
+The controls menu switches movement keys, inverts look, adjusts sensitivity,
+and explicitly saves/loads settings. Keyboard and controller sources share the
+same movement axes. See [timing and input](crates/rayengine/docs/timing_input.md)
+for normalization, fixed-tick sampling, routing, and game-owned persistence.
+
+Try the original pixel-art sprite playground with idle, walking and one-shot
+sword animations: `cargo run -p rayengine --example sprites`. A/D or arrows move;
+Space swings at the golden orb, P pauses, and R restarts the current clip.
 
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
 The CPU suite measures primitives and gameplay simulation; the opt-in native
@@ -144,3 +175,8 @@ optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)
 is tracked separately and deferred beyond 0.0.1.
+
+Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
+See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
+and run `cargo run -p rayengine --example lighting` for a generated/imported
+lit/unlit comparison with adjustable lights.

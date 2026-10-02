@@ -19,6 +19,7 @@ impl Game for Bench {
                 Vec3::new(1.0, 1.0, 0.0),
                 Vec3::new(-1.0, 1.0, 0.0),
             ],
+            normals: Some(vec![Vec3::Z; 4]),
             texcoords: Some(vec![Vec2::ZERO, Vec2::X, Vec2::ONE, Vec2::Y]),
             indices: Some(vec![0, 1, 2, 0, 2, 3]),
             ..MeshData::default()
@@ -36,8 +37,30 @@ impl Game for Bench {
             );
         let shader = ctx.shader_from_source(None, &source)?;
         let gain = ctx.uniform(shader, "gain", UniformValue::Vec3(Vec3::ONE))?;
+        ctx.assets.set_lighting(Lighting {
+            ambient: Vec3::splat(0.2),
+            directional: Some(DirectionalLight {
+                direction: -Vec3::Z,
+                color: Vec3::splat(0.5),
+            }),
+            points: vec![
+                PointLight {
+                    position: Vec3::Z * 2.0,
+                    color: Vec3::splat(0.1),
+                    range: 4.0
+                };
+                MAX_POINT_LIGHTS
+            ],
+        })?;
         for (name, desc) in [
             ("opaque", MaterialDesc::default()),
+            (
+                "lit",
+                MaterialDesc {
+                    shading: Shading::Lit,
+                    ..MaterialDesc::default()
+                },
+            ),
             (
                 "textured",
                 MaterialDesc {

@@ -280,7 +280,7 @@ impl Game for ReleaseProbe {
             assert_eq!(
                 frame.assets.resource_counts(),
                 rayengine::diagnostics::ResourceCounts {
-                    shaders: 1,
+                    shaders: 2,
                     ..Default::default()
                 }
             );

@@ -150,3 +150,58 @@ fn native_quality_runner_resize_letterbox_screenshot_and_error_teardown() {
         .unwrap();
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn checked_quality_manifest_profiles_and_rust_override_precedence() {
+    let source = include_str!("../../examples/render_quality.toml");
+    let directory =
+        std::env::temp_dir().join(format!("rayengine-quality-manifest-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("rayengine.toml");
+    std::fs::write(&path, source).unwrap();
+    let manifest = crate::manifest::ProjectManifest::load(&path).unwrap();
+    for (name, scale, aa, mode) in [
+        ("native", 1.0, AntiAliasing::None, ScaleMode::Fit),
+        ("fxaa", 1.0, AntiAliasing::Fxaa, ScaleMode::Fit),
+        ("2x", 2.0, AntiAliasing::None, ScaleMode::Fit),
+        ("2x-fxaa", 2.0, AntiAliasing::Fxaa, ScaleMode::Fit),
+        ("pixel", 1.0, AntiAliasing::None, ScaleMode::IntegerFit),
+    ] {
+        let project = manifest.resolve(Some(name)).unwrap();
+        let config = Config::new("profiles").with_project(&project).unwrap();
+        assert_eq!(
+            config.render_quality,
+            RenderQuality {
+                render_scale: scale,
+                anti_aliasing: aa
+            }
+        );
+        assert_eq!(config.scale_mode, mode);
+    }
+    std::fs::write(
+        &path,
+        "schema_version = 1\n[render]\nanti_aliasing = 'fxaa'",
+    )
+    .unwrap();
+    let partial = crate::manifest::ProjectManifest::load(&path)
+        .unwrap()
+        .resolve(None)
+        .unwrap();
+    let mut rust = Config::new("rust");
+    rust.render_quality.render_scale = 2.0;
+    let config = rust.with_project(&partial).unwrap();
+    assert_eq!(
+        config.render_quality.render_scale, 2.0,
+        "undeclared render scale retains Rust value"
+    );
+    assert_eq!(config.render_quality.anti_aliasing, AntiAliasing::Fxaa);
+    let mut rust = Config::new("pixel");
+    rust.scale_mode = ScaleMode::IntegerFit;
+    assert!(
+        rust.with_project(&partial)
+            .unwrap_err()
+            .to_string()
+            .contains("IntegerFit")
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}

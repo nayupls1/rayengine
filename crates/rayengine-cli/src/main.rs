@@ -1,6 +1,7 @@
 //! Project scaffolding and Cargo tooling with structured agent-readable results.
 
 use clap::{Parser, Subcommand, ValueEnum};
+use rayengine_core::manifest::{ProjectManifest, ResolvedManifest};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -46,11 +47,17 @@ enum Action {
     Info {
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// Select a named rayengine.toml profile.
+        #[arg(long)]
+        profile: Option<String>,
     },
     /// Type-check a game project.
     Check {
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// Select a named rayengine.toml profile.
+        #[arg(long)]
+        profile: Option<String>,
     },
     /// Build a game project.
     Build {
@@ -58,6 +65,9 @@ enum Action {
         path: PathBuf,
         #[arg(long)]
         release: bool,
+        /// Select a named rayengine.toml profile (independent of Cargo --release).
+        #[arg(long)]
+        profile: Option<String>,
     },
     /// Run a game; remaining arguments are passed to its binary.
     Run {
@@ -65,6 +75,12 @@ enum Action {
         path: PathBuf,
         #[arg(long)]
         release: bool,
+        /// Select a named rayengine.toml profile (independent of Cargo --release).
+        #[arg(long)]
+        profile: Option<String>,
+        /// Override project.executable with a Cargo binary target.
+        #[arg(long)]
+        bin: Option<String>,
         #[arg(last = true)]
         args: Vec<String>,
     },
@@ -176,8 +192,9 @@ fn execute(action: Action, json_mode: bool) -> Result<Value> {
             name,
             sdk_path,
         } => create_package(&path, Template::Plugin, name, sdk_path),
-        Action::Info { path } => {
+        Action::Info { path, profile } => {
             let manifest = manifest(&path)?;
+            let (project, profiles) = project_manifest(&path, profile.as_deref())?;
             let output = Command::new("cargo")
                 .args([
                     "metadata",
@@ -196,22 +213,64 @@ fn execute(action: Action, json_mode: bool) -> Result<Value> {
                 .map_err(|e| Failure::new("invalid_metadata", e.to_string()))?;
             Ok(
                 json!({ "engine_version": env!("CARGO_PKG_VERSION"), "manifest": manifest,
-                "workspace_root": metadata["workspace_root"], "packages": metadata["packages"] }),
+                "workspace_root": metadata["workspace_root"], "packages": metadata["packages"],
+                "project_manifest": project, "profiles": profiles }),
             )
         }
-        Action::Check { path } => cargo_task("check", &path, false, &[], json_mode),
-        Action::Build { path, release } => cargo_task("build", &path, release, &[], json_mode),
+        Action::Check { path, profile } => cargo_task(
+            "check",
+            &path,
+            false,
+            profile.as_deref(),
+            None,
+            &[],
+            json_mode,
+        ),
+        Action::Build {
+            path,
+            release,
+            profile,
+        } => cargo_task(
+            "build",
+            &path,
+            release,
+            profile.as_deref(),
+            None,
+            &[],
+            json_mode,
+        ),
         Action::Run {
             path,
             release,
+            profile,
+            bin,
             args,
-        } => cargo_task("run", &path, release, &args, json_mode),
+        } => cargo_task(
+            "run",
+            &path,
+            release,
+            profile.as_deref(),
+            bin.as_deref(),
+            &args,
+            json_mode,
+        ),
         Action::Doctor => doctor(),
     }
 }
 
 fn manifest(path: &Path) -> Result<PathBuf> {
-    let manifest = if path.is_file() {
+    let manifest = if path
+        .file_name()
+        .is_some_and(|name| name == "rayengine.toml")
+    {
+        path.canonicalize().map_err(|e| {
+            Failure::new(
+                "invalid_project_manifest",
+                format!("{}: {e}", path.display()),
+            )
+        })?;
+        path.with_file_name("Cargo.toml")
+    } else if path.is_file() {
         path.to_path_buf()
     } else {
         path.join("Cargo.toml")
@@ -219,6 +278,28 @@ fn manifest(path: &Path) -> Result<PathBuf> {
     manifest
         .canonicalize()
         .map_err(|e| Failure::new("missing_manifest", format!("{}: {e}", manifest.display())))
+}
+
+fn project_manifest(
+    path: &Path,
+    profile: Option<&str>,
+) -> Result<(Option<ResolvedManifest>, Vec<String>)> {
+    let manifest = ProjectManifest::load_optional(path)
+        .map_err(|e| Failure::new("invalid_project_manifest", e.to_string()))?;
+    match manifest {
+        Some(manifest) => {
+            let profiles = manifest.profiles().map(str::to_owned).collect();
+            let project = manifest
+                .resolve(profile)
+                .map_err(|e| Failure::new("invalid_project_manifest", e.to_string()))?;
+            Ok((Some(project), profiles))
+        }
+        None if profile.is_some() => Err(Failure::new(
+            "invalid_project_manifest",
+            "a profile requires rayengine.toml",
+        )),
+        None => Ok((None, vec![])),
+    }
 }
 
 fn create_project(
@@ -318,16 +399,30 @@ fn create_package(
     fs::write(path.join(".gitignore"), "/target/\n/artifacts/\n").map_err(io_error)?;
     let readme = match template {
         Template::Game(_) => format!(
-            "# {name}\n\nA rayengine game.\n\n```sh\ncargo run\ncargo check\ncargo run -- --frames 60 --screenshot artifacts/frame.png\n```\n\nThe SDK dependency can be changed in Cargo.toml. Keep game state in\nordinary Rust components; fixed_update handles simulation and draw handles\ninterpolated rendering. See rayengine's rustdoc guides for the API.\n"
+            "# {name}\n\nA rayengine game.\n\n```sh\ncargo run\ncargo check\ncargo run -- --frames 60 --screenshot artifacts/frame.png\n```\n\nrayengine.toml describes runtime defaults and asset discovery; Cargo.toml
+still describes the Rust build. Inspect with `rayengine info . --profile dev`.
+Run with `rayengine run . --profile dev -- --frames 60`. Direct `cargo run`
+loads the base manifest; set RAYENGINE_PROFILE=dev to select a profile.
+Paths are relative to the manifest, even when invoked from another directory.
+
+The SDK dependency can be changed in Cargo.toml. Keep game state in\nordinary Rust components; fixed_update handles simulation and draw handles\ninterpolated rendering. See rayengine's rustdoc guides for the API.\n"
         ),
         Template::Plugin => format!(
             "# {name}\n\nAn optional rayengine Cargo plugin.\n\n```sh\ncargo check\ncargo test\ncargo doc --no-deps\n```\n\nAdd this library as a path dependency in the consuming game's Cargo.toml.\nStore MyPlugin and PluginState in your game, then call its Plugin hooks\nexplicitly from Game. The engine does not register or invoke plugins.\nConfigure action IDs in the game; keep GPU work on the render thread.\nThe SDK dependency must match the SDK source/version used by the game.\nIf nested in an existing workspace, exclude this path in its root workspace\nor remove this library's [workspace] and add it to the root members.\nGenerated rayengine games already exclude plugins.\nSee rayengine's plugins rustdoc guide for composition, ownership, and cleanup.\n"
         ),
     };
     fs::write(path.join("README.md"), readme).map_err(io_error)?;
+    let mut files = vec!["Cargo.toml", source_path, ".gitignore", "README.md"];
+    if matches!(template, Template::Game(_)) {
+        let project_manifest = include_str!("templates/rayengine.toml").replace("{{name}}", &name);
+        fs::write(path.join("rayengine.toml"), project_manifest).map_err(io_error)?;
+        fs::create_dir(path.join("assets")).map_err(io_error)?;
+        fs::write(path.join("assets/.gitkeep"), "").map_err(io_error)?;
+        files.extend(["rayengine.toml", "assets/.gitkeep"]);
+    }
     let project = path.canonicalize().map_err(io_error)?;
     Ok(json!({ "path": project, "name": name, "kind": kind,
-        "sdk_path": sdk, "files": ["Cargo.toml", source_path, ".gitignore", "README.md"] }))
+        "sdk_path": sdk, "files": files }))
 }
 
 fn validate_name(name: &str) -> Result<()> {
@@ -351,10 +446,13 @@ fn cargo_task(
     task: &str,
     path: &Path,
     release: bool,
+    profile: Option<&str>,
+    bin: Option<&str>,
     args: &[String],
     json_mode: bool,
 ) -> Result<Value> {
     let manifest = manifest(path)?;
+    let (project, _) = project_manifest(path, profile)?;
     let mut command = Command::new("cargo");
     command
         .arg(task)
@@ -368,6 +466,23 @@ fn cargo_task(
         command.arg("--message-format=json");
     }
     if task == "run" {
+        if let Some(target) = bin.or_else(|| {
+            project
+                .as_ref()
+                .and_then(|p| p.settings.project.executable.as_deref())
+        }) {
+            command.arg("--bin").arg(target);
+        }
+        // Pass an explicit file/profile to opt-in runtimes, independent of cwd.
+        command
+            .env_remove("RAYENGINE_MANIFEST")
+            .env_remove("RAYENGINE_PROFILE");
+        if let Some(project) = &project {
+            command.env("RAYENGINE_MANIFEST", &project.path);
+            if let Some(profile) = &project.profile {
+                command.env("RAYENGINE_PROFILE", profile);
+            }
+        }
         command.arg("--").args(args);
     }
     if !json_mode {
@@ -378,7 +493,9 @@ fn cargo_task(
                 format!("cargo {task} exited with {status}"),
             ));
         }
-        return Ok(json!({ "manifest": manifest, "release": release }));
+        return Ok(
+            json!({ "manifest": manifest, "release": release, "project_manifest": project }),
+        );
     }
     let output = command.output().map_err(process_error)?;
     if !output.status.success() {
@@ -394,7 +511,7 @@ fn cargo_task(
         }
     }
     Ok(
-        json!({ "manifest": manifest, "release": release, "diagnostics": diagnostics,
+        json!({ "manifest": manifest, "release": release, "project_manifest": project, "diagnostics": diagnostics,
         "stdout": game_output.join("\n"), "stderr": String::from_utf8_lossy(&output.stderr) }),
     )
 }

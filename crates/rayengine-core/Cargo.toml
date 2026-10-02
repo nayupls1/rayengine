@@ -16,6 +16,9 @@ include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "docs/**", "examples/
 glam.workspace = true
 hecs.workspace = true
 crc32fast.workspace = true
+serde.workspace = true
+toml.workspace = true
+globset.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

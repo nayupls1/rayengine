@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased (0.0.2)
+
+- Configurable native/2× supersampled world rendering and offscreen FXAA, native
+  UI composition, checked manifest profiles, bounded allocations and visual/performance probes.
+
+- Add opt-in Lambert materials with ambient, directional, and up to four point
+  lights, shared generated/imported geometry APIs, checked normal/transform
+  validation, an adjustable demo, native pixel probes, and submission benchmarks.
+- Optional game-owned state stacks with deferred transitions, independent
+  update/draw/input routing, explicit resource cleanup and a title/pause example.
+- Validated sprite-sheet regions with world-space rotation, explicit pivots,
+  flipping and tint through cached texture handles.
+- CPU-only named animation clips with per-frame timing, looping and one-shot
+  playback, pause/resume/reset and single completion events.
+- Original MIT-licensed pixel-art playground, checked documentation, focused
+  playback tests and a native sprite drawing probe across viewport policies.
+
+- Add optional versioned `rayengine.toml` descriptions with profiles, shared
+  CLI/runtime validation, manifest-relative assets/font declarations, extension
+  namespaces, scaffold examples and inspection/check integration.
+
 ## 0.0.1
 
 - Manually dispatched crates.io releases gated by the full CI suite, coordinated

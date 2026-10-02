@@ -117,10 +117,12 @@ CPU/OS/backend, environment, and active GL driver metadata. Use `--size`,
 `RAYENGINE_BACKEND=wayland` selects a Wayland-enabled build. Native probes run
 serially through `scripts/native_smoke.sh` and require an OpenGL display.
 
-Proposed `rayengine.toml` profile names for manifest issue #44 are
+The `rayengine.toml` profile fields are
 `render_scale` and `anti_aliasing` (`"none"` or `"fxaa"`) under `render`:
 
 ```toml
+schema_version = 1
+
 [render]
 render_scale = 1.0
 anti_aliasing = "none"
@@ -134,7 +136,12 @@ render_scale = 2.0
 anti_aliasing = "fxaa"
 ```
 
-These are coordination examples for the forthcoming versioned manifest, not an
-implemented TOML loader. Current games set `Config::render_quality` directly.
+Load these profiles with `Config::with_optional_project(path, Some("ultra"))`,
+or apply a resolved project with `Config::with_project`. Explicitly declared
+fields override Rust defaults individually; omitted fields retain Rust settings.
+`RunOptions::size` applies last and triggers fresh allocation validation.
+Unknown anti-aliasing strings, unsupported scales, incompatible pixel profiles,
+and excessive initial allocations fail in both CLI and runtime loading.
+The native comparison uses [checked manifest profiles](../examples/render_quality.toml).
 See the [measured comparison](../../../docs/render_quality_comparison.md) for
 resource and performance results and their environment limits.

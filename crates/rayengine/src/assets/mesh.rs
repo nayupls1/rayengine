@@ -20,6 +20,7 @@ pub(super) struct MeshAssets {
 struct Slot {
     generation: u64,
     mesh: Option<Mesh>,
+    lit_normals: bool,
 }
 
 // Only the owning Material drops GPU/CPU data. The WeakMaterial is a private
@@ -75,6 +76,10 @@ impl MeshAssets {
             .and_then(|slot| slot.mesh.as_ref())
     }
 
+    pub(super) fn has_lit_normals(&self, id: MeshId) -> bool {
+        self.get(id).is_some() && self.slots[id.slot].lit_normals
+    }
+
     pub(super) fn upload(
         &mut self,
         raylib: &RaylibHandle,
@@ -88,6 +93,7 @@ impl MeshAssets {
         self.live += 1;
         if let Some(index) = self.free.pop() {
             let slot = &mut self.slots[index];
+            slot.lit_normals = lit_normals(data);
             slot.mesh = Some(mesh);
             Ok(MeshId {
                 slot: index,
@@ -101,6 +107,7 @@ impl MeshAssets {
             self.slots.push(Slot {
                 generation: 0,
                 mesh: Some(mesh),
+                lit_normals: lit_normals(data),
             });
             Ok(id)
         }
@@ -119,6 +126,7 @@ impl MeshAssets {
         }
         // Allocate the complete replacement before dropping the old resource.
         let mesh = upload(thread, data)?;
+        self.slots[id.slot].lit_normals = lit_normals(data);
         self.slots[id.slot].mesh = Some(mesh);
         Ok(())
     }
@@ -153,6 +161,13 @@ impl MeshAssets {
             .set_map_color(raylib::consts::MaterialMapIndex::MATERIAL_MAP_ALBEDO, tint);
         Some((mesh, material.view.clone()))
     }
+}
+
+fn lit_normals(data: &MeshData) -> bool {
+    data.normals.as_ref().is_some_and(|normals| {
+        normals.len() == data.positions.len()
+            && normals.iter().copied().all(crate::lighting::valid_normal)
+    })
 }
 
 fn upload(thread: &RaylibThread, data: &MeshData) -> Result<Mesh, Error> {
@@ -217,6 +232,24 @@ mod tests {
             colors: Some(vec![color; 4]),
             indices: Some(vec![0, 1, 2, 0, 2, 3]),
         }
+    }
+
+    #[test]
+    fn lighting_requires_complete_nonzero_normals_without_restricting_unlit_meshes() {
+        let mut data = quad([255; 4]);
+        assert!(lit_normals(&data));
+        for normals in [
+            None,
+            Some(vec![]),
+            Some(vec![rayengine_core::glam::Vec3::ZERO; 4]),
+        ] {
+            data.normals = normals;
+            assert!(!lit_normals(&data));
+        }
+        // Normal-optional and zero-normal meshes retain the existing unlit upload policy.
+        assert!(data.validate().is_ok());
+        data.normals = Some(vec![rayengine_core::glam::Vec3::Z * 3.0; 4]);
+        assert!(lit_normals(&data));
     }
 
     fn camera() -> Camera3D {

@@ -4,7 +4,8 @@ use glam::Vec2;
 use std::fmt;
 
 /// Anti-aliasing applied to the game's offscreen world before UI composition.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AntiAliasing {
     /// No edge filter (supersampling can still be selected independently).
     #[default]
