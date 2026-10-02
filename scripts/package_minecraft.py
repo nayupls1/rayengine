@@ -20,6 +20,15 @@ def command(*args, env=None):
     return subprocess.check_output(args, cwd=ROOT, env=env, text=True).strip()
 
 
+def source_status(staging=None):
+    args = ['git', 'status', '--porcelain', '--', '.']
+    if staging is not None and staging.is_relative_to(ROOT):
+        # A custom output directory may be unignored. Only exclude this run's
+        # private staging tree; other untracked or modified source still rejects it.
+        args.append(f':(top,exclude,literal){staging.relative_to(ROOT).as_posix()}')
+    return command(*args)
+
+
 def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -79,7 +88,7 @@ def main():
     args = parser.parse_args()
     if sys.platform != 'linux':
         parser.error('bundles are currently supported on Linux')
-    if command('git', 'status', '--porcelain'):
+    if source_status():
         parser.error('commit/stash source changes before packaging a candidate')
     meta = json.loads(command('cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1'))
     version = next(p['version'] for p in meta['packages'] if p['name'] == 'rayengine-minecraft')
@@ -147,7 +156,7 @@ def main():
                     for path in sorted(staging.rglob('*')):
                         tar.add(path, arcname=f'{name}/{path.relative_to(staging).as_posix()}',
                                 recursive=False, filter=normalize)
-        if command('git', 'status', '--porcelain') or command('git', 'rev-parse', 'HEAD') != commit:
+        if source_status(Path(temp)) or command('git', 'rev-parse', 'HEAD') != commit:
             parser.error('source changed during packaging; commit/stash and retry in a new --output directory')
         # Exclusive publication preserves an existing candidate even if another
         # packaging process raced with the initial existence check.
