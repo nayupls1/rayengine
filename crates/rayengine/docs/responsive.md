@@ -56,4 +56,7 @@ a low-resolution UI buffer.
 Minimized windows pause simulation, release held actions, keep polling backend
 events, and sleep briefly. Restoring the window does not queue the entire paused
 interval as simulation work. Reference/window configuration is validated before
-opening the backend, and target allocation is bounded to 8192 pixels per axis.
+opening the backend. Target allocations fail explicitly above 8192 pixels per
+axis, the device limit, or the 512 MiB estimated storage budget. Optional
+[render quality](crate::guides::render_quality) adds world supersampling and FXAA
+while preserving this same viewport and pointer contract.

@@ -171,6 +171,8 @@ pub struct RunSettings {
     pub arch: &'static str,
     /// SDK version.
     pub sdk_version: &'static str,
+    /// OpenGL vendor, renderer and version strings from the active context.
+    pub graphics: [String; 3],
     /// Initial logical window dimensions.
     pub window_size: (u32, u32),
     /// Reference UI dimensions.
@@ -187,6 +189,14 @@ pub struct RunSettings {
     pub vsync: bool,
     /// Last offscreen render size, including DPI/viewport effects.
     pub render_size: (u32, u32),
+    /// Internal world resolution multiplier per dimension.
+    pub render_scale: f32,
+    /// Offscreen world edge filter, serialized by its stable setting name.
+    pub anti_aliasing: &'static str,
+    /// Native composition dimensions.
+    pub output_size: (u32, u32),
+    /// Conservative steady-state render target allocation estimate.
+    pub render_target_bytes: u64,
 }
 
 /// JSON schema 1. Reports retain totals/extrema instead of unbounded frame samples.
@@ -313,6 +323,7 @@ mod tests {
             os: "test",
             arch: "test",
             sdk_version: "0.0.1",
+            graphics: std::array::from_fn(|_| "test".into()),
             window_size: (64, 64),
             reference_size: [64.0; 2],
             scale_mode: "fit",
@@ -321,6 +332,10 @@ mod tests {
             target_fps: 0,
             vsync: false,
             render_size: (64, 64),
+            render_scale: 1.0,
+            anti_aliasing: "none",
+            output_size: (64, 64),
+            render_target_bytes: 64 * 64 * 8,
         };
         let mut report = DiagnosticsReport::new(
             &DiagnosticsConfig::new("fixture.v1"),

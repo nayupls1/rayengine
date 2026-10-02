@@ -11,6 +11,7 @@ use rayengine_core::{
     glam::Vec2,
     input::Input,
     mesh::MeshData,
+    quality::RenderQuality,
     time::{FixedClock, Tick},
     ui::{UiActions, UiInput},
     viewport::{ScaleMode, Viewport},
@@ -71,6 +72,8 @@ pub struct Config {
     pub reference_size: Vec2,
     /// Viewport fit/expand policy.
     pub scale_mode: ScaleMode,
+    /// Offscreen world quality; default is native resolution without an edge filter.
+    pub render_quality: RenderQuality,
     /// Fixed simulation updates per second, from 1 to 1000.
     pub fixed_hz: u32,
     /// Maximum simulation updates before rendering a frame.
@@ -96,6 +99,7 @@ impl Config {
             window_size: (1280, 720),
             reference_size: Vec2::new(960.0, 540.0),
             scale_mode: ScaleMode::Fit,
+            render_quality: RenderQuality::default(),
             fixed_hz: 120,
             max_catch_up: 8,
             target_fps: 120,
@@ -128,6 +132,15 @@ impl Config {
         if self.target_fps > 1000 {
             return Err(Error::Config("target_fps must be 0..=1000".into()));
         }
+        let view = Viewport::new(
+            Vec2::new(self.window_size.0 as f32, self.window_size.1 as f32),
+            self.reference_size,
+            self.scale_mode,
+        )
+        .expect("validated dimensions");
+        self.render_quality
+            .plan(&view, Vec2::ONE, self.scale_mode)
+            .map_err(|e| Error::Config(e.to_string()))?;
         Ok(())
     }
 }
@@ -521,8 +534,8 @@ impl App {
             assets: &mut assets,
         })?;
         let mut cursor = CursorState::default();
-        let mut target: Option<RenderTexture2D> = None;
-        let mut target_size = (0, 0);
+        let mut fxaa = crate::quality::shader(&mut raylib, &thread, config.render_quality)?;
+        let mut targets: Option<crate::quality::QualityTargets> = None;
         let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
         let start = Instant::now();
         let mut previous_frame = start;
@@ -547,6 +560,7 @@ impl App {
                         os: std::env::consts::OS,
                         arch: std::env::consts::ARCH,
                         sdk_version: env!("CARGO_PKG_VERSION"),
+                        graphics: crate::quality::graphics_info(&thread),
                         window_size: config.window_size,
                         reference_size: config.reference_size.to_array(),
                         scale_mode: match config.scale_mode {
@@ -563,6 +577,13 @@ impl App {
                         },
                         vsync: config.vsync && !options.uncapped,
                         render_size: (0, 0),
+                        render_scale: config.render_quality.render_scale,
+                        anti_aliasing: match config.render_quality.anti_aliasing {
+                            rayengine_core::quality::AntiAliasing::None => "none",
+                            rayengine_core::quality::AntiAliasing::Fxaa => "fxaa",
+                        },
+                        output_size: (0, 0),
+                        render_target_bytes: 0,
                     },
                     assets.resource_counts(),
                 )
@@ -642,37 +663,33 @@ impl App {
                 raylib.get_render_width() as f32,
                 raylib.get_render_height() as f32,
             ) / window;
-            let size = if config.scale_mode == ScaleMode::IntegerFit {
-                (
-                    config.reference_size.x.round() as u32,
-                    config.reference_size.y.round() as u32,
-                )
-            } else {
-                view.render_size(dpi)
-            };
-            if size != target_size {
-                // Resize only when required; the old target drops while GL is alive.
-                let new_target = raylib
-                    .load_render_texture(&thread, size.0, size.1)
-                    .map_err(|e| Error::Backend(e.to_string()))?;
-                new_target.texture().set_texture_filter(
+            let target_plan = config
+                .render_quality
+                .plan(&view, dpi, config.scale_mode)
+                .map_err(|e| Error::Config(e.to_string()))?;
+            if targets
+                .as_ref()
+                .is_none_or(|targets| targets.plan != target_plan)
+            {
+                // Drop old targets before allocating to keep the checked memory bound.
+                // Any failure exits cleanly while the graphics context remains alive.
+                drop(targets.take());
+                targets = Some(crate::quality::QualityTargets::new(
+                    &mut raylib,
                     &thread,
-                    if config.scale_mode == ScaleMode::IntegerFit {
-                        TextureFilter::TEXTURE_FILTER_POINT
-                    } else {
-                        TextureFilter::TEXTURE_FILTER_BILINEAR
-                    },
-                );
-                target = Some(new_target);
-                target_size = size;
+                    target_plan,
+                    config.scale_mode == ScaleMode::IntegerFit,
+                )?);
             }
-            let target = target.as_mut().expect("created target");
+            let targets = targets.as_mut().expect("created targets");
+            let size = target_plan.world;
             let draws = {
                 let mut frame = Frame {
                     counters: report.diagnostics.as_ref().map(|_| DrawCounters::default()),
                     raylib: &mut raylib,
                     thread: &thread,
-                    target,
+                    target: &mut targets.world,
+                    ui_target: targets.ui.as_mut(),
                     assets: &mut assets,
                     viewport: view,
                     alpha: plan.alpha,
@@ -682,6 +699,7 @@ impl App {
                 game.draw(&mut frame);
                 frame.draw_counters()
             };
+            targets.resolve(&mut raylib, &thread, fxaa.as_mut());
             if let Some(metrics) = &mut report.diagnostics {
                 metrics
                     .render
@@ -692,8 +710,13 @@ impl App {
                 let mut draw = raylib.begin_drawing(&thread);
                 draw.clear_background(config.bar_color);
                 draw.draw_texture_pro(
-                    target.texture(),
-                    Rectangle::new(0.0, 0.0, size.0 as f32, -(size.1 as f32)),
+                    targets.presented().texture(),
+                    Rectangle::new(
+                        0.0,
+                        0.0,
+                        target_plan.output.0 as f32,
+                        -(target_plan.output.1 as f32),
+                    ),
                     rect(rayengine_core::collision::Aabb2 {
                         min: view.origin,
                         max: view.origin + view.size,
@@ -708,6 +731,8 @@ impl App {
                     .present
                     .record(present_start.expect("diagnostics enabled").elapsed());
                 metrics.settings.render_size = size;
+                metrics.settings.output_size = target_plan.output;
+                metrics.settings.render_target_bytes = target_plan.target_bytes;
                 metrics.record_frame(draws.unwrap_or_default(), assets.resource_counts());
                 metrics.frame.record(now.elapsed());
             }
@@ -983,3 +1008,6 @@ mod ui_tests;
 
 #[cfg(test)]
 mod diagnostics_tests;
+
+#[cfg(test)]
+mod quality_tests;

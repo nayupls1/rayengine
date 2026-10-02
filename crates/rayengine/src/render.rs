@@ -31,12 +31,16 @@ macro_rules! count {
 /// Concrete offscreen raylib drawing guard, available for advanced passes.
 pub type TargetDraw<'draw, 'target> = RaylibTextureMode<'draw, 'target, RaylibHandle>;
 
+/// Native UI pass with coverage-preserving alpha blending.
+pub type UiTargetDraw<'draw, 'target, 'blend> = RaylibBlendMode<'blend, TargetDraw<'draw, 'target>>;
+
 /// One render frame. Game code chooses passes; the engine owns presentation.
 pub struct Frame<'frame, 'audio> {
     pub(crate) counters: Option<DrawCounters>,
     pub(crate) raylib: &'frame mut RaylibHandle,
     pub(crate) thread: &'frame RaylibThread,
     pub(crate) target: &'frame mut RenderTexture2D,
+    pub(crate) ui_target: Option<&'frame mut RenderTexture2D>,
     /// Assets available on the render thread, including explicit unloading.
     pub assets: &'frame mut Assets<'audio>,
     /// Current viewport in logical window coordinates.
@@ -131,12 +135,17 @@ impl Frame<'_, '_> {
         self.assets.replace_mesh(self.thread, id, data)
     }
 
-    /// Clears color and depth at the start of the game frame.
+    /// Clears world color/depth and the optional transparent native UI layer.
     pub fn clear(&mut self, color: Color) {
         count!(self.counters, clears, 1);
         self.raylib
             .begin_texture_mode(self.thread, self.target)
             .clear_background(color);
+        if let Some(ui) = self.ui_target.as_mut() {
+            self.raylib
+                .begin_texture_mode(self.thread, ui)
+                .clear_background(Color::BLANK);
+        }
     }
 
     /// Draws a 2D pass in world units, maintaining the camera's visible height.
@@ -190,16 +199,21 @@ impl Frame<'_, '_> {
         });
     }
 
-    /// Draws screen UI in reference units, scaled independently from the world camera.
-    pub fn ui(&mut self, draw: impl FnOnce(&mut UiCanvas<'_, TargetDraw<'_, '_>>)) {
+    /// Draws UI in reference units. Quality modes use a native-resolution layer
+    /// composed over all world passes after filtering; call order within UI is preserved.
+    /// Default and IntegerFit modes keep the original immediate pass ordering.
+    pub fn ui(&mut self, draw: impl FnOnce(&mut UiCanvas<'_, UiTargetDraw<'_, '_, '_>>)) {
         count!(self.counters, ui_passes, 1);
+        let target = self.ui_target.as_deref_mut().unwrap_or(self.target);
         let pixels = Vec2::new(
-            self.target.texture().width as f32,
-            self.target.texture().height as f32,
+            target.texture().width as f32,
+            target.texture().height as f32,
         );
         let scale = pixels / self.viewport.logical_size;
         let font = self.raylib.get_font_default();
-        let mut raw = self.raylib.begin_texture_mode(self.thread, self.target);
+        crate::quality::ui_blend_factors(self.thread);
+        let mut raw = self.raylib.begin_texture_mode(self.thread, target);
+        let mut raw = raw.begin_blend_mode(BlendMode::BLEND_CUSTOM_SEPARATE);
         draw(&mut UiCanvas {
             raw: &mut raw,
             scale,
@@ -504,6 +518,12 @@ impl Default for UiButtonStyle {
 }
 
 impl<D: RaylibDraw> UiCanvas<'_, D> {
+    /// Native target pixels per logical UI unit. Use for advanced raw text drawing
+    /// and choosing font atlas rasterization size; independent of world quality.
+    pub fn pixel_scale(&self) -> Vec2 {
+        self.scale
+    }
+
     /// Draws an already-resolved button response; activation is handled during
     /// fixed update. Use short labels that fit the supplied bounds.
     pub fn button(

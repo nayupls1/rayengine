@@ -92,6 +92,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Voxel storage, generation interfaces, meshing and streaming](plugins/voxel/README.md)
 - [Minecraft terrain, survival, crafting, respawn and world saves](examples/minecraft/README.md)
 - [Minecraft 0.0.1 release, Linux bundle and complete validation](docs/minecraft_release.md)
+- [Render quality, supersampling and anti-aliasing](crates/rayengine/docs/render_quality.md)
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
