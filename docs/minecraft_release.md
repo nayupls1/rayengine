@@ -117,7 +117,8 @@ a distant generated safe spawn, moves/jumps/looks and verifies saved chunks evic
 A fresh scene reopens the saved player/inventory/fall state, returns to the edited
 region and validates cells/render receipts, then restores the saved pose. The
 second scene leaves the container byte-identical. Assertions check resource bounds
-and complete GPU teardown. Interaction cells and the distant relocation are
+and complete scene-owned GPU teardown; the SDK retains its built-in material
+shader until run shutdown. Interaction cells and the distant relocation are
 controlled fixtures; game input, loaders, rendering and persistence use production
 paths. Screenshots and a structured proof report are exported under
 `artifacts/smoke/minecraft-release-*` and `minecraft-release.json`.

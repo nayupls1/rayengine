@@ -25,7 +25,6 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-
 def dependency_notices(staging, host, backend):
     features = 'rayengine-minecraft/render'
     if backend == 'wayland':

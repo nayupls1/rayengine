@@ -275,8 +275,15 @@ impl Game for ReleaseProbe {
             frame
                 .assets
                 .unload_texture(base.game.texture.take().unwrap());
-            assert_eq!(frame.assets.resource_counts().meshes, 0);
-            assert_eq!(frame.assets.resource_counts().textures, 0);
+            // The SDK owns its built-in material shader until run shutdown;
+            // every scene-owned resource and payload must already be gone.
+            assert_eq!(
+                frame.assets.resource_counts(),
+                rayengine::diagnostics::ResourceCounts {
+                    shaders: 1,
+                    ..Default::default()
+                }
+            );
         }
     }
 }
