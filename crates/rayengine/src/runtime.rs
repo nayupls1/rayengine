@@ -3,7 +3,7 @@
 use crate::{
     assets::{Assets, MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId, path_string},
     diagnostics::{DiagnosticsConfig, DiagnosticsReport, DrawCounters, RunSettings},
-    input::Bindings,
+    input::{Bindings, SamplingState},
     material::{MaterialDesc, UniformId, UniformValue},
     render::{Frame, rect},
 };
@@ -523,6 +523,7 @@ impl App {
         // on early returns. Game-owned native resources also remain context-safe.
         let mut game = game;
         let mut previous_bindings = bindings.clone();
+        let mut sampling = SamplingState::default();
         let (actions, axes) = bindings.capacities();
         let mut input = Input::with_capacities(actions, axes);
         game.init(&mut InitContext {
@@ -595,6 +596,7 @@ impl App {
             if raylib.is_window_minimized() || view.is_none() {
                 sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), false);
                 input.release_all();
+                sampling = SamplingState::default();
                 // Keep backend event polling alive, but pause simulation while minimized.
                 raylib
                     .begin_drawing(&thread)
@@ -605,7 +607,7 @@ impl App {
             let view = view.expect("non-minimized viewport");
             let window_focused = raylib.is_window_focused();
             sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
-            bindings.sample(&raylib, &mut input);
+            bindings.sample(&raylib, &mut input, &mut sampling);
             if cursor.take_motion() {
                 let delta = raylib.get_mouse_delta();
                 input.add_pointer_delta(Vec2::new(delta.x, delta.y));

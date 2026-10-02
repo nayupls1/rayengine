@@ -303,7 +303,8 @@ fn main() -> Result<(), Error> {
             position: Vec2::ZERO,
             previous_position: Vec2::ZERO,
             yaw: 0.0,
-            status: "Tab/Up/Down focus / Enter select / click a control".into(),
+            status: "Tab/Up/Down focus / Enter select / release pad triggers once to enable boost"
+                .into(),
         })?;
     Ok(())
 }

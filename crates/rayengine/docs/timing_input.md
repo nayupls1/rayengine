@@ -88,6 +88,16 @@ per axis, not radial. Button pairs use held state; opposites cancel. `None` or
 nonfinite backend samples always produce zero, including triggers. Native
 sampling checks both device availability and axis count.
 
+GLFW exposes six logical axes even when a controller mapping omits triggers;
+an omitted trigger reads raw zero, indistinguishable from valid half pressure.
+The runner therefore requires each physical trigger to report a released value
+(raw at or below -0.95) before accepting its pressure. This arming state is
+independent for each device slot and trigger, resets on sampled disconnection,
+focus loss or minimization, and keeps missing trigger mappings neutral. A trigger
+held during connection or focus recovery remains neutral until released once.
+After arming, half pressure works normally. This policy is sampling state rather
+than a saved setting; `AxisBinding::process` remains a stateless transformation.
+
 Each analog target selects the processed source with greatest absolute value;
 the first configured source wins ties. Values are not summed, so duplicate
 sources cannot amplify movement. A physical source may drive several targets;
@@ -107,7 +117,8 @@ next sample; other keyboard/controller bindings still contribute. A reused slot
 can drive the mapping when a controller reconnects. Focus loss neutralizes all
 held buttons, analog values and pointer motion, sets `reset_pending`, and retains
 observable releases. Minimization does the same and pauses simulation. Held
-physical controls resume after a focused sample. Masking is explicit per axis:
+physical buttons and sticks resume after a focused sample; triggers require the
+release described above. Masking is explicit per axis:
 
 ```rust
 use rayengine::prelude::*;

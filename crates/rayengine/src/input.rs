@@ -317,14 +317,32 @@ impl Bindings {
         Ok(())
     }
 
-    pub(crate) fn sample(&self, raylib: &RaylibHandle, input: &mut Input) {
-        self.sample_from(&NativeInput(raylib), input);
+    pub(crate) fn sample(
+        &self,
+        raylib: &RaylibHandle,
+        input: &mut Input,
+        sampling: &mut SamplingState,
+    ) {
+        self.sample_from(&NativeInput(raylib), input, sampling);
     }
 
-    fn sample_from(&self, backend: &impl PhysicalInput, input: &mut Input) {
+    fn sample_from(
+        &self,
+        backend: &impl PhysicalInput,
+        input: &mut Input,
+        sampling: &mut SamplingState,
+    ) {
         if !backend.focused() {
+            sampling.trigger_armed.fill(false);
             input.release_all();
             return;
+        }
+        // Poll device presence even without active trigger bindings, so an old
+        // armed state never survives a sampled disconnect and reconnect.
+        for device in 0..4 {
+            if !backend.available(device) {
+                sampling.trigger_armed[device as usize * 2..device as usize * 2 + 2].fill(false);
+            }
         }
         for (action, buttons) in &self.actions {
             let mut down = false;
@@ -347,7 +365,9 @@ impl Bindings {
                         f32::from(backend.button(positive).0)
                             - f32::from(backend.button(negative).0),
                     ),
-                    AxisSource::Gamepad { device, axis } => backend.axis(device, axis),
+                    AxisSource::Gamepad { device, axis } => {
+                        sampling.filter(device, axis, backend.axis(device, axis))
+                    }
                 };
                 let candidate = source.process(raw);
                 if candidate.abs() > value.abs() {
@@ -359,8 +379,40 @@ impl Bindings {
     }
 }
 
+// GLFW reports six logical axes even for mappings with missing triggers. Those
+// missing triggers read zero, indistinguishable from a real half press. Requiring
+// an observed release before accepting pressure keeps such mappings neutral.
+#[derive(Debug, Default)]
+pub(crate) struct SamplingState {
+    trigger_armed: [bool; 8],
+}
+
+impl SamplingState {
+    fn filter(&mut self, device: i32, axis: GamepadAxis, raw: Option<f32>) -> Option<f32> {
+        let trigger = match axis {
+            GamepadAxis::GAMEPAD_AXIS_LEFT_TRIGGER => 0,
+            GamepadAxis::GAMEPAD_AXIS_RIGHT_TRIGGER => 1,
+            _ => return raw,
+        };
+        if !(0..4).contains(&device) {
+            return None;
+        }
+        let armed = &mut self.trigger_armed[device as usize * 2 + trigger];
+        let Some(raw) = raw.filter(|value| value.is_finite()) else {
+            *armed = false;
+            return None;
+        };
+        // Allow small drift near raylib's released trigger endpoint (-1).
+        if raw <= -0.95 {
+            *armed = true;
+        }
+        armed.then_some(raw)
+    }
+}
+
 trait PhysicalInput {
     fn focused(&self) -> bool;
+    fn available(&self, device: i32) -> bool;
     fn button(&self, button: Button) -> (bool, bool);
     fn axis(&self, device: i32, axis: GamepadAxis) -> Option<f32>;
 }
@@ -370,6 +422,9 @@ impl PhysicalInput for NativeInput<'_> {
     fn focused(&self) -> bool {
         self.0.is_window_focused()
     }
+    fn available(&self, device: i32) -> bool {
+        (0..4).contains(&device) && self.0.is_gamepad_available(device)
+    }
     fn button(&self, button: Button) -> (bool, bool) {
         match button {
             Button::Key(key) => (self.0.is_key_down(key), self.0.is_key_pressed(key)),
@@ -377,21 +432,15 @@ impl PhysicalInput for NativeInput<'_> {
                 self.0.is_mouse_button_down(button),
                 self.0.is_mouse_button_pressed(button),
             ),
-            Button::Gamepad { device, button }
-                if (0..4).contains(&device) && self.0.is_gamepad_available(device) =>
-            {
-                (
-                    self.0.is_gamepad_button_down(device, button),
-                    self.0.is_gamepad_button_pressed(device, button),
-                )
-            }
+            Button::Gamepad { device, button } if self.available(device) => (
+                self.0.is_gamepad_button_down(device, button),
+                self.0.is_gamepad_button_pressed(device, button),
+            ),
             Button::Gamepad { .. } => (false, false),
         }
     }
     fn axis(&self, device: i32, axis: GamepadAxis) -> Option<f32> {
-        ((0..4).contains(&device)
-            && self.0.is_gamepad_available(device)
-            && self.0.get_gamepad_axis_count(device) > axis as i32)
+        (self.available(device) && self.0.get_gamepad_axis_count(device) > axis as i32)
             .then(|| self.0.get_gamepad_axis_movement(device, axis))
     }
 }

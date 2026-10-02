@@ -27,6 +27,9 @@ impl PhysicalInput for Backend {
     fn focused(&self) -> bool {
         self.focused
     }
+    fn available(&self, device: i32) -> bool {
+        device == self.requested_device && self.pad.is_some()
+    }
     fn button(&self, button: Button) -> (bool, bool) {
         match button {
             Button::Key(key) => (
@@ -104,25 +107,26 @@ fn keyboard_and_controller_share_intent_with_stable_conflict_resolution() {
         .bind_axis(MOVE, stick())
         .unwrap();
     let mut input = Input::default();
+    let mut sampling = SamplingState::default();
     let mut backend = Backend {
         keys: vec![KeyboardKey::KEY_D],
         pad: Some(-0.6),
         ..Backend::default()
     };
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     close(input.value(MOVE), 1.0);
     backend.pad = Some(-1.0); // Equal magnitude: earlier keyboard wins.
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     close(input.value(MOVE), 1.0);
     backend.keys.push(KeyboardKey::KEY_A); // Keyboard opposites cancel, stick still wins.
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     close(input.value(MOVE), -1.0);
     backend.keys.clear();
     backend.pad = Some(0.575);
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     close(input.value(MOVE), 0.5);
     backend.requested_device = 0; // No implicit fallback to another device.
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     close(input.value(MOVE), 0.0);
 }
 
@@ -141,14 +145,17 @@ fn values_and_button_edges_across_render_and_fixed_rates_disconnect_and_focus() 
         .unwrap();
     let mut backend = Backend {
         tap: true,
-        pad: Some(1.0),
+        pad: Some(-1.0),
         pad_button: true,
         ..Backend::default()
     };
     let mut input = Input::default();
-    bindings.sample_from(&backend, &mut input);
+    let mut sampling = SamplingState::default();
+    bindings.sample_from(&backend, &mut input, &mut sampling); // Observe trigger release.
+    backend.pad = Some(1.0);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     backend.tap = false;
-    bindings.sample_from(&backend, &mut input); // No fixed update between these frames.
+    bindings.sample_from(&backend, &mut input, &mut sampling); // No fixed update between these frames.
     assert!(input.pressed(JUMP));
     close(input.value(MOVE), 1.0);
     input.consume_edges();
@@ -160,20 +167,20 @@ fn values_and_button_edges_across_render_and_fixed_rates_disconnect_and_focus() 
         input.consume_edges();
     }
     backend.pad = None;
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     assert!(input.released(JUMP));
     assert!(!input.down(JUMP));
     close(input.value(MOVE), 0.0);
     input.consume_edges();
     backend.tap = true; // Backend quick tap not held at sample time.
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     assert!(input.pressed(JUMP) && input.released(JUMP));
     input.consume_edges();
     backend.keys.push(KeyboardKey::KEY_SPACE);
     backend.pad = Some(1.0);
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     backend.focused = false;
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     assert!(!input.down(JUMP) && input.released(JUMP) && input.reset_pending());
     close(input.value(MOVE), 0.0);
 }
@@ -188,10 +195,11 @@ fn button_or_release_one_source_does_not_release_action() {
         ..Backend::default()
     };
     let mut input = Input::default();
-    bindings.sample_from(&backend, &mut input);
+    let mut sampling = SamplingState::default();
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     input.consume_edges();
     backend.keys.remove(0);
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     assert!(input.down(JUMP) && !input.released(JUMP) && !input.pressed(JUMP));
 }
 
@@ -213,7 +221,8 @@ fn runtime_rebind_remove_and_complete_replace_clear_only_changed_states() {
         ..Backend::default()
     };
     let mut input = Input::default();
-    bindings.sample_from(&backend, &mut input);
+    let mut sampling = SamplingState::default();
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     input.consume_edges();
     bindings
         .rebind(JUMP, vec![KeyboardKey::KEY_ENTER.into()])
@@ -225,7 +234,7 @@ fn runtime_rebind_remove_and_complete_replace_clear_only_changed_states() {
     assert!(input.down(unchanged) && !input.released(unchanged));
     input.consume_edges(); // A second fixed tick before a new frame remains neutral.
     backend.keys.push(KeyboardKey::KEY_ENTER);
-    bindings.sample_from(&backend, &mut input);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
     assert!(input.down(JUMP) && input.pressed(JUMP));
     bindings.replace(BindingConfig::default()).unwrap();
     input.consume_edges();
@@ -384,4 +393,48 @@ fn invalid_whole_set_assignment_is_rejected_before_reconciling_or_sampling() {
         assert_eq!(previous, original);
         assert!(input.down(JUMP) && !input.released(JUMP));
     }
+}
+
+#[test]
+fn missing_mapped_triggers_stay_neutral_and_real_half_pressure_is_preserved() {
+    let bindings = Bindings::new().bind_axis(MOVE, trigger()).unwrap();
+    // GLFW's mapped gamepad state leaves absent trigger mappings at zero even
+    // though raylib reports all six logical axes. Zero must not arm pressure.
+    let mut backend = Backend {
+        pad: Some(0.0),
+        ..Backend::default()
+    };
+    let mut input = Input::default();
+    let mut sampling = SamplingState::default();
+    for _ in 0..3 {
+        bindings.sample_from(&backend, &mut input, &mut sampling);
+        close(input.value(MOVE), 0.0);
+        input.consume_edges();
+    }
+    backend.pad = Some(1.0); // A real trigger held on connection is neutral too.
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    close(input.value(MOVE), 0.0);
+    backend.pad = Some(-1.0); // Release arms the physical trigger.
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    close(input.value(MOVE), 0.0);
+    backend.pad = Some(0.0);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    close(input.value(MOVE), (0.5 - 0.15) / 0.85); // Valid half-pressure remains usable.
+    backend.focused = false;
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    backend.focused = true;
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    close(input.value(MOVE), 0.0); // Must release again after focus recovery.
+    backend.pad = Some(-0.96); // Small endpoint drift still allows release.
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    backend.pad = Some(1.0);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    close(input.value(MOVE), 1.0);
+    // Disconnection while unbound still clears readiness for reused slots.
+    let empty = Bindings::new();
+    backend.pad = None;
+    empty.sample_from(&backend, &mut input, &mut sampling);
+    backend.pad = Some(0.0);
+    bindings.sample_from(&backend, &mut input, &mut sampling);
+    close(input.value(MOVE), 0.0);
 }
