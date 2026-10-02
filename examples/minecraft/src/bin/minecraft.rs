@@ -14,7 +14,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut textures = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
-        if arg == "--seed" {
+        if arg == "--help" || arg == "-h" {
+            print!("{}", include_str!("../../usage.txt"));
+            return Ok(());
+        } else if arg == "--version" || arg == "-V" {
+            println!("rayengine-minecraft {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        } else if arg == "--seed" {
             seed = Some(
                 args.next()
                     .ok_or("--seed needs a u64 integer")?

@@ -575,3 +575,7 @@ use `MissingPolicy::Stop` when targeting resident terrain only.
 The output capacity is warmed outside timing. `voxel_interaction_v1` measures
 five-block hits/misses and unloaded-boundary queries, with loaded chunk lookups
 and the visible-cell predicate included. All fixtures and count checks are untimed.
+
+The [Minecraft release guide](../../docs/minecraft_release.md) describes the
+assembled demo, tested budgets, complete survival/save/reload validation and
+Linux bundle. Game content and persistence remain under `examples/minecraft`.

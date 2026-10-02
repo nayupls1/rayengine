@@ -42,6 +42,22 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
       - name: Benchmark harnesses compile
         run: cargo bench --locked --workspace --features rayengine-voxel/render,rayengine-minecraft/render --no-run
+      - name: Build Linux Minecraft candidate and offline reference
+        run: python3 scripts/package_minecraft.py
+      - name: Validate the extracted candidate outside the checkout
+        run: xvfb-run -a python3 scripts/test_minecraft_package.py artifacts/releases
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+      - name: Upload Minecraft candidate and validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-linux-${{ github.sha }}
+          path: |
+            artifacts/releases/*.tar.gz
+            artifacts/releases/*.sha256
+            artifacts/smoke/
+          if-no-files-found: warn
 
   msrv:
     runs-on: ubuntu-latest
