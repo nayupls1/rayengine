@@ -17,6 +17,7 @@ pub mod mesh;
 pub mod save;
 pub mod scene;
 pub mod spatial;
+pub mod sprite;
 pub mod time;
 pub mod transform;
 pub mod ui;
@@ -38,6 +39,10 @@ pub mod prelude {
     pub use crate::spatial::{
         Frustum2D, Frustum3D, Ray2, Ray3, RayHit2, RayHit3, SpatialError, SpatialHit2, SpatialHit3,
         SpatialIndex2D, SpatialIndex3D,
+    };
+    pub use crate::sprite::{
+        AnimationClip, AnimationCompleted, AnimationPlayer, PlaybackMode, SpriteError, SpriteFrame,
+        SpriteRegion, SpriteTransform,
     };
     pub use crate::time::{FixedClock, Tick, Timer};
     pub use crate::transform::{

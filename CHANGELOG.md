@@ -1,11 +1,16 @@
 # Changelog
 
-## Unreleased
+## Unreleased (0.0.2)
 
 - Add optional versioned `rayengine.toml` descriptions with profiles, shared
   CLI/runtime validation, manifest-relative assets/font declarations, extension
   namespaces, scaffold examples and inspection/check integration.
-
+- Validated sprite-sheet regions with world-space rotation, explicit pivots,
+  flipping and tint through cached texture handles.
+- CPU-only named animation clips with per-frame timing, looping and one-shot
+  playback, pause/resume/reset and single completion events.
+- Original MIT-licensed pixel-art playground, checked documentation, focused
+  playback tests and a native sprite drawing probe across viewport policies.
 
 ## 0.0.1
 

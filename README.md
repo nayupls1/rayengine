@@ -96,6 +96,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
+- [Sprite sheets and CPU animation](crates/rayengine/docs/sprites.md)
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
@@ -127,6 +128,10 @@ cargo run -p rayengine --example menu
 Escape toggles the menu. Tab/Up/Down moves focus; Enter/Space selects. Drag the
 header to move the panel. Gameplay receives explicitly masked input while the
 menu is open.
+
+Try the original pixel-art sprite playground with idle, walking and one-shot
+sword animations: `cargo run -p rayengine --example sprites`. A/D or arrows move;
+Space swings at the golden orb, P pauses, and R restarts the current clip.
 
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
 The CPU suite measures primitives and gameplay simulation; the opt-in native
