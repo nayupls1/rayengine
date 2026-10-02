@@ -1011,3 +1011,6 @@ mod ui_tests;
 
 #[cfg(test)]
 mod diagnostics_tests;
+
+#[cfg(test)]
+mod sprite_tests;

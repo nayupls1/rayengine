@@ -4,6 +4,12 @@
 
 - Optional game-owned state stacks with deferred transitions, independent
   update/draw/input routing, explicit resource cleanup and a title/pause example.
+- Validated sprite-sheet regions with world-space rotation, explicit pivots,
+  flipping and tint through cached texture handles.
+- CPU-only named animation clips with per-frame timing, looping and one-shot
+  playback, pause/resume/reset and single completion events.
+- Original MIT-licensed pixel-art playground, checked documentation, focused
+  playback tests and a native sprite drawing probe across viewport policies.
 
 ## 0.0.1
 
