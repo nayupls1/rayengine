@@ -219,7 +219,7 @@ fn runtime_rebind_remove_and_complete_replace_clear_only_changed_states() {
         .rebind(JUMP, vec![KeyboardKey::KEY_ENTER.into()])
         .unwrap();
     bindings.remove_axis(MOVE);
-    bindings.reconcile(&mut previous, &mut input);
+    bindings.reconcile(&mut previous, &mut input).unwrap();
     assert!(!input.down(JUMP) && input.released(JUMP));
     close(input.value(MOVE), 0.0);
     assert!(input.down(unchanged) && !input.released(unchanged));
@@ -229,7 +229,7 @@ fn runtime_rebind_remove_and_complete_replace_clear_only_changed_states() {
     assert!(input.down(JUMP) && input.pressed(JUMP));
     bindings.replace(BindingConfig::default()).unwrap();
     input.consume_edges();
-    bindings.reconcile(&mut previous, &mut input);
+    bindings.reconcile(&mut previous, &mut input).unwrap();
     assert!(input.released(JUMP) && input.released(unchanged));
     assert!(!input.down(JUMP) && !input.down(unchanged));
 }
@@ -359,5 +359,29 @@ fn invalid_configuration_reports_context_and_rejects_unknown_fields_and_enums() 
             Bindings::from_json(&invalid).is_err(),
             "accepted: {invalid}"
         );
+    }
+}
+
+#[test]
+fn invalid_whole_set_assignment_is_rejected_before_reconciling_or_sampling() {
+    let mut previous = Bindings::new().bind(JUMP, KeyboardKey::KEY_SPACE);
+    let original = previous.clone();
+    let mut input = Input::default();
+    input.set(JUMP, true);
+    input.consume_edges();
+    for device in [-1, 4, i32::MIN, i32::MAX] {
+        let assigned = Bindings::new().bind(
+            JUMP,
+            Button::Gamepad {
+                device,
+                button: GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB,
+            },
+        );
+        assert!(matches!(
+            assigned.reconcile(&mut previous, &mut input),
+            Err(Error::Config(_))
+        ));
+        assert_eq!(previous, original);
+        assert!(input.down(JUMP) && !input.released(JUMP));
     }
 }

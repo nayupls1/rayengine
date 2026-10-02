@@ -340,6 +340,8 @@ pub struct Update<'context, 'audio> {
     /// Live controls. Changes are reconciled after this tick; affected values
     /// become neutral until the next render-frame sample. Unchanged inputs and
     /// pending edges are preserved. Invalid edits return errors without changes.
+    /// Assigning an invalid set directly makes [`App::run`] return a configuration
+    /// error after this callback, before sampling the new set.
     pub bindings: &'context mut Bindings,
     /// Current viewport, shared with UI and cameras.
     pub viewport: Viewport,
@@ -640,7 +642,7 @@ impl App {
                     metrics.updates = metrics.updates.saturating_add(1);
                 }
                 input.consume_edges();
-                bindings.reconcile(&mut previous_bindings, &mut input);
+                bindings.reconcile(&mut previous_bindings, &mut input)?;
                 sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
                 report.ticks += 1;
                 if quit {
@@ -811,6 +813,32 @@ mod tests {
         config.reference_size.x = 960.0;
         config.title = "bad\0title".into();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn invalid_initial_bindings_fail_before_native_window_creation() {
+        struct InvalidBindings;
+        impl Game for InvalidBindings {
+            fn bindings(&self) -> Bindings {
+                Bindings::new().bind(
+                    rayengine_core::input::Action(0),
+                    crate::input::Button::Gamepad {
+                        device: -1,
+                        button: GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB,
+                    },
+                )
+            }
+            fn fixed_update(&mut self, _: &mut Update<'_, '_>) {
+                panic!("must reject before updating");
+            }
+            fn draw(&mut self, _: &mut Frame<'_, '_>) {
+                panic!("must reject before drawing");
+            }
+        }
+        assert!(matches!(
+            App::new(Config::new("invalid bindings")).run(InvalidBindings),
+            Err(Error::Config(_))
+        ));
     }
 
     #[test]

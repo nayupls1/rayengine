@@ -296,10 +296,13 @@ impl Bindings {
 
     // Reconcile after each fixed update too, so removed/rebound sources cannot
     // keep moving during catch-up ticks. Only changes clone/allocate a snapshot.
-    pub(crate) fn reconcile(&self, previous: &mut Self, input: &mut Input) {
+    pub(crate) fn reconcile(&self, previous: &mut Self, input: &mut Input) -> Result<(), Error> {
         if self == previous {
-            return;
+            return Ok(());
         }
+        // Whole-set assignment and fluent `bind` can bypass fallible mutators.
+        // Reject those changes before they can reach any native sample.
+        self.validate()?;
         for (action, buttons) in &previous.actions {
             if self.buttons(*action) != buttons {
                 input.set(*action, false);
@@ -311,6 +314,7 @@ impl Bindings {
             }
         }
         previous.clone_from(self);
+        Ok(())
     }
 
     pub(crate) fn sample(&self, raylib: &RaylibHandle, input: &mut Input) {
@@ -373,15 +377,21 @@ impl PhysicalInput for NativeInput<'_> {
                 self.0.is_mouse_button_down(button),
                 self.0.is_mouse_button_pressed(button),
             ),
-            Button::Gamepad { device, button } if self.0.is_gamepad_available(device) => (
-                self.0.is_gamepad_button_down(device, button),
-                self.0.is_gamepad_button_pressed(device, button),
-            ),
+            Button::Gamepad { device, button }
+                if (0..4).contains(&device) && self.0.is_gamepad_available(device) =>
+            {
+                (
+                    self.0.is_gamepad_button_down(device, button),
+                    self.0.is_gamepad_button_pressed(device, button),
+                )
+            }
             Button::Gamepad { .. } => (false, false),
         }
     }
     fn axis(&self, device: i32, axis: GamepadAxis) -> Option<f32> {
-        (self.0.is_gamepad_available(device) && self.0.get_gamepad_axis_count(device) > axis as i32)
+        ((0..4).contains(&device)
+            && self.0.is_gamepad_available(device)
+            && self.0.get_gamepad_axis_count(device) > axis as i32)
             .then(|| self.0.get_gamepad_axis_movement(device, axis))
     }
 }

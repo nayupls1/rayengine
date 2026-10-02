@@ -135,6 +135,10 @@ including during catch-up ticks. A held changed action emits a release; unchange
 targets retain their held values and pending transitions. New mappings begin
 sampling on the next render frame, generating ordinary button transitions. This
 also applies when assigning an entirely new `Bindings` to `*context.bindings`.
+An invalid direct assignment (including an invalid fluent `bind`) makes `App::run`
+return a configuration error after that callback, before any native sampling of
+the new set. Use the fallible mutators to report errors while keeping the game
+running and its previous settings intact.
 Changes made and undone within a callback have no effect on the final mapping.
 
 `BindingConfig` is serde-serializable schema 1 with numeric game-owned target IDs
