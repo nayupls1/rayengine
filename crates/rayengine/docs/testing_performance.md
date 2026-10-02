@@ -57,6 +57,13 @@ layouts. CPU tests cover clicks, keyboard focus, drag transitions, resize mappin
 focus-loss resets through paused frames, and explicit gameplay masks.
 The diagnostic probe verifies mixed 2D/3D/UI submissions, stale handles,
 replacement/unload byte accounting, sampled peaks, phase totals and JSON schema.
+The sprite probe samples asymmetric sheet regions with each flip combination,
+rotation around an explicit pivot, tint, camera rotation/zoom, high-DPI target
+mapping and Fit/Expand/IntegerFit layouts. It verifies rejected regions,
+transforms and stale handles submit nothing. CPU tests exercise variable frame
+durations, exact boundaries, huge time steps, pause/resume/reset, independent
+shared players and one completion per one-shot traversal. The sprite playground
+is rendered at wide and portrait sizes by the native smoke script too.
 The script also runs both demos and the menu example at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;

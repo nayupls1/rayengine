@@ -14,6 +14,7 @@ use rayengine_core::{
     collision::{Aabb2, Aabb3},
     glam::{Mat4, Vec2, Vec3},
     mesh::MeshData,
+    sprite::{SpriteRegion, SpriteTransform},
     transform::Transform3D,
     ui::UiResponse,
     viewport::Viewport,
@@ -236,6 +237,51 @@ impl TextureSource for Assets<'_> {
 }
 
 impl<D: RaylibDraw> Canvas2D<'_, D> {
+    /// Draws a source region from a cached texture in the current world camera.
+    /// Rotation is clockwise radians; `position` places the explicit local
+    /// `origin` in world space. Flips only reverse source sampling. Tint multiplies
+    /// all RGBA channels. This method never advances animation.
+    ///
+    /// Returns false without submitting a draw for an unloaded handle, a source
+    /// region outside its texture, or an invalid [`SpriteTransform`]. Successful
+    /// submissions contribute to the existing texture diagnostics counter.
+    pub fn sprite(
+        &mut self,
+        id: TextureId,
+        region: SpriteRegion,
+        transform: SpriteTransform,
+        tint: Color,
+    ) -> bool {
+        let Some(texture) = self.textures.texture(id) else {
+            return false;
+        };
+        if !transform.is_valid() || !region.fits(texture.width as u32, texture.height as u32) {
+            return false;
+        }
+        // raylib takes negative source sizes as UV flips, leaving destination
+        // geometry and its explicit pivot unchanged.
+        let source = Rectangle::new(
+            region.x() as f32,
+            region.y() as f32,
+            region.width() as f32 * if transform.flip_x { -1.0 } else { 1.0 },
+            region.height() as f32 * if transform.flip_y { -1.0 } else { 1.0 },
+        );
+        self.raw.draw_texture_pro(
+            texture,
+            source,
+            Rectangle::new(
+                transform.position.x,
+                transform.position.y,
+                transform.size.x,
+                transform.size.y,
+            ),
+            v2(transform.origin),
+            transform.rotation.to_degrees(),
+            tint,
+        );
+        count!(self.counters, textures, 1);
+        true
+    }
     /// Filled world-space rectangle.
     pub fn rectangle(&mut self, bounds: Aabb2, color: Color) {
         count!(self.counters, primitives_2d, 1);

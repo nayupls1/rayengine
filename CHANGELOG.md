@@ -1,10 +1,16 @@
 # Changelog
 
-## Unreleased
+## Unreleased (0.0.2)
 
 - Add opt-in Lambert materials with ambient, directional, and up to four point
   lights, shared generated/imported geometry APIs, checked normal/transform
   validation, an adjustable demo, native pixel probes, and submission benchmarks.
+- Validated sprite-sheet regions with world-space rotation, explicit pivots,
+  flipping and tint through cached texture handles.
+- CPU-only named animation clips with per-frame timing, looping and one-shot
+  playback, pause/resume/reset and single completion events.
+- Original MIT-licensed pixel-art playground, checked documentation, focused
+  playback tests and a native sprite drawing probe across viewport policies.
 
 ## 0.0.1
 
