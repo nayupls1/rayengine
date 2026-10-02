@@ -1,0 +1,18 @@
+# Project schema version, independent of the SDK dependency in Cargo.toml.
+schema_version = 1
+
+[project]
+name = "{{name}}"
+executable = "{{name}}"
+
+[assets]
+roots = ["assets"]
+exclude = [".gitkeep", "**/*.bak"]
+
+# Rust Config supplies defaults for fields omitted here.
+[profiles.dev.render]
+vsync = false
+
+# Profiles merge over the base; arrays replace rather than append.
+[profiles.pixel.render]
+scale_mode = "integer_fit"

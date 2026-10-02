@@ -14,6 +14,10 @@
 - Original MIT-licensed pixel-art playground, checked documentation, focused
   playback tests and a native sprite drawing probe across viewport policies.
 
+- Add optional versioned `rayengine.toml` descriptions with profiles, shared
+  CLI/runtime validation, manifest-relative assets/font declarations, extension
+  namespaces, scaffold examples and inspection/check integration.
+
 ## 0.0.1
 
 - Manually dispatched crates.io releases gated by the full CI suite, coordinated

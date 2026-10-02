@@ -11,6 +11,11 @@ proximity and camera-visibility queries, and cached
 texture/model/sound handles, generated meshes, and materials with typed shader
 parameters and explicit alpha policies. Raylib is available directly for specialized work.
 
+Optional project descriptions in `rayengine.toml` keep game assets, runtime
+defaults, named profiles and game/plugin settings separate from Cargo builds.
+New game scaffolds include one. See the [manifest guide](crates/rayengine/docs/project_manifest.md)
+for the versioned schema, path resolution and overrides.
+
 Try the games:
 
 ```sh

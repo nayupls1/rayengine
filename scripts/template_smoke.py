@@ -20,7 +20,13 @@ with tempfile.TemporaryDirectory(prefix="rayengine-template-") as temporary:
             response = json.loads(result.stdout)
             if result.returncode or not response["ok"]:
                 raise SystemExit(json.dumps(response, indent=2))
-        print(f"Generated {kind} starter compiles")
+        # CLI inspection agrees with the generated manifest, even from elsewhere.
+        result = subprocess.run([str(binary), "--json", "info", str(project / "rayengine.toml"), "--profile", "dev"], cwd=temporary, env=environment, text=True, capture_output=True, check=True)
+        description = json.loads(result.stdout)["data"]["project_manifest"]
+        assert description["settings"]["assets"]["roots"] == [str(project / "assets")]
+        assert description["settings"]["project"]["executable"] == project.name
+        assert description["settings"]["render"]["vsync"] is False
+        print(f"Generated {kind} starter compiles and its manifest resolves")
 
     # A generated library nested below a game stays independent until the game
     # explicitly adds it as a dependency. Exercise the real CLI output.

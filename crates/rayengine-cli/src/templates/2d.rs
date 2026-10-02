@@ -66,7 +66,12 @@ impl Game for MyGame {
 }
 
 fn main() -> Result<(), Error> {
-    App::new(Config::new("My 2D Game"))
+    let manifest = std::env::var_os("RAYENGINE_MANIFEST")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let profile = std::env::var("RAYENGINE_PROFILE").ok();
+    let config = Config::new("My 2D Game").with_optional_project(manifest, profile.as_deref())?;
+    App::new(config)
         .with_options(RunOptions::from_env()?)
         .run(MyGame::new())?;
     Ok(())
