@@ -50,9 +50,9 @@ python3 scripts/test_minecraft_package.py artifacts/releases
 
 The archive contains `minecraft`, its standalone README/license, offline checked
 rustdoc in `reference/`, a source/compiler/target/libc/backend manifest, linked
-library/version information and per-file checksums. An adjacent checksum covers
+library/version information, dependency license notices and per-file checksums. An adjacent checksum covers
 the archive. Only these build products are packaged; local saves/assets and the
-checkout are excluded. Existing archives are preserved; choose another `--output`
+checkout are excluded. Source changes during the build reject publication. Existing archives are preserved; choose another `--output`
 directory to build a new candidate. The packager owns a separate cache under
 `target/minecraft-release/` and clears its generated doc tree before export.
 Archive order/ownership/timestamps are normalized to the source commit; native

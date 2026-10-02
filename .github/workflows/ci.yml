@@ -34,8 +34,8 @@ jobs:
         run: scripts/check.sh
       - name: Generated projects compile
         run: python3 scripts/template_smoke.py
-      - name: Native Wayland build
-        run: cargo check --locked -p rayengine --features wayland
+      - name: Native Wayland demo build
+        run: cargo check --locked -p rayengine-minecraft --features render,rayengine/wayland
       - name: Native renderer, resize and asset probes
         run: xvfb-run -a scripts/native_smoke.sh
         env:

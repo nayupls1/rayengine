@@ -57,6 +57,7 @@ Open `reference/rayengine_minecraft/index.html` for the full checked guide and
 `reference/rayengine_voxel/index.html`; plugins are optional Cargo libraries and
 the core owns no voxel/game schema. Source and validation instructions live at
 https://github.com/nayupls1/rayengine. The manifest pins the source revision.
+`THIRD_PARTY_NOTICES/` contains dependency license files and package notices.
 `SHA256SUMS` covers bundled files; the adjacent `.tar.gz.sha256` covers the archive.
 Only original fallback assets are distributed. Optional imported Minecraft PNGs
 stay local and can be selected with `--textures PATH`.

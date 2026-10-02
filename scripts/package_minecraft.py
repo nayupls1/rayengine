@@ -25,6 +25,54 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+
+def dependency_notices(staging, host, backend):
+    features = 'rayengine-minecraft/render'
+    if backend == 'wayland':
+        features += ',rayengine/wayland'
+    meta = json.loads(command('cargo', 'metadata', '--locked', '--format-version', '1',
+                              '--filter-platform', host, '--features', features))
+    packages = {p['id']: p for p in meta['packages']}
+    nodes = {n['id']: n for n in meta['resolve']['nodes']}
+    pending = [next(p['id'] for p in meta['packages'] if p['name'] == 'rayengine-minecraft')]
+    included = set()
+    while pending:
+        package = pending.pop()
+        if package in included:
+            continue
+        included.add(package)
+        pending.extend(dep['pkg'] for dep in nodes[package]['deps']
+                       if any(kind['kind'] is None for kind in dep['dep_kinds']))
+    notices = staging / 'THIRD_PARTY_NOTICES'
+    notices.mkdir()
+    entries = []
+    for package in sorted((packages[p] for p in included), key=lambda p: (p['name'], p['version'])):
+        root = Path(package['manifest_path']).parent
+        license_files = set(p for pattern in ['LICENSE*', 'COPYING*'] for p in root.glob(pattern) if p.is_file())
+        if package['source'] is None:
+            license_files.add(ROOT / 'LICENSE')
+        if package.get('license_file'):
+            source = Path(package['license_file'])
+            if not source.is_absolute():
+                source = root / source
+            if source.is_file():
+                license_files.add(source)
+        if package['name'] == 'raylib-sys':
+            license_files.update([root / 'raylib/LICENSE', root / 'raylib/src/external/glfw/LICENSE.md'])
+        destination = notices / f"{package['name']}-{package['version']}"
+        paths = []
+        for source in sorted(license_files):
+            relative = source.relative_to(root) if source.is_relative_to(root) else Path(source.name)
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            paths.append(target.relative_to(staging).as_posix())
+        entries.append(dict(name=package['name'], version=package['version'],
+                            license=package['license'], repository=package['repository'],
+                            authors=package['authors'], license_files=paths))
+    (notices / 'metadata.json').write_text(json.dumps(dict(schema_version=1, packages=entries), indent=2) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts/releases')
@@ -74,6 +122,7 @@ def main():
         shutil.copy2(ROOT / 'LICENSE', staging / 'LICENSE')
         shutil.copy2(ROOT / 'examples/minecraft/RELEASE.md', staging / 'README.md')
         shutil.copytree(docs, staging / 'reference')
+        dependency_notices(staging, host, args.backend)
         (staging / 'runtime-libraries.txt').write_text(libraries + '\n')
         manifest = dict(schema_version=1, name='rayengine-minecraft', version=version,
                         source_commit=commit, source_epoch=epoch, target=host,
@@ -99,6 +148,8 @@ def main():
                     for path in sorted(staging.rglob('*')):
                         tar.add(path, arcname=f'{name}/{path.relative_to(staging).as_posix()}',
                                 recursive=False, filter=normalize)
+        if command('git', 'status', '--porcelain') or command('git', 'rev-parse', 'HEAD') != commit:
+            parser.error('source changed during packaging; commit/stash and retry in a new --output directory')
         # Exclusive publication preserves an existing candidate even if another
         # packaging process raced with the initial existence check.
         os.link(temporary, archive)

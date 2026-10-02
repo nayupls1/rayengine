@@ -34,6 +34,8 @@ def main():
             expected, relative = line.split('  ', 1)
             assert digest(package / relative) == expected, relative
         manifest = json.loads((package / 'manifest.json').read_text())
+        notices = json.loads((package / 'THIRD_PARTY_NOTICES/metadata.json').read_text())
+        assert {'raylib', 'raylib-sys', 'glam', 'hecs'} <= {p['name'] for p in notices['packages']}
         assert (package / 'reference/rayengine/index.html').is_file()
         assert (package / 'reference/rayengine_voxel/index.html').is_file()
         assert (package / 'reference/rayengine_minecraft/index.html').is_file()

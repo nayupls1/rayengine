@@ -219,6 +219,20 @@ impl ReleaseProbe {
         self.scene.base.game.player = expected.player.restore().unwrap();
         self.scene.base.game.focus = self.scene.base.game.player.focus();
         self.scene.base.settle(frame);
+        // A zero-time production tick checks loaded colliders/readiness without
+        // moving the restored airborne pose or changing its saved fall history.
+        assert!(!self.scene.base.game.advance(
+            &Input::with_capacity(24),
+            UiInput::default(),
+            frame.viewport.logical_size,
+            0.0
+        ));
+        assert!(!self.scene.base.game.waiting);
+        assert_eq!(
+            PlayerState::capture(&self.scene.base.game.player),
+            expected.player
+        );
+        assert_eq!(self.scene.base.game.survival.snapshot(), expected.survival);
     }
 }
 impl Game for ReleaseProbe {
