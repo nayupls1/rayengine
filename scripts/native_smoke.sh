@@ -17,6 +17,7 @@ cargo test -p rayengine "${features[@]}" native_mesh -- --ignored --test-threads
 cargo test -p rayengine "${features[@]}" native_material -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_upload -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_ui -- --ignored --test-threads=1
+RAYENGINE_FONT_ARTIFACTS="$rayengine_root/artifacts/smoke/fonts" cargo test -p rayengine "${features[@]}" native_font -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_diagnostics -- --ignored --test-threads=1
 cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored --test-threads=1
 cargo test -p rayengine-beacons "${demo_features[@]}" native_plugin -- --ignored --test-threads=1

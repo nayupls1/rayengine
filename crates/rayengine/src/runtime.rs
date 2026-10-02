@@ -263,6 +263,36 @@ pub struct InitContext<'context, 'audio> {
 }
 
 impl InitContext<'_, '_> {
+    /// Loads/caches an outline font by canonical path and normalized options.
+    pub fn font(
+        &mut self,
+        path: impl AsRef<Path>,
+        options: crate::fonts::FontOptions,
+    ) -> Result<crate::fonts::FontId, Error> {
+        self.assets.load_font(self.thread, path.as_ref(), options)
+    }
+
+    /// Loads resolved named declarations on the owning render thread.
+    /// On error, previously loaded fonts remain cached for reuse or unloading.
+    pub fn fonts(
+        &mut self,
+        declarations: &crate::fonts::FontDeclarations,
+    ) -> Result<std::collections::BTreeMap<String, crate::fonts::FontId>, Error> {
+        declarations
+            .fonts
+            .iter()
+            .map(|(name, declaration)| {
+                self.font(&declaration.path, declaration.options.clone())
+                    .map(|id| (name.clone(), id))
+                    .map_err(|e| {
+                        Error::Asset(format!(
+                            "font '{name}' ({}): {e}",
+                            declaration.path.display()
+                        ))
+                    })
+            })
+            .collect()
+    }
     /// Creates an owned material description with borrowed resource dependencies.
     pub fn material(&mut self, desc: MaterialDesc) -> Result<MaterialId, Error> {
         self.assets.create_material(self.raylib, self.thread, desc)

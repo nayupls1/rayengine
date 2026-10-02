@@ -7,6 +7,7 @@ pub use raylib;
 
 pub mod assets;
 pub mod diagnostics;
+pub mod fonts;
 pub mod input;
 pub mod material;
 pub mod plugin;
@@ -38,6 +39,8 @@ pub mod guides {
     pub mod first_person {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
+    #[doc = include_str!("../docs/fonts.md")]
+    pub mod fonts {}
     #[doc = include_str!("../docs/generated_meshes.md")]
     pub mod generated_meshes {}
     #[doc = include_str!("../docs/materials.md")]
@@ -67,6 +70,10 @@ pub mod guides {
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
     pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
+    pub use crate::fonts::{
+        FontDeclaration, FontDeclarations, FontId, FontOptions, FontRasterization, FontSampling,
+        TextMetrics, TextStyle,
+    };
     pub use crate::input::{Bindings, Button};
     pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
     pub use crate::render::{Frame, UiButtonStyle};

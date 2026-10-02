@@ -1,0 +1,15 @@
+schema_version = 1
+
+[fonts.body]
+path = "LiberationSans-Regular.ttf"
+[fonts.body.options]
+raster_size = 32
+sampling = "smooth"
+rasterization = "adaptive"
+
+[fonts.pixel]
+path = "PressStart2P-Regular.ttf"
+[fonts.pixel.options]
+raster_size = 16
+sampling = "nearest"
+rasterization = "fixed"

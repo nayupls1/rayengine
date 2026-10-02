@@ -48,6 +48,11 @@ fn main() -> Result<(), Error> {
 }
 ```
 
+Custom outline fonts, matching label measurement, per-button font choice,
+DPI-aware atlases, and explicit nearest-filtered pixel text are described in the
+[font guide](https://docs.rs/rayengine/latest/rayengine/guides/fonts/index.html).
+The repository includes a distributable two-font example (`--example fonts`).
+
 The first release provides basic swept character movement and geometric drawing,
 not rigid-body dynamics or an advanced 3D rendering pipeline. The interactive
 input/image/state testing protocol is deferred. The CLI's JSON project diagnostics

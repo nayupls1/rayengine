@@ -97,6 +97,12 @@ impl DrawCounters {
 /// Bytes describe logical payloads, not driver allocation size or total VRAM.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct ResourceCounts {
+    /// Live custom font handles.
+    pub fonts: u64,
+    /// Cached font atlas textures, including adaptive size variants.
+    pub font_atlases: u64,
+    /// RGBA font atlas payload bytes, excluding CPU outline storage.
+    pub font_bytes: u64,
     /// Standalone cached textures.
     pub textures: u64,
     /// Imported models.
@@ -120,6 +126,9 @@ impl ResourceCounts {
     pub(crate) fn maximize(&mut self, other: Self) {
         macro_rules! max { ($($f:ident),*) => { $(self.$f = self.$f.max(other.$f);)* }; }
         max!(
+            fonts,
+            font_atlases,
+            font_bytes,
             textures,
             models,
             sounds,

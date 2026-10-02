@@ -96,6 +96,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
+- [Custom fonts, text measurement, and pixel text](crates/rayengine/docs/fonts.md)
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
