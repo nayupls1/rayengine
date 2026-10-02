@@ -30,5 +30,6 @@ cargo bench -p rayengine-minecraft --bench generation -- "$flag" "$baseline" "$@
 cargo bench -p rayengine-minecraft --bench textures -- "$flag" "$baseline" "$@"
 cargo bench -p rayengine-minecraft --bench survival -- "$flag" "$baseline" "$@"
 cargo bench -p rayengine-minecraft --bench persistence -- "$flag" "$baseline" "$@"
+cargo bench -p rayengine-particles --bench particles -- "$flag" "$baseline" "$@"
 python3 scripts/benchmark_metadata.py after "$run_dir" "$mode" "$baseline"
 echo "Benchmark snapshot: $rayengine_root/$run_dir"

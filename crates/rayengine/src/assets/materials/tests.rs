@@ -527,3 +527,65 @@ fn native_material_smoke() {
         })
         .unwrap();
 }
+
+#[test]
+#[ignore = "requires native OpenGL; scripts/native_smoke.sh runs serially"]
+fn native_material_2d_scoped_alpha_without_materials_and_unwind() {
+    struct Probe;
+    impl Game for Probe {
+        fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+        fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+            frame.clear(Color::new(0, 0, 255, 255));
+            let thread = frame.thread;
+            let before = gpu::snapshot(thread);
+            frame.world_2d(
+                rayengine_core::camera::Camera2D {
+                    view_height: 8.0,
+                    ..Default::default()
+                },
+                |canvas| {
+                    canvas
+                        .with_alpha_blend(|canvas| {
+                            canvas.rectangle(
+                                Aabb2::from_center(Vec2::ZERO, Vec2::splat(2.0)),
+                                Color::new(255, 0, 0, 128),
+                            );
+                        })
+                        .unwrap();
+                    assert_eq!(gpu::snapshot(thread), before);
+                    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        canvas
+                            .with_alpha_blend(|canvas| {
+                                canvas.rectangle(
+                                    Aabb2::from_center(Vec2::new(3.0, 0.0), Vec2::ONE),
+                                    Color::new(255, 0, 0, 128),
+                                );
+                                panic!("intentional alpha-scope unwind");
+                            })
+                            .unwrap();
+                    }));
+                    assert!(unwound.is_err());
+                    assert_eq!(gpu::snapshot(thread), before);
+                },
+            );
+            assert_eq!(gpu::snapshot(thread), before);
+            let image = frame.target.texture().load_image().unwrap();
+            let center = image.get_color(image.width / 2, image.height / 2);
+            assert_eq!(center, Color::new(128, 0, 127, 255));
+            assert_eq!(frame.assets.resource_counts().materials, 0);
+            assert_eq!(frame.assets.resource_counts().shaders, 0);
+        }
+    }
+    let mut config = Config::new("Scoped alpha probe");
+    config.audio = false;
+    config.vsync = false;
+    App::new(config)
+        .with_options(RunOptions {
+            hidden: true,
+            frames: Some(1),
+            uncapped: true,
+            ..Default::default()
+        })
+        .run(Probe)
+        .unwrap();
+}

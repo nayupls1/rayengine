@@ -159,8 +159,11 @@ impl Frame<'_, '_> {
         };
         let mut target = self.raylib.begin_texture_mode(self.thread, self.target);
         let mut raw = target.begin_mode2D(camera);
+        let surface = self.assets.material_pass();
         draw(&mut Canvas2D {
             raw: &mut raw,
+            thread: self.thread,
+            surface,
             textures: self.assets,
             counters: &mut self.counters,
         });
@@ -221,6 +224,8 @@ impl Frame<'_, '_> {
 
 /// Immediate 2D primitives. No command buffer or allocation is introduced.
 pub struct Canvas2D<'draw, D: RaylibDraw> {
+    thread: &'draw RaylibThread,
+    surface: Option<SurfaceGuard>,
     counters: &'draw mut Option<DrawCounters>,
     /// Raylib guard for advanced drawing within this camera pass.
     pub raw: &'draw mut D,
@@ -237,6 +242,25 @@ impl TextureSource for Assets<'_> {
 }
 
 impl<D: RaylibDraw> Canvas2D<'_, D> {
+    /// Draws a scoped straight-alpha group with destination alpha preserved.
+    /// This avoids a second alpha multiplication when the offscreen target is
+    /// presented. Flushes pending batches at both boundaries and restores blend
+    /// and depth-write state, including on unwind. Depth writes are disabled in
+    /// the group. Native GL procedure loading can fail before the callback runs.
+    /// A previously initialized material backend avoids additional procedure lookups.
+    pub fn with_alpha_blend<R>(&mut self, draw: impl FnOnce(&mut Self) -> R) -> Result<R, Error> {
+        let mut surface = match self.surface.take() {
+            Some(surface) => surface,
+            None => crate::assets::materials::alpha_pass(self.thread)?,
+        };
+        surface.resnapshot();
+        surface.apply(crate::material::AlphaMode::Blend);
+        let result = draw(self);
+        surface.legacy();
+        self.surface = Some(surface);
+        Ok(result)
+    }
+
     /// Draws a source region from a cached texture in the current world camera.
     /// Rotation is clockwise radians; `position` places the explicit local
     /// `origin` in world space. Flips only reverse source sampling. Tint multiplies

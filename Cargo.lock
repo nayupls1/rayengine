@@ -662,6 +662,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayengine-particles"
+version = "0.0.1"
+dependencies = [
+ "criterion",
+ "rayengine",
+ "rayengine-core",
+]
+
+[[package]]
 name = "rayengine-voxel"
 version = "0.0.1"
 dependencies = [

@@ -49,3 +49,13 @@
   exported benchmark samples with machine/toolchain/revision provenance.
 
 Interactive agent pause/input/image/state automation is deferred to issue #1.
+
+## Unreleased particle effects
+
+- Add the independently optional `rayengine-particles` Cargo plugin with bounded,
+  seeded CPU emitters, fixed-tick emission/bursts, lifetime variation, motion and
+  size/color evolution, and explicit stop/reset/removal.
+- Add optional 2D atlas sprites and transparent camera-facing 3D billboards using
+  existing asset/material/viewport APIs, with procedural sparks/smoke/pickup demo.
+- Add scoped 2D alpha blending that preserves target alpha and restores native
+  state, simulation/native coverage and bounded-load Criterion comparisons.
