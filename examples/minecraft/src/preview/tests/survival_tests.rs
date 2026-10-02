@@ -4,19 +4,19 @@ use crate::{
     hud::Layout,
     survival::{Item, MAX_HEALTH},
 };
-struct SurvivalProbe {
-    base: Probe,
-    screen: u8,
-    complete: Arc<Mutex<bool>>,
+pub(super) struct SurvivalProbe {
+    pub(super) base: Probe,
+    pub(super) screen: u8,
+    pub(super) complete: Arc<Mutex<bool>>,
 }
 impl SurvivalProbe {
-    fn tick(&mut self, input: &mut Input, size: Vec2, pointer: Option<Vec2>) {
+    pub(super) fn tick(&mut self, input: &mut Input, size: Vec2, pointer: Option<Vec2>) {
         let ui = UiInput::from_actions(input, pointer, UI_ACTIONS, true);
         assert!(!self.base.game.advance(input, ui, size, 1.0 / 60.0));
         input.consume_edges();
         assert!(self.base.game.error.is_none(), "{:?}", self.base.game.error);
     }
-    fn exercise(&mut self, frame: &mut Frame<'_, '_>) {
+    pub(super) fn exercise(&mut self, frame: &mut Frame<'_, '_>) {
         self.base.settle(frame);
         let size = frame.viewport.logical_size;
         let b = self.base.game.terrain.blocks();
@@ -202,6 +202,8 @@ impl SurvivalProbe {
                         && self.base.game.interaction_report.progress < 1.0
                 );
             }
+            // The release scenario continues from genuine respawned gameplay.
+            4 => {}
             _ => {
                 self.base.game.survival.health.damage(MAX_HEALTH);
                 self.tick(&mut input, size, None);
