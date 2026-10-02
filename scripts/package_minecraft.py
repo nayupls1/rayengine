@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -67,6 +68,11 @@ def dependency_notices(staging, host, backend):
                 license_files.add(source)
         if package['name'] == 'raylib-sys':
             license_files.update([root / 'raylib/LICENSE', root / 'raylib/src/external/glfw/LICENSE.md'])
+            # Vendored native dependencies carry their notices inside their
+            # source files rather than Cargo metadata or separate LICENSE files.
+            # Preserve these files intact, including notices at the end of headers.
+            license_files.update(p for p in (root / 'raylib/src/external').iterdir()
+                                 if p.is_file() and p.suffix in {'.h', '.c'})
         destination = notices / f"{package['name']}-{package['version']}"
         paths = []
         for source in sorted(license_files):
@@ -79,6 +85,38 @@ def dependency_notices(staging, host, backend):
                             license=package['license'], repository=package['repository'],
                             authors=package['authors'], license_files=paths))
     (notices / 'metadata.json').write_text(json.dumps(dict(schema_version=1, packages=entries), indent=2) + '\n')
+
+
+def offline_reference_links(reference, commit):
+    # Authored Markdown links work in the checkout; rustdoc preserves them even
+    # though exported HTML has a different directory layout. Use the rendered
+    # guide pages in bundles, and pin source-only links to the recorded revision.
+    # Rustdoc's help page links to this landing page, which `cargo doc` does
+    # not generate by default. Also make every bundled crate easy to find.
+    crates = sorted(p.name for p in reference.iterdir() if (p / 'index.html').is_file())
+    (reference / 'index.html').write_text(
+        '<!doctype html><meta charset="utf-8"><title>Offline reference</title>'
+        '<h1>Offline reference</h1><ul>' + ''.join(
+            f'<li><a href="{name}/index.html">{name}</a></li>' for name in crates) + '</ul>\n')
+    pages = {
+        '../../docs/minecraft_release.md': 'rayengine_minecraft/guides/release/index.html',
+        '../../crates/rayengine/docs/saves.md': 'rayengine/guides/saves/index.html',
+        '../crates/rayengine/docs/quickstart.md': 'rayengine/guides/quickstart/index.html',
+        '../examples/minecraft/README.md': 'rayengine_minecraft/index.html',
+        '../examples/minecraft/RELEASE.md': 'rayengine_minecraft/guides/controls/index.html',
+    }
+    for html in reference.rglob('*.html'):
+        def rewrite(match):
+            href = match.group(1)
+            if href in pages:
+                target = reference / pages[href]
+                if not target.is_file():
+                    raise FileNotFoundError(target)
+                href = Path(os.path.relpath(target, html.parent)).as_posix()
+            elif href == '../scripts/compare_benchmarks.py':
+                href = f'https://github.com/nayupls1/rayengine/blob/{commit}/scripts/compare_benchmarks.py'
+            return f'href="{href}"'
+        html.write_text(re.sub(r'href="([^"]+)"', rewrite, html.read_text()))
 
 
 def main():
@@ -130,6 +168,7 @@ def main():
         shutil.copy2(ROOT / 'LICENSE', staging / 'LICENSE')
         shutil.copy2(ROOT / 'examples/minecraft/RELEASE.md', staging / 'README.md')
         shutil.copytree(docs, staging / 'reference')
+        offline_reference_links(staging / 'reference', commit)
         dependency_notices(staging, host, args.backend)
         (staging / 'runtime-libraries.txt').write_text(libraries + '\n')
         manifest = dict(schema_version=1, name='rayengine-minecraft', version=version,

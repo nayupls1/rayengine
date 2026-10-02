@@ -4,15 +4,32 @@ import argparse
 import hashlib
 import json
 import os
+from html.parser import HTMLParser
 from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
+from urllib.parse import unquote, urlsplit
 
 
 def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+class ReferenceLinks(HTMLParser):
+    def __init__(self, page):
+        super().__init__()
+        self.page = page
+
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            if tag == 'a' and name == 'href' and value:
+                link = urlsplit(value)
+                # External crate reexports can contain unresolved Rust link
+                # disambiguators (e.g. macro@Bundle); check actual page/source URLs.
+                if not link.scheme and not link.netloc and link.path.endswith(('.html', '.md', '.py')):
+                    assert (self.page.parent / unquote(link.path)).exists(), (self.page, value)
 
 
 def main():
@@ -36,9 +53,17 @@ def main():
         manifest = json.loads((package / 'manifest.json').read_text())
         notices = json.loads((package / 'THIRD_PARTY_NOTICES/metadata.json').read_text())
         assert {'raylib', 'raylib-sys', 'glam', 'hecs'} <= {p['name'] for p in notices['packages']}
+        native = next(p for p in notices['packages'] if p['name'] == 'raylib-sys')
+        for name in ['qoi.h', 'glad.h', 'stb_image.h', 'stb_truetype.h', 'miniaudio.h']:
+            path = next(p for p in native['license_files'] if p.endswith('/external/' + name))
+            assert (package / path).is_file(), name
         assert (package / 'reference/rayengine/index.html').is_file()
         assert (package / 'reference/rayengine_voxel/index.html').is_file()
         assert (package / 'reference/rayengine_minecraft/index.html').is_file()
+        assert (package / 'reference/rayengine_minecraft/guides/release/index.html').is_file()
+        assert (package / 'reference/rayengine_minecraft/guides/controls/index.html').is_file()
+        for page in (package / 'reference').rglob('*.html'):
+            ReferenceLinks(page).feed(page.read_text())
         binary = package / 'minecraft'
         work = root / 'empty-working-directory'
         work.mkdir()
