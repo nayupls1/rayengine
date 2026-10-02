@@ -88,6 +88,7 @@ cargo doc --workspace --no-deps
 Guides are plain Markdown included in rustdoc, with checked Rust examples:
 
 - [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
+- [Optional scene switching and state stacks](crates/rayengine/docs/states.md)
 - [Optional plugins and authoring](crates/rayengine/docs/plugins.md)
 - [Voxel storage, generation interfaces, meshing and streaming](plugins/voxel/README.md)
 - [Minecraft terrain, survival, crafting, respawn and world saves](examples/minecraft/README.md)
@@ -119,6 +120,15 @@ scripts/benchmark.sh compare before-change
 scripts/render_benchmark.sh save materials-v1 # optional native draw benchmark
 ```
 
+Try the title/gameplay/pause state stack example:
+
+```sh
+cargo run -p rayengine --example states
+```
+
+Enter starts a session. Escape pauses with the world visible; Enter/Escape
+resumes, and T while paused returns to title and releases session resources.
+
 Try the draggable menu, keyboard focus, and dynamic cursor capture example:
 
 ```sh
@@ -148,3 +158,8 @@ optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)
 is tracked separately and deferred beyond 0.0.1.
+
+Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
+See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
+and run `cargo run -p rayengine --example lighting` for a generated/imported
+lit/unlit comparison with adjustable lights.

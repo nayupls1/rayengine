@@ -6,6 +6,7 @@ logical UI with optional interaction and explicit asset ownership. Version **0.0
 
 Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/quickstart/index.html), then read
 [game structure](https://docs.rs/rayengine/latest/rayengine/guides/game_structure/index.html) and
+[scene switching and state stacks](https://docs.rs/rayengine/latest/rayengine/guides/states/index.html), and
 [optional plugins](https://docs.rs/rayengine/latest/rayengine/guides/plugins/index.html). The remaining guides explain
 [responsive viewports](https://docs.rs/rayengine/latest/rayengine/guides/responsive/index.html),
 [timing and input](https://docs.rs/rayengine/latest/rayengine/guides/timing_input/index.html), [assets](https://docs.rs/rayengine/latest/rayengine/guides/assets/index.html),
@@ -53,3 +54,8 @@ not rigid-body dynamics or an advanced 3D rendering pipeline. The interactive
 input/image/state testing protocol is deferred. The CLI's JSON project diagnostics
 are available now. Desktop Linux is the supported development target; Windows
 and macOS are optional and not yet verified by this project's CI.
+
+Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
+See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
+and run `cargo run -p rayengine --example lighting` for a generated/imported
+lit/unlit comparison with adjustable lights.

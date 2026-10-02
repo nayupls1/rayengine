@@ -9,10 +9,12 @@ pub use raylib;
 pub mod assets;
 pub mod diagnostics;
 pub mod input;
+pub mod lighting;
 pub mod material;
 pub mod plugin;
 pub mod render;
 pub mod runtime;
+pub mod state;
 pub mod upload;
 
 pub use plugin::Plugin;
@@ -26,6 +28,11 @@ pub mod guides {
     pub mod quickstart {}
     #[doc = include_str!("../docs/game_structure.md")]
     pub mod game_structure {}
+    #[doc = include_str!("../docs/states.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/states.rs")]
+    #[doc = "```"]
+    pub mod states {}
     #[doc = include_str!("../docs/plugins.md")]
     pub mod plugins {}
     #[doc = include_str!("../docs/responsive.md")]
@@ -48,6 +55,11 @@ pub mod guides {
     pub mod generated_meshes {}
     #[doc = include_str!("../docs/materials.md")]
     pub mod materials {}
+    #[doc = include_str!("../docs/lighting.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/lighting.rs")]
+    #[doc = "```"]
+    pub mod lighting {}
     #[doc = include_str!("../docs/spatial_queries.md")]
     pub mod spatial_queries {}
     #[doc = include_str!("../docs/background_work.md")]
@@ -74,8 +86,14 @@ pub mod guides {
 pub mod prelude {
     pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
     pub use crate::input::{Bindings, Button};
-    pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
+    pub use crate::lighting::{DirectionalLight, Lighting, MAX_POINT_LIGHTS, PointLight};
+    pub use crate::material::{
+        AlphaMode, MaterialDesc, MaterialParam, Shading, UniformId, UniformValue,
+    };
     pub use crate::render::{Frame, UiButtonStyle};
+    pub use crate::state::{
+        State, StateCommands, StatePolicy, StateResources, StateStack, Transition,
+    };
     pub use crate::upload::{
         MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
         UploadBudget, UploadReport,
