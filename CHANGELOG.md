@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add opt-in Lambert materials with ambient, directional, and up to four point
+  lights, shared generated/imported geometry APIs, checked normal/transform
+  validation, an adjustable demo, native pixel probes, and submission benchmarks.
+
 ## 0.0.1
 
 - Manually dispatched crates.io releases gated by the full CI suite, coordinated

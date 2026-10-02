@@ -71,7 +71,7 @@ fn native_diagnostics_counts_resources_replacements_and_json_schema() {
                     counts.materials,
                     counts.shaders
                 ),
-                (1, 1, 1, 1)
+                (1, 1, 1, 2)
             );
             Ok(())
         }

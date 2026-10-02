@@ -154,6 +154,13 @@ scripts/render_benchmark.sh save ui-draw-v1 ui_draw
 scripts/render_benchmark.sh save diagnostics-v1 diagnostics_
 ```
 
+`draw_submission/lit_100` compares basic lighting with `opaque_100` using the
+same normal-bearing quad, opaque alpha, identity matrix, and white tint/texture.
+The lit case evaluates ambient, one directional light, and four points. Light
+setup and uniform lookup happen outside measurement; draws reuse the validated
+configuration. See [basic lighting](crate::guides::lighting) for the runnable
+comparison demo and native pixel probe.
+
 Stable `draw_submission` cases submit 100 indexed quads through the existing
 default path and opaque, textured, cutout, parameterized, and blended materials.
 The target is 64x64 with vsync disabled. These timings include CPU work, OpenGL
