@@ -236,3 +236,36 @@ fn extreme_finite_time_rate_and_motion_remain_bounded() {
     assert!(emitter.remainder.is_finite());
     assert!(emitter.particles().iter().all(|p| p.position().is_finite()));
 }
+
+#[test]
+fn lifetime_rounding_does_not_expire_on_zero_time_or_lose_small_ticks() {
+    let mut emitter = Emitter::new(EmitterConfig::default()).unwrap();
+    emitter.burst(1);
+    emitter.step(0.5).unwrap();
+    let dt = f32::from_bits(0.5_f32.to_bits() - 1);
+    emitter.step(dt).unwrap();
+    assert_eq!(emitter.len(), 1);
+    let age = emitter.particles()[0].age();
+    assert_eq!(age, 0.5 + f64::from(dt));
+    assert!(age < 1.0);
+    emitter.step(0.0).unwrap();
+    assert_eq!(emitter.len(), 1);
+    assert_eq!(emitter.particles()[0].age(), age);
+    assert_eq!(emitter.particles()[0].previous_age, age);
+    emitter.step(f32::EPSILON).unwrap();
+    assert!(emitter.is_empty());
+
+    let mut long = Emitter::new(EmitterConfig {
+        lifetime: [1_000_000.0, 1_000_000.0],
+        ..Default::default()
+    })
+    .unwrap();
+    long.burst(1);
+    long.step(100_000.0).unwrap();
+    let before = long.particles()[0].age();
+    let dt = 0.001;
+    long.step(dt).unwrap();
+    assert_eq!(long.particles()[0].age(), before + f64::from(dt));
+    assert!(long.particles()[0].age() > before);
+    assert_eq!(std::mem::size_of::<Particle>(), 56);
+}

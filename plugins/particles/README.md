@@ -36,9 +36,10 @@ positive ordered lifetime, and straight RGBA in 0..=1. Variation is uniform per
 axis. Constant acceleration is integrated analytically per tick; size and color
 interpolate linearly over each sampled lifetime. Splitting a tick changes birth
 quantization: continuous births occur at tick end with age zero. Identical seeds,
-configuration and call sequence reproduce CPU state. There is no wall clock or
-backend randomness. `set_position` moves future births, leaving live particles
-in world space. Finite motion that overflows f32 storage retires that particle.
+configuration and call sequence reproduce CPU state. Ages accumulate in f64 so
+small fixed ticks do not round prematurely to a f32 lifetime boundary. There is
+no wall clock or backend randomness. `set_position` moves future births, leaving
+live particles in world space. Finite motion that overflows f32 storage retires that particle.
 
 ## Bounds and saturation
 
@@ -109,4 +110,4 @@ wide/portrait viewports, stale handles and unload/reinit. Criterion workloads
 compare idle, full-capacity updates, continuous saturation and oversized bursts
 at 128/4,096/32,768 capacity. Construction is outside measured regions and every
 sample starts from the same seeded state. These are CPU costs, not GPU/FPS claims.
-See [performance evidence](docs/performance.md) for measured bounds/comparisons.
+See [performance evidence](crate::guides::performance) for measured bounds/comparisons.

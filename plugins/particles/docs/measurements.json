@@ -1,81 +1,325 @@
 {
   "schema_version": 1,
-  "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
-  "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
-  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
-  "base_commit": "de95112ada4f2e4ef8fa52a703c45a1286482c5b",
-  "workload": "particles_cpu_v1",
-  "measurement": "CPU only, shared development machine; repeat runs of identical code",
-  "criterion": {
-    "samples": 10,
-    "warmup_ms": 100,
-    "measurement_ms": 300
+  "measurement": "CPU only; repeated bounded workloads of the same implementation",
+  "save_provenance": {
+    "schema_version": 1,
+    "utc": "2026-10-02T21:33:20.005154+00:00",
+    "commit": "9a2eff9620c0b6e2c5b29307ffb477f1b4443a8f",
+    "dirty_files": [
+      "M plugins/particles/README.md",
+      " M plugins/particles/docs/performance.md",
+      " M plugins/particles/src/lib.rs",
+      " M plugins/particles/src/tests.rs"
+    ],
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logical_cpus": 20,
+    "rustflags": "",
+    "measurement": "CPU-only; no window or GPU initialized",
+    "mode": "save",
+    "baseline": "particles-age64-v1",
+    "criterion_arguments": [
+      "particles_"
+    ]
   },
-  "results": {
-    "128": {
-      "idle": {
-        "save_mean_ns": 7.129761582325402,
-        "compare_mean_ns": 7.7699170387554375
-      },
-      "full_tick": {
-        "save_mean_ns": 447.2607239160902,
-        "compare_mean_ns": 468.9276212745922
-      },
-      "saturated_240_ticks": {
-        "save_mean_ns": 114303.97319950203,
-        "compare_mean_ns": 107289.0814968254
-      },
-      "oversized_burst": {
-        "save_mean_ns": 3.165164410838737,
-        "compare_mean_ns": 3.052036620802702
-      },
-      "admitted_burst": {
-        "save_mean_ns": 224.30349076835037,
-        "compare_mean_ns": 329.2056279955736
+  "compare_provenance": {
+    "schema_version": 1,
+    "utc": "2026-10-02T21:33:41.869052+00:00",
+    "commit": "9a2eff9620c0b6e2c5b29307ffb477f1b4443a8f",
+    "dirty_files": [
+      "M plugins/particles/README.md",
+      " M plugins/particles/docs/performance.md",
+      " M plugins/particles/src/lib.rs",
+      " M plugins/particles/src/tests.rs"
+    ],
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+    "logical_cpus": 20,
+    "rustflags": "",
+    "measurement": "CPU-only; no window or GPU initialized",
+    "mode": "compare",
+    "baseline": "particles-age64-v1",
+    "criterion_arguments": [
+      "particles_"
+    ]
+  },
+  "bench_source_sha256": "09073ded515825ad0acaf464109ddc0ec779c2fe277f021a4d634e5cc393d913",
+  "simulation_source_sha256": "d5d3e954c54ef8f2a141b3f99879705263b3fae4c858c362b84bf78caa171bc8",
+  "save_results": {
+    "particles_cpu_v1/admitted_burst/128": {
+      "mean_ns": 243.08545507109588,
+      "median_ns": 242.37206672321176,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 241.83033662400277,
+        "upper_bound": 244.48594916840446
       }
     },
-    "4096": {
-      "idle": {
-        "save_mean_ns": 9.516797435596697,
-        "compare_mean_ns": 17.87215410776164
-      },
-      "full_tick": {
-        "save_mean_ns": 14313.374536825397,
-        "compare_mean_ns": 20643.351243894995
-      },
-      "saturated_240_ticks": {
-        "save_mean_ns": 3537464.735257936,
-        "compare_mean_ns": 4607051.538392858
-      },
-      "oversized_burst": {
-        "save_mean_ns": 32.38945653165481,
-        "compare_mean_ns": 20.773046641361855
-      },
-      "admitted_burst": {
-        "save_mean_ns": 11126.308113291097,
-        "compare_mean_ns": 11930.306921497584
+    "particles_cpu_v1/admitted_burst/32768": {
+      "mean_ns": 88794.44756645629,
+      "median_ns": 89775.3078313253,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 74596.59057463186,
+        "upper_bound": 105345.16559571621
       }
     },
-    "32768": {
-      "idle": {
-        "save_mean_ns": 21.90836298932384,
-        "compare_mean_ns": 18.42023602869542
-      },
-      "full_tick": {
-        "save_mean_ns": 116965.02374007937,
-        "compare_mean_ns": 117150.62824546485
-      },
-      "saturated_240_ticks": {
-        "save_mean_ns": 27621476.0,
-        "compare_mean_ns": 29009661.9
-      },
-      "oversized_burst": {
-        "save_mean_ns": 41.78871290545204,
-        "compare_mean_ns": 45.27438672438673
-      },
-      "admitted_burst": {
-        "save_mean_ns": 56871.15439139516,
-        "compare_mean_ns": 57793.49224664224
+    "particles_cpu_v1/admitted_burst/4096": {
+      "mean_ns": 7639.480798177957,
+      "median_ns": 7642.962334004023,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 7631.796598591549,
+        "upper_bound": 7646.114272377319
+      }
+    },
+    "particles_cpu_v1/full_tick/128": {
+      "mean_ns": 401.24076741645564,
+      "median_ns": 400.79324010626146,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 400.2114850538756,
+        "upper_bound": 402.23555179005905
+      }
+    },
+    "particles_cpu_v1/full_tick/32768": {
+      "mean_ns": 101861.10437003968,
+      "median_ns": 101565.8015625,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 101171.65479166666,
+        "upper_bound": 102557.69138653274
+      }
+    },
+    "particles_cpu_v1/full_tick/4096": {
+      "mean_ns": 12510.693906349205,
+      "median_ns": 12501.615000000002,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 12451.924773015871,
+        "upper_bound": 12568.68851111111
+      }
+    },
+    "particles_cpu_v1/idle/128": {
+      "mean_ns": 8.045411873942598,
+      "median_ns": 7.836462744391387,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 7.65866329298936,
+        "upper_bound": 8.472817203877225
+      }
+    },
+    "particles_cpu_v1/idle/32768": {
+      "mean_ns": 10.196819755743764,
+      "median_ns": 9.928867780325364,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 9.415389049412754,
+        "upper_bound": 11.050352112676055
+      }
+    },
+    "particles_cpu_v1/idle/4096": {
+      "mean_ns": 9.611586892262894,
+      "median_ns": 8.783615767176276,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 8.387974767342929,
+        "upper_bound": 11.555529563455517
+      }
+    },
+    "particles_cpu_v1/oversized_burst/128": {
+      "mean_ns": 3.184256397549791,
+      "median_ns": 2.9600463051365287,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 2.8802893256468782,
+        "upper_bound": 3.5647263007265155
+      }
+    },
+    "particles_cpu_v1/oversized_burst/32768": {
+      "mean_ns": 58.022705627705626,
+      "median_ns": 56.415909090909096,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 49.91386363636363,
+        "upper_bound": 67.42573241341992
+      }
+    },
+    "particles_cpu_v1/oversized_burst/4096": {
+      "mean_ns": 17.09932827879755,
+      "median_ns": 17.032774674115455,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 15.019624900239425,
+        "upper_bound": 19.186744579675445
+      }
+    },
+    "particles_cpu_v1/saturated_240_ticks/128": {
+      "mean_ns": 97131.62121901975,
+      "median_ns": 95905.00146198831,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 95795.64323447506,
+        "upper_bound": 99382.8395760234
+      }
+    },
+    "particles_cpu_v1/saturated_240_ticks/32768": {
+      "mean_ns": 24396084.0,
+      "median_ns": 24174721.0,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 24049358.165,
+        "upper_bound": 24774236.5
+      }
+    },
+    "particles_cpu_v1/saturated_240_ticks/4096": {
+      "mean_ns": 2983076.7005753973,
+      "median_ns": 2992160.8973214286,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 2968418.109382441,
+        "upper_bound": 2994363.760575397
+      }
+    }
+  },
+  "compare_results": {
+    "particles_cpu_v1/admitted_burst/128": {
+      "mean_ns": 250.6937938015113,
+      "median_ns": 246.54875020288915,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 245.59437350200184,
+        "upper_bound": 256.5145865153114
+      }
+    },
+    "particles_cpu_v1/admitted_burst/32768": {
+      "mean_ns": 72784.76029195012,
+      "median_ns": 71904.85515873015,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 68343.31322420636,
+        "upper_bound": 77466.8003235544
+      }
+    },
+    "particles_cpu_v1/admitted_burst/4096": {
+      "mean_ns": 10988.005629722602,
+      "median_ns": 10409.49321086262,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 9979.603668796593,
+        "upper_bound": 12069.642983882926
+      }
+    },
+    "particles_cpu_v1/full_tick/128": {
+      "mean_ns": 515.5469601793709,
+      "median_ns": 496.2782356532357,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 462.56308824731815,
+        "upper_bound": 569.8030481423339
+      }
+    },
+    "particles_cpu_v1/full_tick/32768": {
+      "mean_ns": 306453.74918871257,
+      "median_ns": 266594.925308642,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 229756.44462257496,
+        "upper_bound": 409774.9110489418
+      }
+    },
+    "particles_cpu_v1/full_tick/4096": {
+      "mean_ns": 15445.723211346263,
+      "median_ns": 14109.135141093475,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 13646.589691358025,
+        "upper_bound": 17702.71412643298
+      }
+    },
+    "particles_cpu_v1/idle/128": {
+      "mean_ns": 10.081480227239192,
+      "median_ns": 9.317902464217205,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 9.085003510033935,
+        "upper_bound": 11.284931459347794
+      }
+    },
+    "particles_cpu_v1/idle/32768": {
+      "mean_ns": 26.265400105169572,
+      "median_ns": 24.301983720400727,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 23.067577954234977,
+        "upper_bound": 29.98425910950104
+      }
+    },
+    "particles_cpu_v1/idle/4096": {
+      "mean_ns": 10.73951226726774,
+      "median_ns": 10.170028754700287,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 9.83261347398209,
+        "upper_bound": 11.741378274840866
+      }
+    },
+    "particles_cpu_v1/oversized_burst/128": {
+      "mean_ns": 3.7849714520290876,
+      "median_ns": 3.279072249589491,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 3.2637838523340372,
+        "upper_bound": 4.345881280788177
+      }
+    },
+    "particles_cpu_v1/oversized_burst/32768": {
+      "mean_ns": 133.07434676434679,
+      "median_ns": 109.52884615384616,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 82.31693055555557,
+        "upper_bound": 190.7186248473748
+      }
+    },
+    "particles_cpu_v1/oversized_burst/4096": {
+      "mean_ns": 24.66144313843681,
+      "median_ns": 22.370253164556964,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 19.38844505977496,
+        "upper_bound": 31.64231276371306
+      }
+    },
+    "particles_cpu_v1/saturated_240_ticks/128": {
+      "mean_ns": 100471.24678876679,
+      "median_ns": 99948.84679487179,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 99370.37598008242,
+        "upper_bound": 101654.84849252137
+      }
+    },
+    "particles_cpu_v1/saturated_240_ticks/32768": {
+      "mean_ns": 52880464.8,
+      "median_ns": 50070022.5,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 44320492.46,
+        "upper_bound": 61992072.154999994
+      }
+    },
+    "particles_cpu_v1/saturated_240_ticks/4096": {
+      "mean_ns": 3223450.3238492063,
+      "median_ns": 3171215.972222222,
+      "mean_confidence_interval": {
+        "confidence_level": 0.95,
+        "lower_bound": 3127665.6744444445,
+        "upper_bound": 3331854.908015873
       }
     }
   }

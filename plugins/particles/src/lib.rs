@@ -12,6 +12,18 @@ use std::fmt;
 #[cfg(feature = "render")]
 pub mod render;
 
+/// Checked performance documentation, also included in offline SDK references.
+pub mod guides {
+    #[doc = include_str!("../docs/performance.md")]
+    pub mod performance {}
+
+    /// Recorded benchmark means and machine provenance.
+    #[doc = "```json"]
+    #[doc = include_str!("../docs/measurements.json")]
+    #[doc = "```"]
+    pub mod measurements {}
+}
+
 /// Hard admission ceiling for particle storage and spawn work per call.
 pub const MAX_PARTICLES: usize = 1_000_000;
 
@@ -138,8 +150,8 @@ pub struct Particle {
     position: Vec3,
     previous_position: Vec3,
     velocity: Vec3,
-    age: f32,
-    previous_age: f32,
+    age: f64,
+    previous_age: f64,
     lifetime: f32,
 }
 impl Particle {
@@ -151,8 +163,8 @@ impl Particle {
     pub fn velocity(&self) -> Vec3 {
         self.velocity
     }
-    /// Elapsed lifetime in seconds.
-    pub fn age(&self) -> f32 {
+    /// Elapsed lifetime in seconds, accumulated in f64 to preserve small fixed ticks.
+    pub fn age(&self) -> f64 {
         self.age
     }
     /// Sampled total lifetime in seconds.
@@ -293,11 +305,11 @@ impl Emitter {
         self.particles.retain_mut(|p| {
             p.previous_position = p.position;
             p.previous_age = p.age;
-            let age = f64::from(p.age) + delta;
+            let age = p.age + delta;
             if age >= f64::from(p.lifetime) {
                 return false;
             }
-            p.age = age as f32;
+            p.age = age;
             let velocity = p.velocity.as_dvec3();
             p.position =
                 (p.position.as_dvec3() + velocity * delta + acceleration * (0.5 * delta * delta))
@@ -315,9 +327,9 @@ impl Emitter {
     /// Samples linear size/color evolution for one particle. Use a particle from
     /// this emitter so the appearance uses the matching configuration.
     pub fn appearance(&self, particle: &Particle, alpha: f32) -> Appearance {
-        let age =
-            particle.previous_age * (1.0 - alpha_value(alpha)) + particle.age * alpha_value(alpha);
-        let t = (age / particle.lifetime).clamp(0.0, 1.0);
+        let alpha = f64::from(alpha_value(alpha));
+        let age = particle.previous_age * (1.0 - alpha) + particle.age * alpha;
+        let t = (age / f64::from(particle.lifetime)).clamp(0.0, 1.0) as f32;
         Appearance {
             color: self.config.start_color.lerp(self.config.end_color, t),
             size: (f64::from(self.config.start_size) * (1.0 - f64::from(t))
