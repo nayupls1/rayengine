@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased (0.0.2)
+
+- Optional game-owned state stacks with deferred transitions, independent
+  update/draw/input routing, explicit resource cleanup and a title/pause example.
+
 ## 0.0.1
 
 - Manually dispatched crates.io releases gated by the full CI suite, coordinated

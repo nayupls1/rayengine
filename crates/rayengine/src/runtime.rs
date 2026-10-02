@@ -375,6 +375,16 @@ pub trait Game {
     fn init(&mut self, _context: &mut InitContext<'_, '_>) -> Result<(), Error> {
         Ok(())
     }
+    /// Applies deferred lifecycle work after each fixed update and each draw,
+    /// outside render passes. Asset creation and teardown are safe here.
+    /// Errors stop the run; `shutdown` still runs while the backend is alive.
+    fn boundary(&mut self, _context: &mut InitContext<'_, '_>) -> Result<(), Error> {
+        Ok(())
+    }
+    /// Teardown while assets, audio, and graphics are alive. Called once after
+    /// initialization is attempted, on both successful and error returns.
+    /// Must tolerate partially completed initialization.
+    fn shutdown(&mut self, _context: &mut InitContext<'_, '_>) {}
     /// Advances game state by one fixed tick.
     fn fixed_update(&mut self, context: &mut Update<'_, '_>);
     /// Draws world passes and UI. Interpolate state using `frame.alpha`.
@@ -515,229 +525,247 @@ impl App {
         let mut game = game;
         let bindings = game.bindings();
         let mut input = Input::with_capacity(bindings.capacity());
-        game.init(&mut InitContext {
+        let initialized = game.init(&mut InitContext {
             raylib: &mut raylib,
             thread: &thread,
             assets: &mut assets,
-        })?;
-        let mut cursor = CursorState::default();
-        let mut target: Option<RenderTexture2D> = None;
-        let mut target_size = (0, 0);
-        let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
-        let start = Instant::now();
-        let mut previous_frame = start;
-        let mut report = RunReport {
-            diagnostics: options.diagnostics.as_ref().map(|diagnostics| {
-                DiagnosticsReport::new(
-                    diagnostics,
-                    RunSettings {
-                        backend: if cfg!(target_os = "windows") {
-                            "glfw-win32"
-                        } else if cfg!(target_os = "macos") {
-                            "glfw-cocoa"
-                        } else if cfg!(all(unix, not(target_vendor = "apple")))
-                            && cfg!(feature = "wayland")
-                        {
-                            "glfw-x11+wayland"
-                        } else if cfg!(all(unix, not(target_vendor = "apple"))) {
-                            "glfw-x11"
-                        } else {
-                            "glfw"
+        });
+        let result = initialized.and_then(|()| {
+            let mut cursor = CursorState::default();
+            let mut target: Option<RenderTexture2D> = None;
+            let mut target_size = (0, 0);
+            let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
+            let start = Instant::now();
+            let mut previous_frame = start;
+            let mut report = RunReport {
+                diagnostics: options.diagnostics.as_ref().map(|diagnostics| {
+                    DiagnosticsReport::new(
+                        diagnostics,
+                        RunSettings {
+                            backend: if cfg!(target_os = "windows") {
+                                "glfw-win32"
+                            } else if cfg!(target_os = "macos") {
+                                "glfw-cocoa"
+                            } else if cfg!(all(unix, not(target_vendor = "apple")))
+                                && cfg!(feature = "wayland")
+                            {
+                                "glfw-x11+wayland"
+                            } else if cfg!(all(unix, not(target_vendor = "apple"))) {
+                                "glfw-x11"
+                            } else {
+                                "glfw"
+                            },
+                            os: std::env::consts::OS,
+                            arch: std::env::consts::ARCH,
+                            sdk_version: env!("CARGO_PKG_VERSION"),
+                            window_size: config.window_size,
+                            reference_size: config.reference_size.to_array(),
+                            scale_mode: match config.scale_mode {
+                                ScaleMode::Fit => "fit",
+                                ScaleMode::Expand => "expand",
+                                ScaleMode::IntegerFit => "integer-fit",
+                            },
+                            fixed_hz: config.fixed_hz,
+                            max_catch_up: config.max_catch_up,
+                            target_fps: if options.uncapped {
+                                0
+                            } else {
+                                config.target_fps
+                            },
+                            vsync: config.vsync && !options.uncapped,
+                            render_size: (0, 0),
                         },
-                        os: std::env::consts::OS,
-                        arch: std::env::consts::ARCH,
-                        sdk_version: env!("CARGO_PKG_VERSION"),
-                        window_size: config.window_size,
-                        reference_size: config.reference_size.to_array(),
-                        scale_mode: match config.scale_mode {
-                            ScaleMode::Fit => "fit",
-                            ScaleMode::Expand => "expand",
-                            ScaleMode::IntegerFit => "integer-fit",
-                        },
-                        fixed_hz: config.fixed_hz,
-                        max_catch_up: config.max_catch_up,
-                        target_fps: if options.uncapped {
-                            0
-                        } else {
-                            config.target_fps
-                        },
-                        vsync: config.vsync && !options.uncapped,
-                        render_size: (0, 0),
-                    },
-                    assets.resource_counts(),
-                )
-            }),
-            ..RunReport::default()
-        };
-        let mut quit = false;
-        while !quit
-            && !raylib.window_should_close()
-            && options.frames.is_none_or(|limit| report.frames < limit)
-        {
-            let now = Instant::now();
-            let elapsed = now.duration_since(previous_frame);
-            previous_frame = now;
-            let window = Vec2::new(
-                raylib.get_screen_width() as f32,
-                raylib.get_screen_height() as f32,
-            );
-            let view = Viewport::new(window, config.reference_size, config.scale_mode);
-            if raylib.is_window_minimized() || view.is_none() {
-                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), false);
-                input.release_all();
-                // Keep backend event polling alive, but pause simulation while minimized.
-                raylib
-                    .begin_drawing(&thread)
-                    .clear_background(config.bar_color);
-                std::thread::sleep(Duration::from_millis(16));
-                continue;
-            }
-            let view = view.expect("non-minimized viewport");
-            let window_focused = raylib.is_window_focused();
-            sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
-            bindings.sample(&raylib, &mut input);
-            if cursor.take_motion() {
-                let delta = raylib.get_mouse_delta();
-                input.add_pointer_delta(Vec2::new(delta.x, delta.y));
-            }
-            let mouse = raylib.get_mouse_position();
-            let plan = clock.advance(elapsed);
-            report.dropped_time += plan.dropped;
-            if let Some(metrics) = &mut report.diagnostics {
-                metrics.dropped_ns = metrics
-                    .dropped_ns
-                    .saturating_add(plan.dropped.as_nanos().min(u128::from(u64::MAX)) as u64);
-            }
-            for step in 0..plan.steps {
-                let update_start = report.diagnostics.as_ref().map(|_| Instant::now());
-                game.fixed_update(&mut Update {
-                    tick: Tick {
-                        index: plan.first_tick + u64::from(step),
-                        dt: clock.step().as_secs_f32(),
-                    },
-                    input: &input,
-                    viewport: view,
-                    pointer: (window_focused && !cursor.captured)
-                        .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
-                        .flatten(),
-                    window_focused,
-                    assets: &assets,
-                    quit: &mut quit,
-                });
-                if let Some(metrics) = &mut report.diagnostics {
-                    metrics
-                        .update
-                        .record(update_start.expect("diagnostics enabled").elapsed());
-                    metrics.updates = metrics.updates.saturating_add(1);
-                }
-                input.consume_edges();
-                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
-                report.ticks += 1;
-                if quit {
-                    break;
-                }
-            }
-            let render_start = report.diagnostics.as_ref().map(|_| Instant::now());
-            let dpi = Vec2::new(
-                raylib.get_render_width() as f32,
-                raylib.get_render_height() as f32,
-            ) / window;
-            let size = if config.scale_mode == ScaleMode::IntegerFit {
-                (
-                    config.reference_size.x.round() as u32,
-                    config.reference_size.y.round() as u32,
-                )
-            } else {
-                view.render_size(dpi)
+                        assets.resource_counts(),
+                    )
+                }),
+                ..RunReport::default()
             };
-            if size != target_size {
-                // Resize only when required; the old target drops while GL is alive.
-                let new_target = raylib
-                    .load_render_texture(&thread, size.0, size.1)
-                    .map_err(|e| Error::Backend(e.to_string()))?;
-                new_target.texture().set_texture_filter(
-                    &thread,
-                    if config.scale_mode == ScaleMode::IntegerFit {
-                        TextureFilter::TEXTURE_FILTER_POINT
-                    } else {
-                        TextureFilter::TEXTURE_FILTER_BILINEAR
-                    },
+            let mut quit = false;
+            while !quit
+                && !raylib.window_should_close()
+                && options.frames.is_none_or(|limit| report.frames < limit)
+            {
+                let now = Instant::now();
+                let elapsed = now.duration_since(previous_frame);
+                previous_frame = now;
+                let window = Vec2::new(
+                    raylib.get_screen_width() as f32,
+                    raylib.get_screen_height() as f32,
                 );
-                target = Some(new_target);
-                target_size = size;
-            }
-            let target = target.as_mut().expect("created target");
-            let draws = {
-                let mut frame = Frame {
-                    counters: report.diagnostics.as_ref().map(|_| DrawCounters::default()),
+                let view = Viewport::new(window, config.reference_size, config.scale_mode);
+                if raylib.is_window_minimized() || view.is_none() {
+                    sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), false);
+                    input.release_all();
+                    // Keep backend event polling alive, but pause simulation while minimized.
+                    raylib
+                        .begin_drawing(&thread)
+                        .clear_background(config.bar_color);
+                    std::thread::sleep(Duration::from_millis(16));
+                    continue;
+                }
+                let view = view.expect("non-minimized viewport");
+                let window_focused = raylib.is_window_focused();
+                sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
+                bindings.sample(&raylib, &mut input);
+                if cursor.take_motion() {
+                    let delta = raylib.get_mouse_delta();
+                    input.add_pointer_delta(Vec2::new(delta.x, delta.y));
+                }
+                let mouse = raylib.get_mouse_position();
+                let plan = clock.advance(elapsed);
+                report.dropped_time += plan.dropped;
+                if let Some(metrics) = &mut report.diagnostics {
+                    metrics.dropped_ns = metrics
+                        .dropped_ns
+                        .saturating_add(plan.dropped.as_nanos().min(u128::from(u64::MAX)) as u64);
+                }
+                for step in 0..plan.steps {
+                    let update_start = report.diagnostics.as_ref().map(|_| Instant::now());
+                    game.fixed_update(&mut Update {
+                        tick: Tick {
+                            index: plan.first_tick + u64::from(step),
+                            dt: clock.step().as_secs_f32(),
+                        },
+                        input: &input,
+                        viewport: view,
+                        pointer: (window_focused && !cursor.captured)
+                            .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
+                            .flatten(),
+                        window_focused,
+                        assets: &assets,
+                        quit: &mut quit,
+                    });
+                    if let Some(metrics) = &mut report.diagnostics {
+                        metrics
+                            .update
+                            .record(update_start.expect("diagnostics enabled").elapsed());
+                        metrics.updates = metrics.updates.saturating_add(1);
+                    }
+                    game.boundary(&mut InitContext {
+                        raylib: &mut raylib,
+                        thread: &thread,
+                        assets: &mut assets,
+                    })?;
+                    input.consume_edges();
+                    sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
+                    report.ticks += 1;
+                    if quit {
+                        break;
+                    }
+                }
+                let render_start = report.diagnostics.as_ref().map(|_| Instant::now());
+                let dpi = Vec2::new(
+                    raylib.get_render_width() as f32,
+                    raylib.get_render_height() as f32,
+                ) / window;
+                let size = if config.scale_mode == ScaleMode::IntegerFit {
+                    (
+                        config.reference_size.x.round() as u32,
+                        config.reference_size.y.round() as u32,
+                    )
+                } else {
+                    view.render_size(dpi)
+                };
+                if size != target_size {
+                    // Resize only when required; the old target drops while GL is alive.
+                    let new_target = raylib
+                        .load_render_texture(&thread, size.0, size.1)
+                        .map_err(|e| Error::Backend(e.to_string()))?;
+                    new_target.texture().set_texture_filter(
+                        &thread,
+                        if config.scale_mode == ScaleMode::IntegerFit {
+                            TextureFilter::TEXTURE_FILTER_POINT
+                        } else {
+                            TextureFilter::TEXTURE_FILTER_BILINEAR
+                        },
+                    );
+                    target = Some(new_target);
+                    target_size = size;
+                }
+                let target = target.as_mut().expect("created target");
+                let draws = {
+                    let mut frame = Frame {
+                        counters: report.diagnostics.as_ref().map(|_| DrawCounters::default()),
+                        raylib: &mut raylib,
+                        thread: &thread,
+                        target,
+                        assets: &mut assets,
+                        viewport: view,
+                        alpha: plan.alpha,
+                        index: report.frames,
+                    };
+                    frame.clear(Color::BLACK);
+                    game.draw(&mut frame);
+                    frame.draw_counters()
+                };
+                game.boundary(&mut InitContext {
                     raylib: &mut raylib,
                     thread: &thread,
-                    target,
                     assets: &mut assets,
-                    viewport: view,
-                    alpha: plan.alpha,
-                    index: report.frames,
-                };
-                frame.clear(Color::BLACK);
-                game.draw(&mut frame);
-                frame.draw_counters()
-            };
-            if let Some(metrics) = &mut report.diagnostics {
-                metrics
-                    .render
-                    .record(render_start.expect("diagnostics enabled").elapsed());
+                })?;
+                if let Some(metrics) = &mut report.diagnostics {
+                    metrics
+                        .render
+                        .record(render_start.expect("diagnostics enabled").elapsed());
+                }
+                let present_start = report.diagnostics.as_ref().map(|_| Instant::now());
+                {
+                    let mut draw = raylib.begin_drawing(&thread);
+                    draw.clear_background(config.bar_color);
+                    draw.draw_texture_pro(
+                        target.texture(),
+                        Rectangle::new(0.0, 0.0, size.0 as f32, -(size.1 as f32)),
+                        rect(rayengine_core::collision::Aabb2 {
+                            min: view.origin,
+                            max: view.origin + view.size,
+                        }),
+                        Vector2::zero(),
+                        0.0,
+                        Color::WHITE,
+                    );
+                }
+                if let Some(metrics) = &mut report.diagnostics {
+                    metrics
+                        .present
+                        .record(present_start.expect("diagnostics enabled").elapsed());
+                    metrics.settings.render_size = size;
+                    metrics.record_frame(draws.unwrap_or_default(), assets.resource_counts());
+                    metrics.frame.record(now.elapsed());
+                }
+                report.frames += 1;
             }
-            let present_start = report.diagnostics.as_ref().map(|_| Instant::now());
+            if let Some(path) = &options.screenshot {
+                let image = raylib.load_image_from_screen(&thread);
+                let png = image
+                    .export_image_to_memory(".png")
+                    .map_err(|e| Error::Backend(e.to_string()))?;
+                std::fs::write(path, &*png)?;
+            }
+            report.elapsed = start.elapsed();
+            if let Some((path, metrics)) = options
+                .diagnostics
+                .as_ref()
+                .and_then(|d| d.output.as_ref())
+                .zip(report.diagnostics.as_ref())
             {
-                let mut draw = raylib.begin_drawing(&thread);
-                draw.clear_background(config.bar_color);
-                draw.draw_texture_pro(
-                    target.texture(),
-                    Rectangle::new(0.0, 0.0, size.0 as f32, -(size.1 as f32)),
-                    rect(rayengine_core::collision::Aabb2 {
-                        min: view.origin,
-                        max: view.origin + view.size,
-                    }),
-                    Vector2::zero(),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-            if let Some(metrics) = &mut report.diagnostics {
+                if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let file = std::fs::File::create(path)?;
+                let mut writer = std::io::BufWriter::new(file);
                 metrics
-                    .present
-                    .record(present_start.expect("diagnostics enabled").elapsed());
-                metrics.settings.render_size = size;
-                metrics.record_frame(draws.unwrap_or_default(), assets.resource_counts());
-                metrics.frame.record(now.elapsed());
+                    .write_json(&mut writer)
+                    .map_err(|error| Error::Io(std::io::Error::other(error)))?;
+                std::io::Write::flush(&mut writer)?;
             }
-            report.frames += 1;
-        }
-        if let Some(path) = &options.screenshot {
-            let image = raylib.load_image_from_screen(&thread);
-            let png = image
-                .export_image_to_memory(".png")
-                .map_err(|e| Error::Backend(e.to_string()))?;
-            std::fs::write(path, &*png)?;
-        }
-        report.elapsed = start.elapsed();
-        if let Some((path, metrics)) = options
-            .diagnostics
-            .as_ref()
-            .and_then(|d| d.output.as_ref())
-            .zip(report.diagnostics.as_ref())
-        {
-            if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-                std::fs::create_dir_all(parent)?;
-            }
-            let file = std::fs::File::create(path)?;
-            let mut writer = std::io::BufWriter::new(file);
-            metrics
-                .write_json(&mut writer)
-                .map_err(|error| Error::Io(std::io::Error::other(error)))?;
-            std::io::Write::flush(&mut writer)?;
-        }
-        Ok(report)
+            Ok(report)
+        });
+        game.shutdown(&mut InitContext {
+            raylib: &mut raylib,
+            thread: &thread,
+            assets: &mut assets,
+        });
+        result
     }
 }
 
