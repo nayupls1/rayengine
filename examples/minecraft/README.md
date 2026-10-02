@@ -16,6 +16,9 @@ assert_eq!(terrain.block_at(spawn.support), terrain.blocks().grass);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+The [release guide](../../docs/minecraft_release.md) covers the complete play/save/
+reload check, Linux bundles and release boundaries.
+
 Run the CPU tool or native game:
 
 ```sh

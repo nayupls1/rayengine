@@ -1,0 +1,25 @@
+Minecraft survival demo built on rayengine
+
+Usage: minecraft [OPTIONS]
+
+World:
+  --seed N            Seed for a new world (default: 42)
+  --save PATH         Save/reopen a world; omit --seed to use its recorded seed
+  --atomic-save       Replace without durability flushes; requires --save
+  --textures PATH     Extracted block PNGs or pack root (default: original art)
+
+Window and diagnostics:
+  --size WIDTHxHEIGHT Initial window size
+  --frames N          Exit after N presented frames
+  --screenshot PATH   Save the final frame to a .png file
+  --hidden            Hide the window; still needs a display/OpenGL context
+  --uncapped          Disable VSync and the render cap
+  --diagnostics PATH  Write an SDK timing/resource report
+  --workload ID       Label an SDK diagnostics workload
+  -h, --help          Print this help without opening a window
+  -V, --version       Print the demo version without opening a window
+
+Controls: WASD move, mouse look, Space jump, Shift sprint, LMB mine, RMB place,
+1-9 hotbar, E/Escape inventory, F5 save/retry, F10 quit. Gather two logs and use
+inventory recipes to craft a wooden pickaxe. Linux saves default to durable
+replacement. Autosave runs every ten simulation seconds when --save is enabled.

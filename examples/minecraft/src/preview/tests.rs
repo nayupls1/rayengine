@@ -12,6 +12,9 @@ impl Probe {
         loop {
             self.game.draw(frame);
             assert!(self.game.error.is_none(), "{:?}", self.game.error);
+            if let Some(saving) = &self.game.saving {
+                assert!(saving.error().is_none(), "{:?}", saving.error());
+            }
             let r = self.game.report;
             assert!(r.jobs <= 4 && r.mesh_slots <= 4 && r.resident <= 160);
             let gpu = self.game.render_report.resources;
@@ -214,3 +217,5 @@ fn native_minecraft_mining_placement_collision_remesh_and_teardown() {
 mod survival_tests;
 
 mod persistence_tests;
+
+mod release_tests;
