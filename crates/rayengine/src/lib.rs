@@ -3,6 +3,7 @@
 pub use rayengine_core as core;
 pub use rayengine_core::first_person;
 pub use rayengine_core::save;
+pub use rayengine_core::sprite;
 pub use raylib;
 
 pub mod assets;
@@ -41,6 +42,11 @@ pub mod guides {
     pub mod first_person {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
+    #[doc = include_str!("../docs/sprites.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/sprites.rs")]
+    #[doc = "```"]
+    pub mod sprites {}
     #[doc = include_str!("../docs/generated_meshes.md")]
     pub mod generated_meshes {}
     #[doc = include_str!("../docs/materials.md")]
