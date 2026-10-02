@@ -15,3 +15,6 @@ The workspace lists members explicitly; adding a directory does not activate it.
 Read [the plugin authoring guide](../crates/rayengine/docs/plugins.md) for lifecycle,
 public engine APIs, scaffolding, compatibility, ownership, and testing. Future
 CPU/backend subcrates for a plugin should stay beneath that plugin's directory.
+
+- `particles/` (`rayengine-particles`): seeded, bounded CPU emission and optional
+  `render` adapters for 2D sprites and transparent 3D billboards.
