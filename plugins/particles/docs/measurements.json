@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+  "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "base_commit": "de95112ada4f2e4ef8fa52a703c45a1286482c5b",
+  "workload": "particles_cpu_v1",
+  "measurement": "CPU only, shared development machine; repeat runs of identical code",
+  "criterion": {
+    "samples": 10,
+    "warmup_ms": 100,
+    "measurement_ms": 300
+  },
+  "results": {
+    "128": {
+      "idle": {
+        "save_mean_ns": 7.129761582325402,
+        "compare_mean_ns": 7.7699170387554375
+      },
+      "full_tick": {
+        "save_mean_ns": 447.2607239160902,
+        "compare_mean_ns": 468.9276212745922
+      },
+      "saturated_240_ticks": {
+        "save_mean_ns": 114303.97319950203,
+        "compare_mean_ns": 107289.0814968254
+      },
+      "oversized_burst": {
+        "save_mean_ns": 3.165164410838737,
+        "compare_mean_ns": 3.052036620802702
+      },
+      "admitted_burst": {
+        "save_mean_ns": 224.30349076835037,
+        "compare_mean_ns": 329.2056279955736
+      }
+    },
+    "4096": {
+      "idle": {
+        "save_mean_ns": 9.516797435596697,
+        "compare_mean_ns": 17.87215410776164
+      },
+      "full_tick": {
+        "save_mean_ns": 14313.374536825397,
+        "compare_mean_ns": 20643.351243894995
+      },
+      "saturated_240_ticks": {
+        "save_mean_ns": 3537464.735257936,
+        "compare_mean_ns": 4607051.538392858
+      },
+      "oversized_burst": {
+        "save_mean_ns": 32.38945653165481,
+        "compare_mean_ns": 20.773046641361855
+      },
+      "admitted_burst": {
+        "save_mean_ns": 11126.308113291097,
+        "compare_mean_ns": 11930.306921497584
+      }
+    },
+    "32768": {
+      "idle": {
+        "save_mean_ns": 21.90836298932384,
+        "compare_mean_ns": 18.42023602869542
+      },
+      "full_tick": {
+        "save_mean_ns": 116965.02374007937,
+        "compare_mean_ns": 117150.62824546485
+      },
+      "saturated_240_ticks": {
+        "save_mean_ns": 27621476.0,
+        "compare_mean_ns": 29009661.9
+      },
+      "oversized_burst": {
+        "save_mean_ns": 41.78871290545204,
+        "compare_mean_ns": 45.27438672438673
+      },
+      "admitted_burst": {
+        "save_mean_ns": 56871.15439139516,
+        "compare_mean_ns": 57793.49224664224
+      }
+    }
+  }
+}

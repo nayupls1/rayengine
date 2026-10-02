@@ -23,6 +23,9 @@ cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored
 cargo test -p rayengine-beacons "${demo_features[@]}" native_plugin -- --ignored --test-threads=1
 cargo test -p rayengine-voxel --features render "${demo_features[@]}" native_voxel -- --ignored --test-threads=1
 cargo test -p rayengine-minecraft --features render "${demo_features[@]}" native_minecraft -- --ignored --test-threads=1
+cargo test -p rayengine-particles --features render "${demo_features[@]}" native_particles -- --ignored --test-threads=1
+cargo run -p rayengine-particles --features render "${demo_features[@]}" --example effects -- --hidden --frames 120 --size 1280x720 --screenshot "artifacts/smoke/$backend/particles-wide.png"
+cargo run -p rayengine-particles --features render "${demo_features[@]}" --example effects -- --hidden --frames 120 --size 800x1000 --screenshot "artifacts/smoke/$backend/particles-portrait.png"
 cargo build -p rayengine-demos "${demo_features[@]}" --bins
 rayengine_target=${CARGO_TARGET_DIR:-"$rayengine_root/target"}
 for game in arena meadow; do

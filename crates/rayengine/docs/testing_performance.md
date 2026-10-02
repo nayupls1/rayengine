@@ -237,3 +237,11 @@ counts and timings rather than assuming merging always improves performance.
 The [plugin guide](https://github.com/nayupls1/rayengine/blob/master/plugins/voxel/README.md)
 records fixtures and timing boundaries. CPU cases initialize no renderer or
 save I/O; native cases include driver work/stalls and are not GPU timers or FPS.
+
+The optional `rayengine-particles` plugin provides CPU-only seeded emission tests
+and `particles_cpu_v1` comparisons for idle, full, saturated sustained and burst
+loads at 128/4,096/32,768 capacity. Run `scripts/benchmark.sh save particles-v1
+particles_` and then `scripts/benchmark.sh compare particles-v1 particles_`.
+The native smoke script checks 2D/3D particle pixels, atlas regions, depth ordering,
+blend/depth state, wide/portrait fitting, stale handles and cleanup. It also checks
+scoped 2D alpha blending without materials and restoration on callback unwind.

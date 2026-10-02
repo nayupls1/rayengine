@@ -160,6 +160,12 @@ pub(crate) struct SurfaceGuard {
 }
 
 impl SurfaceGuard {
+    /// Reuse the procedure table while capturing state at a new scope boundary.
+    pub(crate) fn resnapshot(&mut self) {
+        self.legacy();
+        *self = self.state.begin();
+    }
+
     pub(crate) fn apply(&mut self, mode: AlphaMode) {
         let blend = mode == AlphaMode::Blend;
         if self.current == Some(blend) {
@@ -189,6 +195,9 @@ impl SurfaceGuard {
         }
         // SAFETY: Restore the exact pass-entry state through the same live table.
         unsafe {
+            // Submit batched 2D/legacy draws before restoring their state, including
+            // when a scoped blend callback unwinds.
+            ffi::rlDrawRenderBatchActive();
             (self.state.depth)(self.values[0] as u8);
             if self.blending != 0 {
                 (self.state.enable)(0x0BE2);

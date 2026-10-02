@@ -357,3 +357,8 @@ fn set_value(shader: &mut Shader, location: i32, value: UniformValue) {
 
 #[cfg(test)]
 mod tests;
+
+/// Load a state-only guard without creating shaders or materials.
+pub(crate) fn alpha_pass(thread: &RaylibThread) -> Result<SurfaceGuard, Error> {
+    Ok(gpu::RenderState::load(thread)?.begin())
+}
