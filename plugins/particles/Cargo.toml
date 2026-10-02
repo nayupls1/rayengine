@@ -1,5 +1,6 @@
 [package]
 name = "rayengine-particles"
+publish = false
 description = "Bounded CPU particle effects and optional 2D/3D rendering for rayengine"
 version.workspace = true
 edition.workspace = true
