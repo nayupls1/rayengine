@@ -12,6 +12,7 @@ pub mod events;
 pub mod first_person;
 pub mod input;
 pub mod jobs;
+pub mod manifest;
 pub mod mesh;
 pub mod save;
 pub mod scene;

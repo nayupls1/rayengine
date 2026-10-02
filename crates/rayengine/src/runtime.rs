@@ -106,6 +106,71 @@ impl Config {
         }
     }
 
+    /// Applies explicitly declared project/profile fields over these Rust defaults.
+    /// Missing fields preserve the caller's values. RunOptions overrides apply last.
+    pub fn with_project(
+        mut self,
+        project: &crate::manifest::ResolvedManifest,
+    ) -> Result<Self, Error> {
+        let settings = &project.settings;
+        macro_rules! apply {
+            ($section:literal, $field:ident, $value:expr) => {
+                if project.is_declared($section, stringify!($field)) {
+                    self.$field = $value;
+                }
+            };
+        }
+        apply!("window", title, settings.window.title.clone());
+        if project.is_declared("window", "size") {
+            self.window_size = (settings.window.size[0], settings.window.size[1]);
+        }
+        apply!(
+            "render",
+            reference_size,
+            Vec2::from_array(settings.render.reference_size)
+        );
+        apply!(
+            "render",
+            scale_mode,
+            match settings.render.scale_mode {
+                crate::manifest::ScaleMode::Fit => ScaleMode::Fit,
+                crate::manifest::ScaleMode::Expand => ScaleMode::Expand,
+                crate::manifest::ScaleMode::IntegerFit => ScaleMode::IntegerFit,
+            }
+        );
+        apply!("render", target_fps, settings.render.target_fps);
+        apply!("render", vsync, settings.render.vsync);
+        let [r, g, b, a] = settings.render.bar_color;
+        apply!("render", bar_color, Color::new(r, g, b, a));
+        apply!("runtime", fixed_hz, settings.runtime.fixed_hz);
+        apply!("runtime", max_catch_up, settings.runtime.max_catch_up);
+        apply!("runtime", audio, settings.runtime.audio);
+        self.validate()?;
+        Ok(self)
+    }
+
+    /// Loads a project directory, Cargo manifest, or explicit rayengine.toml.
+    /// Absent optional manifests preserve the existing manifest-free workflow.
+    pub fn with_optional_project(
+        self,
+        path: impl AsRef<Path>,
+        profile: Option<&str>,
+    ) -> Result<Self, Error> {
+        let manifest = crate::manifest::ProjectManifest::load_optional(path)
+            .map_err(|e| Error::Config(e.to_string()))?;
+        match manifest {
+            Some(manifest) => self.with_project(
+                &manifest
+                    .resolve(profile)
+                    .map_err(|e| Error::Config(e.to_string()))?,
+            ),
+            None if profile.is_some() => {
+                Err(Error::Config("a profile requires rayengine.toml".into()))
+            }
+            None => Ok(self),
+        }
+    }
+
     /// Validates configuration before invoking the native backend.
     pub fn validate(&self) -> Result<(), Error> {
         if self.title.contains('\0') {
@@ -754,6 +819,72 @@ fn validate_size(size: (u32, u32)) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manifest_examples_and_runtime_defaults_agree() {
+        let path =
+            std::env::temp_dir().join(format!("rayengine-runtime-manifest-{}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        let documentation = include_str!("../docs/project_manifest.md");
+        for block in documentation.split("```toml\n").skip(1) {
+            let source = block.split("```").next().unwrap();
+            std::fs::write(path.join("rayengine.toml"), source).unwrap();
+            let manifest =
+                crate::manifest::ProjectManifest::load(&path.join("rayengine.toml")).unwrap();
+            let project = manifest.resolve(None).unwrap();
+            let config = Config::new("rayengine game")
+                .with_project(&project)
+                .unwrap();
+            assert_eq!(
+                config.window_size,
+                (
+                    project.settings.window.size[0],
+                    project.settings.window.size[1]
+                )
+            );
+            assert_eq!(
+                config.reference_size.to_array(),
+                project.settings.render.reference_size
+            );
+            assert_eq!(config.target_fps, project.settings.render.target_fps);
+            assert_eq!(config.vsync, project.settings.render.vsync);
+            assert_eq!(config.fixed_hz, project.settings.runtime.fixed_hz);
+            assert_eq!(config.max_catch_up, project.settings.runtime.max_catch_up);
+            assert_eq!(config.audio, project.settings.runtime.audio);
+            for profile in manifest.profiles() {
+                manifest.resolve(Some(profile)).unwrap();
+            }
+        }
+        std::fs::write(path.join("rayengine.toml"), "schema_version = 1\n[window]\nsize = [640, 480]\n[profiles.dev.render]\ntarget_fps = 30").unwrap();
+        let mut rust = Config::new("Custom title");
+        rust.fixed_hz = 60;
+        rust.audio = true;
+        let config = rust.with_optional_project(&path, Some("dev")).unwrap();
+        assert_eq!(config.title, "Custom title");
+        assert_eq!(config.window_size, (640, 480));
+        assert_eq!(config.target_fps, 30);
+        assert_eq!(config.fixed_hz, 60);
+        assert!(config.audio);
+        assert!(
+            Config::new("Test")
+                .with_optional_project(&path, Some("missing"))
+                .is_err()
+        );
+        std::fs::remove_file(path.join("rayengine.toml")).unwrap();
+        assert_eq!(
+            Config::new("No manifest")
+                .with_optional_project(&path, None)
+                .unwrap()
+                .title,
+            "No manifest"
+        );
+        assert!(
+            Config::new("No manifest")
+                .with_optional_project(&path, Some("dev"))
+                .is_err()
+        );
+        std::fs::remove_dir(path).unwrap();
+    }
 
     #[test]
     fn capture_releases_on_focus_loss_and_ignores_motion_at_focus_transitions() {

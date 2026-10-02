@@ -53,3 +53,7 @@ not rigid-body dynamics or an advanced 3D rendering pipeline. The interactive
 input/image/state testing protocol is deferred. The CLI's JSON project diagnostics
 are available now. Desktop Linux is the supported development target; Windows
 and macOS are optional and not yet verified by this project's CI.
+
+Optional `rayengine.toml` project descriptions share a CPU-only loader with the
+CLI. See the [project manifest guide](https://docs.rs/rayengine/latest/rayengine/guides/project_manifest/)
+for profiles, asset/font declarations, validation and configuration precedence.

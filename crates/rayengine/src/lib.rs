@@ -2,6 +2,7 @@
 
 pub use rayengine_core as core;
 pub use rayengine_core::first_person;
+pub use rayengine_core::manifest;
 pub use rayengine_core::save;
 pub use raylib;
 
@@ -38,6 +39,8 @@ pub mod guides {
     pub mod first_person {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
+    #[doc = include_str!("../docs/project_manifest.md")]
+    pub mod project_manifest {}
     #[doc = include_str!("../docs/generated_meshes.md")]
     pub mod generated_meshes {}
     #[doc = include_str!("../docs/materials.md")]

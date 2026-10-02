@@ -143,3 +143,8 @@ optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)
 is tracked separately and deferred beyond 0.0.1.
+
+Optional project descriptions in `rayengine.toml` keep game assets, runtime
+defaults, named profiles and game/plugin settings separate from Cargo builds.
+New game scaffolds include one. See the [manifest guide](crates/rayengine/docs/project_manifest.md)
+for the versioned schema, path resolution and overrides.
