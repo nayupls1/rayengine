@@ -3,3 +3,4 @@
 **/target/
 /examples/minecraft/local-assets/
 **/__pycache__/
+/examples/minecraft/local-saves/

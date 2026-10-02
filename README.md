@@ -47,6 +47,9 @@ Collision and reach queries use the resident edited world. Extract local texture
 The game has no archive dependency; `--bin textures` inspects a PNG folder as JSON.
 Its game-owned recipe and CPU fixtures are documented in
 [the terrain guide](examples/minecraft/README.md).
+Add `--save examples/minecraft/local-saves/world.save` to retain world/player
+progress. Autosave, F5 and graceful exit checkpoint the selected slot; reopening
+uses its recorded seed.
 
 Create a game:
 
@@ -84,7 +87,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Game structure and corresponding 2D/3D primitives](crates/rayengine/docs/game_structure.md)
 - [Optional plugins and authoring](crates/rayengine/docs/plugins.md)
 - [Voxel storage, generation interfaces, meshing and streaming](plugins/voxel/README.md)
-- [Minecraft terrain, mining, survival inventory, crafting and respawn](examples/minecraft/README.md)
+- [Minecraft terrain, survival, crafting, respawn and world saves](examples/minecraft/README.md)
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)

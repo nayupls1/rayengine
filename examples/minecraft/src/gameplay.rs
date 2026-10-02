@@ -254,6 +254,18 @@ impl Interaction {
         input: InteractionInput,
         speed: impl Fn(BlockId) -> f32,
     ) -> Result<InteractionReport, VoxelError> {
+        self.apply_admitted(world, player, input, speed, |_| true)
+    }
+    /// Reject edits before mutation when game-owned persistence/history is full.
+    /// A denied mining gesture resets its progress; placement consumes no item.
+    pub fn apply_admitted(
+        &mut self,
+        world: &mut VoxelWorld,
+        player: &Player,
+        input: InteractionInput,
+        speed: impl Fn(BlockId) -> f32,
+        allowed: impl Fn(BlockPos) -> bool,
+    ) -> Result<InteractionReport, VoxelError> {
         let InteractionInput {
             mining,
             place,
@@ -278,11 +290,15 @@ impl Interaction {
         if place {
             if let Some(position) = hit
                 .adjacent
-                .filter(|&pos| can_place(world, pos, block, player))
+                .filter(|&pos| allowed(pos) && can_place(world, pos, block, player))
             {
                 report.edit = world.set_block(position, block)?;
             }
         } else if mining {
+            if !allowed(hit.position) {
+                self.reset();
+                return Ok(report);
+            }
             let stamp = world
                 .stamp(hit.position.split().0)
                 .expect("resident ray hit");

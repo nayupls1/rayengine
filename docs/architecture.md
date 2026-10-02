@@ -69,7 +69,11 @@ cooperative cancellation; concrete seed/settings, noise, caves, trees, ores and
 safe spawn belong to `examples/minecraft`. Versioned integer fixtures make untouched
 terrain reproducible independently of request order. Survival inventory, tools,
 pickups, crafting, health and the modal HUD stay game-owned. Propagated lighting
-remains deferred; disk saves are the next follow-up.
+remains deferred. Optional game-owned disk checkpoints reuse the core's versioned
+save container. A single bounded worker writes consistent world/player/inventory
+snapshots; exact chunk stamps keep concurrent edits dirty and prevent eviction
+before successful persistence. Untouched chunks regenerate and committed edited
+chunks reload from immutable saved history. No voxel/game schema enters core.
 
 ## First release
 

@@ -1,9 +1,11 @@
 //! Bounded, CPU-only demo survival rules. Engine and voxel plugins know no items.
+use crate::persistence::bounded::Bounded;
 use crate::{
     gameplay::{Interaction, InteractionInput, InteractionReport, Player, as_global},
     terrain::DemoBlocks,
 };
 use rayengine_voxel::{glam::DVec3, prelude::*};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Nine directly selectable slots at the beginning of the inventory.
@@ -15,7 +17,8 @@ pub const MAX_PICKUPS: usize = 128;
 /// Maximum health, measured in half-heart units.
 pub const MAX_HEALTH: u8 = 20;
 /// Game-owned item identities; tools do not stack.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Item {
     /// Placeable soil, also dropped by grass.
     Dirt,
@@ -104,7 +107,7 @@ impl Item {
     }
 }
 /// Validated nonempty stack, constructed only by the inventory/pickup rules.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct Stack {
     item: Item,
     count: u16,
@@ -416,9 +419,21 @@ impl Survival {
         input: SurvivalInput,
         blocks: DemoBlocks,
     ) -> Result<InteractionReport, VoxelError> {
+        self.interact_admitted(interaction, world, player, input, blocks, |_| true)
+    }
+    /// Apply a game-owned edit admission policy before block or inventory mutation.
+    pub fn interact_admitted(
+        &mut self,
+        interaction: &mut Interaction,
+        world: &mut VoxelWorld,
+        player: &Player,
+        input: SurvivalInput,
+        blocks: DemoBlocks,
+        allowed: impl Fn(BlockPos) -> bool,
+    ) -> Result<InteractionReport, VoxelError> {
         let held = self.held().map(Stack::item);
         let block = held.and_then(|i| i.block(blocks)).unwrap_or(BlockId::AIR);
-        let report = interaction.apply(
+        let report = interaction.apply_admitted(
             world,
             player,
             InteractionInput {
@@ -428,6 +443,7 @@ impl Survival {
                 block,
             },
             |id| held.map_or(1.0, |i| i.mining_speed(id, blocks)),
+            allowed,
         )?;
         if let Some(edit) = report.edit {
             if edit.current == BlockId::AIR {
@@ -510,3 +526,96 @@ pub fn respawn_feet(world: &VoxelWorld, spawn: BlockPos) -> Option<DVec3> {
 }
 #[cfg(test)]
 mod tests;
+
+impl<'de> Deserialize<'de> for Stack {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Fields {
+            item: Item,
+            count: u16,
+        }
+        let Fields { item, count } = Fields::deserialize(d)?;
+        if count == 0 || count > item.stack_limit() {
+            return Err(serde::de::Error::custom("invalid item stack count"));
+        }
+        Ok(Self { item, count })
+    }
+}
+/// Validated game save representation; runtime invariants stay private.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SurvivalState {
+    slots: Bounded<Option<Stack>, INVENTORY_SLOTS>,
+    selected: usize,
+    health: u8,
+    fall_peak: Option<f64>,
+    pickups: Bounded<PickupState, MAX_PICKUPS>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PickupState {
+    position: [f64; 3],
+    stack: Stack,
+}
+impl Survival {
+    /// Owned bounded inventory/health/fall/pickup snapshot, without transient UI.
+    pub fn snapshot(&self) -> SurvivalState {
+        SurvivalState {
+            slots: Bounded(self.inventory.slots.to_vec()),
+            selected: self.selected,
+            health: self.health.value,
+            fall_peak: self.health.peak,
+            pickups: Bounded(
+                self.pickups
+                    .iter()
+                    .map(|p| PickupState {
+                        position: p.position.to_array(),
+                        stack: p.stack,
+                    })
+                    .collect(),
+            ),
+        }
+    }
+}
+impl SurvivalState {
+    /// Reject invalid health, slot counts, selected indices and pickup coordinates
+    /// before constructing live state. Fall history survives an airborne reload.
+    pub fn restore(&self) -> Result<Survival, crate::persistence::Error> {
+        let invalid = || crate::persistence::Error::Invalid("invalid survival state".into());
+        if self.slots.0.len() != INVENTORY_SLOTS
+            || self.selected >= HOTBAR_SLOTS
+            || self.health > MAX_HEALTH
+            || self.fall_peak.is_some_and(|p| {
+                !p.is_finite() || p < f64::from(i32::MIN) || p > f64::from(i32::MAX) + 1.0
+            })
+            || self.pickups.0.len() > MAX_PICKUPS
+        {
+            return Err(invalid());
+        }
+        let mut result = Survival {
+            inventory: Inventory::default(),
+            selected: self.selected,
+            health: Health {
+                value: self.health,
+                peak: self.fall_peak,
+            },
+            pickups: Vec::with_capacity(MAX_PICKUPS),
+        };
+        result.inventory.slots.copy_from_slice(&self.slots.0);
+        for p in &self.pickups.0 {
+            let position = DVec3::from_array(p.position);
+            if !position.is_finite()
+                || position.min_element() < f64::from(i32::MIN)
+                || position.max_element() > f64::from(i32::MAX) + 1.0
+            {
+                return Err(invalid());
+            }
+            result.pickups.push(Pickup {
+                position,
+                stack: p.stack,
+            });
+        }
+        Ok(result)
+    }
+}

@@ -12,7 +12,7 @@ publish = false
 rayengine-core.workspace = true
 rayengine-voxel = { path = "../../plugins/voxel" }
 rayengine = { workspace = true, optional = true }
-serde.workspace = true
+serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 clap.workspace = true
 png = "0.18.1"
@@ -52,3 +52,7 @@ harness = false
 name = "survival_render"
 harness = false
 required-features = ["render"]
+
+[[bench]]
+name = "persistence"
+harness = false
