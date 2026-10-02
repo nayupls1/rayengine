@@ -21,7 +21,7 @@ Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/qu
 [agent workflow](https://docs.rs/rayengine/latest/rayengine/guides/agent_workflow/index.html).
 
 `rayengine-core` contains display-independent components and math; access it
-through [`core`](https://docs.rs/rayengine/latest/rayengine/core/index.html) or depend on it directly for simulations without raylib.
+through [`core`](https://docs.rs/rayengine-core) or depend on it directly for simulations without raylib.
 [`prelude`](https://docs.rs/rayengine/latest/rayengine/prelude/index.html) contains the normal game imports. [`raylib`](https://docs.rs/raylib) remains available for
 specialized rendering and other lower-level features.
 
