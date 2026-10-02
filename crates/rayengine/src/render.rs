@@ -326,6 +326,13 @@ pub struct Canvas3D<'draw, D: RaylibDraw> {
 }
 
 trait ModelSource {
+    fn validate_lit_draw(
+        &self,
+        mesh: Option<MeshId>,
+        model: Option<ModelId>,
+        material: MaterialId,
+        transform: Mat4,
+    ) -> Result<(), Error>;
     fn model(&self, id: ModelId) -> Option<&Model>;
     fn mesh(&mut self, id: MeshId, tint: Color) -> Option<(&Mesh, WeakMaterial)>;
     fn mesh_material(
@@ -342,6 +349,15 @@ trait ModelSource {
     ) -> Option<(&Model, Prepared<'_>)>;
 }
 impl ModelSource for Assets<'_> {
+    fn validate_lit_draw(
+        &self,
+        mesh: Option<MeshId>,
+        model: Option<ModelId>,
+        material: MaterialId,
+        transform: Mat4,
+    ) -> Result<(), Error> {
+        self.validate_lit_draw(mesh, model, material, transform)
+    }
     fn model(&self, id: ModelId) -> Option<&Model> {
         self.model(id)
     }
@@ -372,7 +388,8 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
             surface.legacy();
         }
     }
-    /// Draws generated geometry with a reusable material; false for stale dependencies.
+    /// Draws generated geometry; false for stale dependencies or invalid lit data.
+    /// Use try_mesh_material for actionable validation errors.
     /// Draw opaque/cutout surfaces first, then blended surfaces from far to near.
     pub fn mesh_material(
         &mut self,
@@ -383,7 +400,7 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
     ) -> bool {
         self.mesh_material_matrix(mesh, material, transform.matrix(), tint)
     }
-    /// Material drawing with an affine scene/world matrix. No command buffer or heap allocation.
+    /// Material drawing with an affine scene/world matrix. Valid draws allocate no SDK heap data.
     pub fn mesh_material_matrix(
         &mut self,
         mesh: MeshId,
@@ -391,19 +408,44 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         transform: Mat4,
         tint: Color,
     ) -> bool {
+        self.try_mesh_material_matrix(mesh, material, transform, tint)
+            .unwrap_or(false)
+    }
+    /// Checked material drawing, returning actionable normal/transform errors.
+    /// Stale resource handles return Ok(false); no geometry is submitted on error.
+    pub fn try_mesh_material(
+        &mut self,
+        mesh: MeshId,
+        material: MaterialId,
+        transform: Transform3D,
+        tint: Color,
+    ) -> Result<bool, Error> {
+        self.try_mesh_material_matrix(mesh, material, transform.matrix(), tint)
+    }
+    /// Checked material drawing with an affine world matrix.
+    pub fn try_mesh_material_matrix(
+        &mut self,
+        mesh: MeshId,
+        material: MaterialId,
+        transform: Mat4,
+        tint: Color,
+    ) -> Result<bool, Error> {
+        self.models
+            .validate_lit_draw(Some(mesh), None, material, transform)?;
         if let Some((mesh, material)) = self.models.mesh_material(mesh, material, tint) {
             if let Some(surface) = &mut self.surface {
                 surface.apply(material.alpha);
             }
             material.draw(self.raw, mesh, matrix(transform));
             count!(self.counters, meshes, 1);
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
     /// Overrides every mesh of an imported model with this material, applying its native transform.
-    /// Returns false for an unloaded model, material, shader, or texture.
+    /// Returns false for stale dependencies or invalid lit normals/transforms.
+    /// Use try_model_material for actionable validation errors.
     pub fn model_material(
         &mut self,
         model: ModelId,
@@ -421,24 +463,51 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         transform: Mat4,
         tint: Color,
     ) -> bool {
+        self.try_model_material_matrix(model, material, transform, tint)
+            .unwrap_or(false)
+    }
+    /// Checked material drawing, returning actionable normal/transform errors.
+    /// Stale resource handles return Ok(false); no geometry is submitted on error.
+    pub fn try_model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        transform: Transform3D,
+        tint: Color,
+    ) -> Result<bool, Error> {
+        self.try_model_material_matrix(model, material, transform.matrix(), tint)
+    }
+    /// Checked material drawing with an affine world matrix.
+    pub fn try_model_material_matrix(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        transform: Mat4,
+        tint: Color,
+    ) -> Result<bool, Error> {
+        let Some(native_model) = self.models.model(model) else {
+            return Ok(false);
+        };
+        let m = native_model.transform;
+        let local = Mat4::from_cols_array(&[
+            m.m0, m.m1, m.m2, m.m3, m.m4, m.m5, m.m6, m.m7, m.m8, m.m9, m.m10, m.m11, m.m12, m.m13,
+            m.m14, m.m15,
+        ]);
+        self.models
+            .validate_lit_draw(None, Some(model), material, transform * local)?;
         if let Some((model, material)) = self.models.model_material(model, material, tint) {
             if let Some(surface) = &mut self.surface {
                 surface.apply(material.alpha);
             }
-            let m = model.transform;
-            let local = Mat4::from_cols_array(&[
-                m.m0, m.m1, m.m2, m.m3, m.m4, m.m5, m.m6, m.m7, m.m8, m.m9, m.m10, m.m11, m.m12,
-                m.m13, m.m14, m.m15,
-            ]);
             let transform = matrix(transform * local);
             count!(self.counters, models, 1);
             count!(self.counters, meshes, model.meshes().len() as u64);
             for mesh in model.meshes() {
                 material.draw(self.raw, mesh, transform);
             }
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
     /// Draws generated geometry with translation, rotation, scale, and tint.

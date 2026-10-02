@@ -2,6 +2,9 @@
 
 ## Unreleased (0.0.2)
 
+- Add opt-in Lambert materials with ambient, directional, and up to four point
+  lights, shared generated/imported geometry APIs, checked normal/transform
+  validation, an adjustable demo, native pixel probes, and submission benchmarks.
 - Optional game-owned state stacks with deferred transitions, independent
   update/draw/input routing, explicit resource cleanup and a title/pause example.
 - Validated sprite-sheet regions with world-space rotation, explicit pivots,
