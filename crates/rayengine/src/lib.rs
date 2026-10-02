@@ -30,6 +30,9 @@ pub mod guides {
     #[doc = include_str!("../docs/responsive.md")]
     pub mod responsive {}
     #[doc = include_str!("../docs/timing_input.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/controls.rs")]
+    #[doc = "```"]
     pub mod timing_input {}
     #[doc = include_str!("../docs/first_person.md")]
     #[doc = "\n\n```no_run"]
@@ -67,7 +70,9 @@ pub mod guides {
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
     pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
-    pub use crate::input::{Bindings, Button};
+    pub use crate::input::{
+        ActionBinding, AxisBinding, AxisConfig, AxisSource, BindingConfig, Bindings, Button,
+    };
     pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
     pub use crate::render::{Frame, UiButtonStyle};
     pub use crate::upload::{

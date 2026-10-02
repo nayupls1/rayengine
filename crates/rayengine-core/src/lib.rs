@@ -30,7 +30,7 @@ pub mod prelude {
         FirstPersonActions, FirstPersonConfig, FirstPersonController, FirstPersonError,
         FirstPersonInput,
     };
-    pub use crate::input::{Action, Input, InputView};
+    pub use crate::input::{Action, Axis, Input, InputView};
     pub use crate::jobs::{Cancellation, Completion, JobHandle, JobId, JobOutcome, JobPool};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
     pub use crate::scene::Scene;

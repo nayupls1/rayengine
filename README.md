@@ -128,6 +128,17 @@ Escape toggles the menu. Tab/Up/Down moves focus; Enter/Space selects. Drag the
 header to move the panel. Gameplay receives explicitly masked input while the
 menu is open.
 
+Try analog controller movement and live binding settings:
+
+```sh
+cargo run -p rayengine --example controls
+```
+
+The controls menu switches movement keys, inverts look, adjusts sensitivity,
+and explicitly saves/loads settings. Keyboard and controller sources share the
+same movement axes. See [timing and input](crates/rayengine/docs/timing_input.md)
+for normalization, fixed-tick sampling, routing, and game-owned persistence.
+
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
 The CPU suite measures primitives and gameplay simulation; the opt-in native
 suite measures draw submission wall time, including driver stalls. Neither is a

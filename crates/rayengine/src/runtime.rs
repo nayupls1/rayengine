@@ -337,6 +337,10 @@ pub struct Update<'context, 'audio> {
     pub tick: Tick,
     /// Action states. Press/release edges are consumed after this update.
     pub input: &'context Input,
+    /// Live controls. Changes are reconciled after this tick; affected values
+    /// become neutral until the next render-frame sample. Unchanged inputs and
+    /// pending edges are preserved. Invalid edits return errors without changes.
+    pub bindings: &'context mut Bindings,
     /// Current viewport, shared with UI and cameras.
     pub viewport: Viewport,
     /// Pointer in UI units, or `None` in bars, while captured, or while unfocused.
@@ -367,7 +371,8 @@ pub trait Game {
     fn cursor_mode(&self) -> CursorMode {
         CursorMode::Free
     }
-    /// Declares actions and physical buttons before entering the loop.
+    /// Declares initial button and analog bindings before window creation.
+    /// Change live controls through [`Update::bindings`].
     fn bindings(&self) -> Bindings {
         Bindings::new()
     }
@@ -469,6 +474,8 @@ impl App {
             config.window_size = size;
         }
         config.validate()?;
+        let mut bindings = game.bindings();
+        bindings.validate()?;
         if let Some(diagnostics) = &options.diagnostics {
             diagnostics.validate()?;
         }
@@ -513,8 +520,9 @@ impl App {
         // This binding drops the game before assets, audio, and the window even
         // on early returns. Game-owned native resources also remain context-safe.
         let mut game = game;
-        let bindings = game.bindings();
-        let mut input = Input::with_capacity(bindings.capacity());
+        let mut previous_bindings = bindings.clone();
+        let (actions, axes) = bindings.capacities();
+        let mut input = Input::with_capacities(actions, axes);
         game.init(&mut InitContext {
             raylib: &mut raylib,
             thread: &thread,
@@ -616,6 +624,7 @@ impl App {
                         dt: clock.step().as_secs_f32(),
                     },
                     input: &input,
+                    bindings: &mut bindings,
                     viewport: view,
                     pointer: (window_focused && !cursor.captured)
                         .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
@@ -631,6 +640,7 @@ impl App {
                     metrics.updates = metrics.updates.saturating_add(1);
                 }
                 input.consume_edges();
+                bindings.reconcile(&mut previous_bindings, &mut input);
                 sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
                 report.ticks += 1;
                 if quit {
