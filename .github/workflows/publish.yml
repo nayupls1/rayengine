@@ -54,16 +54,16 @@ jobs:
       - uses: ./.github/actions/setup-linux
       - name: Check publishing credential
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           if [[ -z "$CARGO_REGISTRY_TOKEN" ]]; then
-            echo 'Set the repository Actions secret CRATES_IO_TOKEN with publish-new and publish-update scopes.' >&2
+            echo 'Set the repository Actions secret CARGO_REGISTRY_TOKEN with publish-new and publish-update scopes.' >&2
             exit 1
           fi
       - name: Validate and publish the four release crates
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           python3 scripts/release_check.py --version "$RELEASE_VERSION" --package
           cargo publish --locked --registry crates-io -p rayengine-core -p rayengine -p rayengine-voxel -p rayengine-cli

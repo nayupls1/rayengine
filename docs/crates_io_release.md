@@ -12,7 +12,7 @@ remain repository-only. The CLI installs a binary named `rayengine`.
   scopes. Restrict its crate names to the four release packages and choose an
   expiry. Ownership, yanking and Trusted Publisher management scopes are not
   needed by this workflow.
-- [ ] Add the token as repository Actions secret **CRATES_IO_TOKEN** at
+- [ ] Add the token as repository Actions secret **CARGO_REGISTRY_TOKEN** at
   **Settings → Secrets and variables → Actions → New repository secret**.
 - [ ] Merge the release preparation into `master`. GitHub displays manual
   workflows once their definition exists on the default branch.
