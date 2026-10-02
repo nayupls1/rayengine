@@ -2,6 +2,8 @@
 
 ## Unreleased (0.0.2)
 
+- Optional game-owned state stacks with deferred transitions, independent
+  update/draw/input routing, explicit resource cleanup and a title/pause example.
 - Validated sprite-sheet regions with world-space rotation, explicit pivots,
   flipping and tint through cached texture handles.
 - CPU-only named animation clips with per-frame timing, looping and one-shot

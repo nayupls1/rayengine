@@ -26,7 +26,7 @@ impl From<KeyboardKey> for Button {
 }
 
 /// Game-owned action bindings. Sampling ORs all physical buttons for an action.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Bindings {
     actions: Vec<(Action, Vec<Button>)>,
 }

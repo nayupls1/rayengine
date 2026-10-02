@@ -16,6 +16,7 @@ cargo test -p rayengine "${features[@]}" native_render_smoke -- --ignored --test
 cargo test -p rayengine "${features[@]}" native_mesh -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_material -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_upload -- --ignored --test-threads=1
+cargo test -p rayengine "${features[@]}" native_state -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_ui -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_sprite -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_diagnostics -- --ignored --test-threads=1
@@ -29,6 +30,7 @@ for game in arena meadow; do
     "$rayengine_target/debug/$game" --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/$game-wide.png"
     "$rayengine_target/debug/$game" --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/$game-portrait.png"
 done
+cargo run -p rayengine "${features[@]}" --example states -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/states-wide.png"
 cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/menu-wide.png"
 cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/menu-portrait.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/sprites-wide.png"
