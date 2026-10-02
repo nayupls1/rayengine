@@ -19,7 +19,7 @@ Implement [`crate::state::State`] and choose a [`crate::state::StatePolicy`]:
 | --- | --- | --- |
 | `update_below` | false | Visit lower states after this state's update |
 | `draw_below` | false | Include lower states before drawing this state |
-| `input_below` | false | Give lower updated states actions and pointer input |
+| `input_below` | false | Give lower updated states buttons, analog axes and pointer input |
 
 Updates run **top to bottom**. Drawing runs **bottom to top**, starting at the
 highest state that blocks drawing below it. Policies are sampled before each

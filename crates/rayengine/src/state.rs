@@ -10,7 +10,7 @@ use rayengine_core::input::Input;
 
 /// Independent propagation choices for a state and those underneath it.
 /// The default is an opaque, modal state. Input only propagates to states that
-/// also receive updates; blocked input includes held actions, edges and pointer.
+/// also receive updates; blocked input includes held actions, edges, analog axes and pointer.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StatePolicy {
     /// Continue fixed updates down the stack (visited top to bottom).
@@ -342,7 +342,7 @@ impl Game for StateStack {
             if self.commands.is_pending() {
                 break;
             }
-            // A blocked state still simulates, but sees no actions or pointer.
+            // A blocked state still simulates, but sees neutral buttons/axes and no pointer.
             // Preserve focus/reset signals so UI can cancel old captures.
             self.blocked_input.consume_edges();
             if context.input.reset_pending() {
@@ -354,6 +354,7 @@ impl Game for StateStack {
                 } else {
                     &self.blocked_input
                 },
+                bindings: &mut *context.bindings,
                 pointer: if input { context.pointer } else { None },
                 tick: context.tick,
                 viewport: context.viewport,

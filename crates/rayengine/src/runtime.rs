@@ -3,7 +3,7 @@
 use crate::{
     assets::{Assets, MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId, path_string},
     diagnostics::{DiagnosticsConfig, DiagnosticsReport, DrawCounters, RunSettings},
-    input::Bindings,
+    input::{Bindings, SamplingState},
     material::{MaterialDesc, UniformId, UniformValue},
     render::{Frame, rect},
 };
@@ -337,6 +337,12 @@ pub struct Update<'context, 'audio> {
     pub tick: Tick,
     /// Action states. Press/release edges are consumed after this update.
     pub input: &'context Input,
+    /// Live controls. Changes are reconciled after this tick; affected values
+    /// become neutral until the next render-frame sample. Unchanged inputs and
+    /// pending edges are preserved. Invalid edits return errors without changes.
+    /// Assigning an invalid set directly makes [`App::run`] return a configuration
+    /// error after this callback, before sampling the new set.
+    pub bindings: &'context mut Bindings,
     /// Current viewport, shared with UI and cameras.
     pub viewport: Viewport,
     /// Pointer in UI units, or `None` in bars, while captured, or while unfocused.
@@ -367,7 +373,8 @@ pub trait Game {
     fn cursor_mode(&self) -> CursorMode {
         CursorMode::Free
     }
-    /// Declares actions and physical buttons before entering the loop.
+    /// Declares initial button and analog bindings before window creation.
+    /// Change live controls through [`Update::bindings`].
     fn bindings(&self) -> Bindings {
         Bindings::new()
     }
@@ -479,6 +486,8 @@ impl App {
             config.window_size = size;
         }
         config.validate()?;
+        let mut bindings = game.bindings();
+        bindings.validate()?;
         if let Some(diagnostics) = &options.diagnostics {
             diagnostics.validate()?;
         }
@@ -523,8 +532,10 @@ impl App {
         // This binding drops the game before assets, audio, and the window even
         // on early returns. Game-owned native resources also remain context-safe.
         let mut game = game;
-        let bindings = game.bindings();
-        let mut input = Input::with_capacity(bindings.capacity());
+        let mut previous_bindings = bindings.clone();
+        let mut sampling = SamplingState::default();
+        let (actions, axes) = bindings.capacities();
+        let mut input = Input::with_capacities(actions, axes);
         let initialized = game.init(&mut InitContext {
             raylib: &mut raylib,
             thread: &thread,
@@ -596,6 +607,7 @@ impl App {
                 if raylib.is_window_minimized() || view.is_none() {
                     sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), false);
                     input.release_all();
+                    sampling = SamplingState::default();
                     // Keep backend event polling alive, but pause simulation while minimized.
                     raylib
                         .begin_drawing(&thread)
@@ -606,7 +618,7 @@ impl App {
                 let view = view.expect("non-minimized viewport");
                 let window_focused = raylib.is_window_focused();
                 sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
-                bindings.sample(&raylib, &mut input);
+                bindings.sample(&raylib, &mut input, &mut sampling);
                 if cursor.take_motion() {
                     let delta = raylib.get_mouse_delta();
                     input.add_pointer_delta(Vec2::new(delta.x, delta.y));
@@ -627,6 +639,7 @@ impl App {
                             dt: clock.step().as_secs_f32(),
                         },
                         input: &input,
+                        bindings: &mut bindings,
                         viewport: view,
                         pointer: (window_focused && !cursor.captured)
                             .then(|| view.screen_to_ui(Vec2::new(mouse.x, mouse.y)))
@@ -647,6 +660,7 @@ impl App {
                         assets: &mut assets,
                     })?;
                     input.consume_edges();
+                    bindings.reconcile(&mut previous_bindings, &mut input)?;
                     sync_cursor(&mut raylib, &mut cursor, game.cursor_mode(), window_focused);
                     report.ticks += 1;
                     if quit {
@@ -829,6 +843,32 @@ mod tests {
         config.reference_size.x = 960.0;
         config.title = "bad\0title".into();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn invalid_initial_bindings_fail_before_native_window_creation() {
+        struct InvalidBindings;
+        impl Game for InvalidBindings {
+            fn bindings(&self) -> Bindings {
+                Bindings::new().bind(
+                    rayengine_core::input::Action(0),
+                    crate::input::Button::Gamepad {
+                        device: -1,
+                        button: GamepadButton::GAMEPAD_BUTTON_LEFT_THUMB,
+                    },
+                )
+            }
+            fn fixed_update(&mut self, _: &mut Update<'_, '_>) {
+                panic!("must reject before updating");
+            }
+            fn draw(&mut self, _: &mut Frame<'_, '_>) {
+                panic!("must reject before drawing");
+            }
+        }
+        assert!(matches!(
+            App::new(Config::new("invalid bindings")).run(InvalidBindings),
+            Err(Error::Config(_))
+        ));
     }
 
     #[test]

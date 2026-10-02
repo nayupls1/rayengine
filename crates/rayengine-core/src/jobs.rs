@@ -246,6 +246,8 @@ impl<R: Send + 'static> JobPool<R> {
         if state.outstanding == self.capacity {
             return Err(SubmitError::Full(work));
         }
+        // `try_update` is newer than our Rust 1.89 minimum.
+        #[allow(deprecated)]
         let Ok(id) =
             NEXT_JOB.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
         else {

@@ -139,6 +139,17 @@ Escape toggles the menu. Tab/Up/Down moves focus; Enter/Space selects. Drag the
 header to move the panel. Gameplay receives explicitly masked input while the
 menu is open.
 
+Try analog controller movement and live binding settings:
+
+```sh
+cargo run -p rayengine --example controls
+```
+
+The controls menu switches movement keys, inverts look, adjusts sensitivity,
+and explicitly saves/loads settings. Keyboard and controller sources share the
+same movement axes. See [timing and input](crates/rayengine/docs/timing_input.md)
+for normalization, fixed-tick sampling, routing, and game-owned persistence.
+
 Try the original pixel-art sprite playground with idle, walking and one-shot
 sword animations: `cargo run -p rayengine --example sprites`. A/D or arrows move;
 Space swings at the golden orb, P pauses, and R restarts the current clip.

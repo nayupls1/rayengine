@@ -34,6 +34,8 @@ done
 cargo run -p rayengine "${features[@]}" --example states -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/states-wide.png"
 cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/menu-wide.png"
 cargo run -p rayengine "${features[@]}" --example menu -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/menu-portrait.png"
+cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/controls-wide.png"
+cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/controls-portrait.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/sprites-wide.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/sprites-portrait.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/first-person-wide.png"

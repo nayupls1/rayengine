@@ -1,7 +1,7 @@
 use super::*;
 use rayengine_core::{
     glam::Vec2,
-    input::Action,
+    input::{Action, Axis},
     time::Tick,
     viewport::{ScaleMode, Viewport},
 };
@@ -15,6 +15,7 @@ struct Seen {
     pressed: bool,
     released: bool,
     delta: Vec2,
+    analog: f32,
     pointer: Option<Vec2>,
     reset: bool,
     focused: bool,
@@ -36,6 +37,7 @@ impl State for Probe {
             pressed: ctx.input.pressed(ACTION),
             released: ctx.input.released(ACTION),
             delta: ctx.input.pointer_delta(),
+            analog: ctx.input.value(Axis(0)),
             pointer: ctx.pointer,
             reset: ctx.input.reset_pending(),
             focused: ctx.window_focused,
@@ -65,12 +67,14 @@ fn entry(
 fn update(stack: &mut StateStack, input: &Input) {
     let assets = Assets::new(None);
     let mut quit = false;
+    let mut bindings = Bindings::new();
     stack.fixed_update(&mut Update {
         tick: Tick {
             index: 0,
             dt: 1.0 / 120.0,
         },
         input,
+        bindings: &mut bindings,
         pointer: Some(Vec2::ONE),
         window_focused: true,
         viewport: Viewport::new(Vec2::splat(100.0), Vec2::splat(100.0), ScaleMode::Fit).unwrap(),
@@ -134,6 +138,7 @@ fn input_blocking_is_cumulative_and_preserves_focus_reset() {
     input.release_all();
     input.set(ACTION, true);
     input.add_pointer_delta(Vec2::ONE);
+    input.set_axis(Axis(0), 0.6);
     update(&mut stack, &input);
     let seen = log.borrow();
     assert_eq!(
@@ -141,9 +146,11 @@ fn input_blocking_is_cumulative_and_preserves_focus_reset() {
         ["upper", "lower", "world"]
     );
     assert!(seen[0].down && seen[0].pressed && seen[0].released);
+    assert_eq!(seen[0].analog, 0.6);
     for state in &seen[1..] {
         assert!(!state.down && !state.pressed && !state.released);
         assert_eq!(state.delta, Vec2::ZERO);
+        assert_eq!(state.analog, 0.0);
         assert_eq!(state.pointer, None);
         assert!(state.reset && state.focused);
     }
@@ -161,11 +168,12 @@ fn transparent_states_receive_input_and_transition_stops_lower_updates_that_tick
     };
     let mut input = Input::default();
     input.set(ACTION, true);
+    input.set_axis(Axis(0), 0.6);
     update(&mut stack, &input);
     assert!(
         log.borrow()
             .iter()
-            .all(|s| s.pressed && s.pointer == Some(Vec2::ONE))
+            .all(|s| s.pressed && s.pointer == Some(Vec2::ONE) && s.analog == 0.6)
     );
     stack.entries[1] = entry("closing", pass(), &log, true);
     log.borrow_mut().clear();
@@ -191,13 +199,16 @@ fn post_transition_guard_blocks_one_tick_then_held_input_resumes() {
     let mut input = Input::default();
     input.set(ACTION, true);
     input.add_pointer_delta(Vec2::ONE);
+    input.set_axis(Axis(0), 0.6);
     update(&mut stack, &input);
     assert!(!log.borrow()[0].down && !log.borrow()[0].pressed);
     assert_eq!(log.borrow()[0].pointer, None);
     assert_eq!(log.borrow()[0].delta, Vec2::ZERO);
+    assert_eq!(log.borrow()[0].analog, 0.0);
     input.consume_edges();
     update(&mut stack, &input);
     assert!(log.borrow()[1].down && !log.borrow()[1].pressed);
+    assert_eq!(log.borrow()[1].analog, 0.6);
 }
 
 #[test]
