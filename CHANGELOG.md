@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (0.0.2)
+
+- Validated sprite-sheet regions with world-space rotation, explicit pivots,
+  flipping and tint through cached texture handles.
+- CPU-only named animation clips with per-frame timing, looping and one-shot
+  playback, pause/resume/reset and single completion events.
+- Original MIT-licensed pixel-art playground, checked documentation, focused
+  playback tests and a native sprite drawing probe across viewport policies.
+
 ## 0.0.1
 
 - Manually dispatched crates.io releases gated by the full CI suite, coordinated
