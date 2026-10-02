@@ -1,0 +1,92 @@
+name: Publish crates
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version already committed in Cargo.toml (without v)
+        required: true
+        default: '0.0.1'
+        type: string
+      dry_run:
+        description: Validate the release without uploading to crates.io
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crates-io-publish
+  cancel-in-progress: false
+
+jobs:
+  release-inputs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+      - name: Validate release version and branch
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [[ "$RELEASE_DRY_RUN" != true && "$GITHUB_REF" != refs/heads/master ]]; then
+            echo 'Actual publication must run from master.' >&2
+            exit 1
+          fi
+          python3 scripts/release_check.py --version "$RELEASE_VERSION"
+
+  checks:
+    needs: release-inputs
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    if: ${{ !inputs.dry_run }}
+    needs: [release-inputs, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-linux
+      - name: Check publishing credential
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [[ -z "$CARGO_REGISTRY_TOKEN" ]]; then
+            echo 'Set the repository Actions secret CARGO_REGISTRY_TOKEN with publish-new and publish-update scopes.' >&2
+            exit 1
+          fi
+      - name: Validate and publish the four release crates
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          python3 scripts/release_check.py --version "$RELEASE_VERSION" --package
+          cargo publish --locked --registry crates-io -p rayengine-core -p rayengine -p rayengine-voxel -p rayengine-cli
+      - name: Verify registry installation and consumers
+        run: python3 scripts/release_smoke.py --registry
+
+  summary:
+    needs: [checks, publish]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Release outcome
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+        run: |
+          {
+            echo "Version: $RELEASE_VERSION"
+            echo "Commit: $GITHUB_SHA"
+            echo "Dry run: $RELEASE_DRY_RUN"
+            echo "Checks: $CHECKS_RESULT"
+            echo "Publication and registry smoke checks: $PUBLISH_RESULT"
+            echo 'Release candidates and checksums are in the crate-candidates artifact.'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -115,10 +115,10 @@ Document whether unload is idempotent and whether reinitialization is supported.
 
 ## Create and use a plugin
 
-From this checkout:
+With the installed CLI:
 
 ```sh
-cargo run -p rayengine-cli -- new-plugin ../my-game/plugins/my-plugin --name my-plugin
+rayengine new-plugin ../my-game/plugins/my-plugin --name my-plugin
 # Optional: --sdk-path /path/to/rayengine/crates/rayengine
 cargo check --manifest-path ../my-game/plugins/my-plugin/Cargo.toml
 ```

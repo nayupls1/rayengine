@@ -4,25 +4,25 @@ A small Linux-first Rust game SDK over raylib. Games are ordinary Cargo projects
 with a shared lifecycle for 2D and 3D, action input, fixed updates, fitted cameras,
 logical UI with optional interaction and explicit asset ownership. Version **0.0.1**.
 
-Start with [the quickstart](crate::guides::quickstart), then read
-[game structure](crate::guides::game_structure) and
-[optional plugins](crate::guides::plugins). The remaining guides explain
-[responsive viewports](crate::guides::responsive),
-[timing and input](crate::guides::timing_input), [assets](crate::guides::assets),
-[first-person movement](crate::guides::first_person),
-[generated meshes](crate::guides::generated_meshes),
-[materials and shaders](crate::guides::materials),
-[spatial queries](crate::guides::spatial_queries),
-[background work](crate::guides::background_work),
-[interactive UI and input routing](crate::guides::interactive_ui),
-[versioned saves](crate::guides::saves),
-[runtime diagnostics](crate::guides::diagnostics),
-[testing and performance](crate::guides::testing_performance), and the
-[agent workflow](crate::guides::agent_workflow).
+Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/quickstart/index.html), then read
+[game structure](https://docs.rs/rayengine/latest/rayengine/guides/game_structure/index.html) and
+[optional plugins](https://docs.rs/rayengine/latest/rayengine/guides/plugins/index.html). The remaining guides explain
+[responsive viewports](https://docs.rs/rayengine/latest/rayengine/guides/responsive/index.html),
+[timing and input](https://docs.rs/rayengine/latest/rayengine/guides/timing_input/index.html), [assets](https://docs.rs/rayengine/latest/rayengine/guides/assets/index.html),
+[first-person movement](https://docs.rs/rayengine/latest/rayengine/guides/first_person/index.html),
+[generated meshes](https://docs.rs/rayengine/latest/rayengine/guides/generated_meshes/index.html),
+[materials and shaders](https://docs.rs/rayengine/latest/rayengine/guides/materials/index.html),
+[spatial queries](https://docs.rs/rayengine/latest/rayengine/guides/spatial_queries/index.html),
+[background work](https://docs.rs/rayengine/latest/rayengine/guides/background_work/index.html),
+[interactive UI and input routing](https://docs.rs/rayengine/latest/rayengine/guides/interactive_ui/index.html),
+[versioned saves](https://docs.rs/rayengine/latest/rayengine/guides/saves/index.html),
+[runtime diagnostics](https://docs.rs/rayengine/latest/rayengine/guides/diagnostics/index.html),
+[testing and performance](https://docs.rs/rayengine/latest/rayengine/guides/testing_performance/index.html), and the
+[agent workflow](https://docs.rs/rayengine/latest/rayengine/guides/agent_workflow/index.html).
 
 `rayengine-core` contains display-independent components and math; access it
-through [`core`] or depend on it directly for simulations without raylib.
-[`prelude`] contains the normal game imports. [`raylib`] remains available for
+through [`core`](https://docs.rs/rayengine-core) or depend on it directly for simulations without raylib.
+[`prelude`](https://docs.rs/rayengine/latest/rayengine/prelude/index.html) contains the normal game imports. [`raylib`](https://docs.rs/raylib) remains available for
 specialized rendering and other lower-level features.
 
 ```no_run

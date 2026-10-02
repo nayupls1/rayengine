@@ -6,6 +6,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rayengine-voxel"
+keywords = ["game", "voxel", "meshing"]
+categories = ["game-development"]
+include = ["Cargo.toml", "README.md", "LICENSE", "src/**", "docs/**", "examples/**", "benches/**", "tests/**"]
 
 [dependencies]
 rayengine-core.workspace = true
@@ -37,3 +42,6 @@ workspace = true
 [[example]]
 name = "stream_render"
 required-features = ["render"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]

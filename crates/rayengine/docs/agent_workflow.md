@@ -25,7 +25,7 @@ Operational failures use a structured error and process exit code 1:
 ```
 
 `new-plugin` creates a standalone Cargo library, returning `command:
-"new-plugin"`, `data.kind: "plugin"`, the resolved SDK path, and a file list
+"new-plugin"`, `data.kind: "plugin"`, `data.sdk_path` (null for the registry default, or the resolved local SDK path), and a file list
 containing `src/lib.rs`. Like `new`, it refuses existing destinations and accepts
 `--name` and `--sdk-path`. Add it to the game with an explicit Cargo path
 dependency; the command does not edit the game or register hooks. Generated game

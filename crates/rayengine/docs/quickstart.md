@@ -39,26 +39,30 @@ which links a system GLFW library without enabling the bundled Wayland backend.
 The engine's minimum Rust version includes hecs 0.11's const-generic inference
 requirement, newer than the minimum advertised in its package metadata.
 
-Create a game with the CLI:
+Install the published CLI and create a game:
 
 ```sh
-cargo run -p rayengine-cli -- new ../my-game --kind 2d
+cargo install rayengine-cli --version 0.0.1 --locked
+rayengine doctor
+rayengine new ../my-game --kind 2d
 # For 3D, use --kind 3d.
 cargo run --manifest-path ../my-game/Cargo.toml
 ```
 
 Scaffolding creates a new directory and refuses to overwrite anything already
-there. When built from the repository, the CLI infers the local SDK crate path.
-If the binary has been moved or installed, pass `--sdk-path /path/to/rayengine/crates/rayengine`.
-Generated projects use a local path dependency: keep the SDK checkout available
-or update that dependency before moving the project to another machine.
+there. Generated projects depend on `rayengine = "0.0.1"` from crates.io by
+default. An ordinary Cargo project can also add that dependency directly.
 
-Install just the project CLI, if desired:
+For development before publication, build/install the CLI from this checkout
+and explicitly use the local SDK:
 
 ```sh
 cargo install --path crates/rayengine-cli --locked
 rayengine new ../another-game --kind 3d --sdk-path "$PWD/crates/rayengine"
 ```
+
+A project created with `--sdk-path` requires that checkout to remain available;
+change its dependency to a registry version before sharing it.
 
 The CLI itself does not link raylib. Creating and inspecting projects works
 without a display. Compiling games requires the native prerequisites; running
