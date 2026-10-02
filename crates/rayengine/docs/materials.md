@@ -190,7 +190,8 @@ allocation or CPU vertex conversion on this path. GPU state is captured once
 per 3D camera pass after material support is initialized. Shader compilation,
 material creation/editing, file caches, and uniform registration allocate;
 perform those operations outside hot drawing loops. The default is unlit;
-lighting, PBR and automatic world streaming remain separate work.
+optional [basic lighting](crate::guides::lighting) uses `Shading::Lit`. PBR and
+automatic world streaming remain separate work.
 
 The serial native material probe in `scripts/native_smoke.sh` checks texture/model
 pixels, alpha cutout/depth behavior, blending, batched primitive ordering, uniform

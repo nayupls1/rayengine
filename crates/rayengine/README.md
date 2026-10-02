@@ -21,6 +21,10 @@ Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/qu
 [testing and performance](https://docs.rs/rayengine/latest/rayengine/guides/testing_performance/index.html), and the
 [agent workflow](https://docs.rs/rayengine/latest/rayengine/guides/agent_workflow/index.html).
 
+Optional `rayengine.toml` project descriptions share a CPU-only loader with the
+CLI. See the [project manifest guide](https://docs.rs/rayengine/latest/rayengine/guides/project_manifest/)
+for profiles, asset/font declarations, validation and configuration precedence.
+
 `rayengine-core` contains display-independent components and math; access it
 through [`core`](https://docs.rs/rayengine-core) or depend on it directly for simulations without raylib.
 [`prelude`](https://docs.rs/rayengine/latest/rayengine/prelude/index.html) contains the normal game imports. [`raylib`](https://docs.rs/raylib) remains available for
@@ -55,6 +59,7 @@ input/image/state testing protocol is deferred. The CLI's JSON project diagnosti
 are available now. Desktop Linux is the supported development target; Windows
 and macOS are optional and not yet verified by this project's CI.
 
-Optional `rayengine.toml` project descriptions share a CPU-only loader with the
-CLI. See the [project manifest guide](https://docs.rs/rayengine/latest/rayengine/guides/project_manifest/)
-for profiles, asset/font declarations, validation and configuration precedence.
+Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
+See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
+and run `cargo run -p rayengine --example lighting` for a generated/imported
+lit/unlit comparison with adjustable lights.

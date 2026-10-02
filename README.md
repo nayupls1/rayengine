@@ -11,6 +11,11 @@ proximity and camera-visibility queries, and cached
 texture/model/sound handles, generated meshes, and materials with typed shader
 parameters and explicit alpha policies. Raylib is available directly for specialized work.
 
+Optional project descriptions in `rayengine.toml` keep game assets, runtime
+defaults, named profiles and game/plugin settings separate from Cargo builds.
+New game scaffolds include one. See the [manifest guide](crates/rayengine/docs/project_manifest.md)
+for the versioned schema, path resolution and overrides.
+
 Try the games:
 
 ```sh
@@ -159,7 +164,7 @@ optional, and browser/mobile are outside the current scope.
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)
 is tracked separately and deferred beyond 0.0.1.
 
-Optional project descriptions in `rayengine.toml` keep game assets, runtime
-defaults, named profiles and game/plugin settings separate from Cargo builds.
-New game scaffolds include one. See the [manifest guide](crates/rayengine/docs/project_manifest.md)
-for the versioned schema, path resolution and overrides.
+Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
+See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
+and run `cargo run -p rayengine --example lighting` for a generated/imported
+lit/unlit comparison with adjustable lights.

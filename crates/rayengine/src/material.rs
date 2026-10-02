@@ -96,9 +96,19 @@ pub struct MaterialParam {
     pub value: UniformValue,
 }
 
+/// Built-in surface shading. Custom shaders require Unlit and implement their own lighting.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Shading {
+    /// Texture, vertex color, and tint only (the default).
+    #[default]
+    Unlit,
+    /// World-space ambient, directional, and point Lambert lighting.
+    Lit,
+}
+
 /// CPU surface description. Materials borrow texture/shader handles, never own them.
 ///
-/// Missing texture uses white; missing shader uses the built-in unlit shader.
+/// Missing texture uses white; missing shader uses the built-in shader selected by shading.
 /// Unloading a dependency makes drawing return false until the description is
 /// replaced with live handles. Parameters override shader defaults per draw,
 /// so surfaces sharing a shader do not inherit another surface's overrides.
@@ -108,6 +118,8 @@ pub struct MaterialDesc {
     pub texture: Option<TextureId>,
     /// Optional custom shader with raylib's standard mesh attributes/uniforms.
     pub shader: Option<ShaderId>,
+    /// Built-in shading; Lit requires valid normals and an invertible affine transform.
+    pub shading: Shading,
     /// Multiplied by vertex colors, texture pixels, and the draw tint.
     pub tint: Color,
     /// Blending, fragment discard, and depth-write policy.
@@ -121,6 +133,7 @@ impl Default for MaterialDesc {
         Self {
             texture: None,
             shader: None,
+            shading: Shading::Unlit,
             tint: Color::WHITE,
             alpha: AlphaMode::Opaque,
             parameters: Vec::new(),
