@@ -11,6 +11,15 @@
 - Seeded trauma-based screen shake for `Camera2D` and `Camera3D`.
 - `Frame::delta` exposes render-frame wall time for presentation-only animation;
   new tweens guide and playable example animating UI and world objects.
+- Grid A* pathfinding in the core: four/eight-way movement, per-cell costs,
+  diagonal corner rules, borrowed `NavGrid` cells, reusable search buffers and
+  resumable expansion budgets.
+- Cost- and clearance-aware path smoothing, a path follower for 2D/3D character
+  bodies, and distance fields for many agents chasing one target.
+- `rayengine-tilemap` maps implement `NavGrid` (solid tiles block) and expose
+  `grid_layout()`; `GridLayout` supports rectangular cells.
+- Checked pathfinding guide, an agents-around-walls example, unit tests against
+  a reference search, and `pathfinding_*` Criterion workloads.
 
 ## 0.0.2
 

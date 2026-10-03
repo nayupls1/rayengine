@@ -69,7 +69,13 @@ cells and returns solid/one-way/trigger/custom metadata. `solid_geometry`
 produces ordinary `Aabb2` values for `Body2D::move_and_slide` or a physics
 broadphase. `rebuild_solid_index` builds the existing `SpatialIndex2D` with stable
 (layer, x, y) IDs; rebuild caller-owned snapshots after edits. The planned physics
-and pathfinding plugins can consume these IDs, flags and coordinate queries.
+plugin can consume these IDs, flags and coordinate queries.
+
+`Tilemap` implements the core `pathfinding::NavGrid` for top-down navigation:
+a cell is blocked when any layer holds a solid tile (`is_solid`), and one-way,
+trigger and custom tiles are walkable. `grid_layout()` converts path cells to
+world positions, including rectangular tiles. Searches read current cells, so
+replan after edits.
 
 `move_body` queries the swept region, resolves X then Y, and handles downward
 one-way top contacts. Solid takes precedence over one-way; trigger/custom bits

@@ -115,6 +115,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Particle effects plugin](plugins/particles/README.md)
 - [Versioned project manifests](crates/rayengine/docs/project_manifest.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
+- [Grid pathfinding](crates/rayengine/docs/pathfinding.md)
 - [Background work and upload budgets](crates/rayengine/docs/background_work.md)
 - [Interactive UI and input routing](crates/rayengine/docs/interactive_ui.md)
 - [Versioned saves and reliable file replacement](crates/rayengine/docs/saves.md)
@@ -172,6 +173,10 @@ Try tweened world objects and UI: `cargo run -p rayengine --example tweens`.
 Space slides a door, H flashes a training dummy and shakes the camera, and P
 pauses the world tweens; each door completion slides in a UI toast.
 
+Watch agents navigate around walls with grid A*, path smoothing and a shared
+distance field: `cargo run -p rayengine --example pathfinding`. Click to move
+the target; R resets. See [grid pathfinding](crates/rayengine/docs/pathfinding.md).
+
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
 The CPU suite measures primitives and gameplay simulation; the opt-in native
 suite measures draw submission wall time, including driver stalls. Neither is a
@@ -181,8 +186,8 @@ template checks, minimum-Rust checks and benchmark compilation.
 
 The first release keeps physics and rendering small: axis-aligned static
 collision and character movement, geometric drawing, textures and model access.
-The game owns optional voxel streaming. There is no rigid-body solver, advanced lighting,
-navigation, networking or editor. Linux is the tested target; Windows/macOS are
+The game owns optional voxel streaming. Navigation is limited to grid pathfinding.
+There is no rigid-body solver, advanced lighting, navigation mesh, networking or editor. Linux is the tested target; Windows/macOS are
 optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)

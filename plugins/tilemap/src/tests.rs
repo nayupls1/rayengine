@@ -389,3 +389,66 @@ fn chunk_culling_is_conservative_near_world_precision_limit() {
         assert_eq!(actual, expected);
     }
 }
+#[test]
+fn maps_are_navigation_grids_with_rectangular_cells() {
+    use rayengine_core::glam::UVec2;
+    use rayengine_core::pathfinding::{
+        NavGrid, PathFinder, PathFollower, PathOptions, PathStatus, smooth_path,
+    };
+    // 2x4 world-unit tiles: a solid wall in column 4, and a walkable one-way
+    // tile on another layer.
+    let mut map = map(10, 6);
+    for y in 0..4 {
+        map.set_tile(0, 4, y, Some(TileId(0))).unwrap();
+    }
+    map.set_tile(1, 6, 5, Some(TileId(1))).unwrap();
+    assert_eq!(map.size(), UVec2::new(10, 6));
+    assert!(map.is_solid(4, 2) && !map.walkable(UVec2::new(4, 2)));
+    assert!(!map.is_solid(6, 5) && map.cost(UVec2::new(6, 5)) == Some(1.0));
+    assert!(!map.is_solid(40, 0));
+
+    let layout = map.grid_layout();
+    assert_eq!(
+        layout.cell_center(UVec2::new(4, 2)),
+        map.tile_bounds(4, 2).unwrap().center()
+    );
+    assert_eq!(
+        layout.cell_at(Vec2::new(0.5, 7.0), map.size()),
+        map.world_to_tile(Vec2::new(0.5, 7.0)).map(UVec2::from)
+    );
+
+    for (x, y) in [(0, 0), (3, 5), (9, 2)] {
+        let corner = map.tile_to_world(x, y).unwrap();
+        assert_eq!(layout.cell_at(corner, map.size()), Some(UVec2::new(x, y)));
+    }
+
+    let (start, goal) = (UVec2::new(0, 0), UVec2::new(9, 0));
+    let mut finder = PathFinder::new();
+    let mut path = Vec::new();
+    let options = PathOptions::default();
+    let status = finder
+        .find_path(&map, start, goal, &options, &mut path)
+        .unwrap();
+    assert!(matches!(status, PathStatus::Found { .. }));
+    assert!(path.contains(&UVec2::new(4, 4)));
+
+    let mut body = Body2D::new(layout.cell_center(start), Vec2::new(1.2, 2.4));
+    smooth_path(
+        &map,
+        &mut path,
+        options.neighborhood,
+        layout.clearance(body.half_size),
+    )
+    .unwrap();
+    let mut follower = PathFollower::new(0.05);
+    follower.set_cells(&layout, &path);
+    let solids = map.solid_geometry(map.bounds());
+    for _ in 0..600 {
+        follower.steer_body_2d(&mut body, 12.0, 1.0 / 60.0);
+        // Top-down movement ignores one-way platforms.
+        map.move_body(&mut body, 1.0 / 60.0, true);
+        assert!(solids.iter().all(|solid| !solid.intersects(&body.bounds())));
+    }
+    assert!(follower.is_finished());
+    assert!(body.position.distance(layout.cell_center(goal)) < 0.06);
+}
