@@ -1,6 +1,6 @@
 # Render quality comparison
 
-Recorded 2026-10-03T07:45:19.812145+00:00; release build on 12th Gen Intel(R) Core(TM) i7-12700K, Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44.
+Recorded 2026-10-03T08:10:33.695285+00:00; release build on 12th Gen Intel(R) Core(TM) i7-12700K, Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44.
 Backend: x11 (XWayland display), renderer: NVIDIA Corporation / NVIDIA GeForce RTX 4070/PCIe/SSE2 / 3.3.0 NVIDIA 610.57.04.
 Toolchain: cargo 1.98.1 (797e8a9bc 2026-08-05); rustc 1.98.1 (48a229cea 2026-09-01).
 
@@ -12,10 +12,10 @@ Default and 64-pixel custom font atlas, diagonal lines, cube and sphere are iden
 
 | Mode | World pixels | Estimated targets (MiB) | Frame median (ms) | Per-run range (ms) | Render median (ms) | Present median (ms) | Relative frame wall time |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: |
-| native | 1280×720 | 7.031 | 0.1303 | 0.1012–0.3097 | 0.0675 | 0.0624 | 1.00× |
-| fxaa | 1280×720 | 21.094 | 0.1952 | 0.1366–0.5263 | 0.1093 | 0.0853 | 1.50× |
-| 2x | 2560×1440 | 42.188 | 0.1810 | 0.1585–0.1903 | 0.0985 | 0.0820 | 1.39× |
-| 2x-fxaa | 2560×1440 | 42.188 | 0.1921 | 0.1575–0.5454 | 0.1086 | 0.0829 | 1.47× |
+| native | 1280×720 | 7.031 | 0.0936 | 0.0928–0.0946 | 0.0569 | 0.0363 | 1.00× |
+| fxaa | 1280×720 | 21.094 | 0.1228 | 0.1210–0.1240 | 0.0779 | 0.0429 | 1.31× |
+| 2x | 2560×1440 | 42.188 | 0.1384 | 0.1375–0.1391 | 0.0811 | 0.0578 | 1.48× |
+| 2x-fxaa | 2560×1440 | 42.188 | 0.1427 | 0.1405–0.1449 | 0.0821 | 0.0609 | 1.52× |
 
 These are uncapped CPU frame wall times, including driver stalls and window
 presentation, **not GPU execution timings or expected FPS for a game**. Hidden
@@ -33,9 +33,9 @@ at 4096×4096, 2× requires 768 MiB and fails the 512 MiB budget explicitly.
 The [recorded summary](render-quality-evidence/summary.json) includes repeated
 samples, effective settings, actual GL vendor/renderer/version, toolchain, OS, CPU,
 environment and the exact clean implementation revision under measurement.
-The measured commit includes the reviewed alpha fix and current manifest, input,
-lighting, state and particle APIs;
-subsequent documentation/master updates do not change this static workload.
+The measured commit includes the reviewed alpha fix, explicit RGBA8 target
+allocation and current manifest, input, lighting, state, particle and Minecraft
+demo APIs. The subsequent evidence update does not change the implementation.
 Re-run the script to measure the final checkout.
 
 Screenshots from the identical release workload:
