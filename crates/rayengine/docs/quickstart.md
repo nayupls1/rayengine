@@ -42,7 +42,7 @@ requirement, newer than the minimum advertised in its package metadata.
 Install the published CLI and create a game:
 
 ```sh
-cargo install rayengine-cli --version 0.0.1 --locked
+cargo install rayengine-cli --version 0.0.2 --locked
 rayengine doctor
 rayengine new ../my-game --kind 2d
 # For 3D, use --kind 3d.
@@ -50,7 +50,7 @@ cargo run --manifest-path ../my-game/Cargo.toml
 ```
 
 Scaffolding creates a new directory and refuses to overwrite anything already
-there. Generated projects depend on `rayengine = "0.0.1"` from crates.io by
+there. Generated projects depend on `rayengine = "0.0.2"` from crates.io by
 default. An ordinary Cargo project can also add that dependency directly.
 
 For development before publication, build/install the CLI from this checkout

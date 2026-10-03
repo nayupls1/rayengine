@@ -11,10 +11,10 @@ Add it to a game from crates.io:
 
 ```toml
 [dependencies]
-rayengine-voxel = "0.0.1"
+rayengine-voxel = "0.0.2"
 ```
 
-For the SDK rendering adapter, use `rayengine-voxel = { version = "0.0.1", features = ["render"] }`.
+For the SDK rendering adapter, use `rayengine-voxel = { version = "0.0.2", features = ["render"] }`.
 The docs.rs reference covers the default CPU API; rendering is optional.
 During development, a local `path = "../rayengine/plugins/voxel"` dependency also works.
 

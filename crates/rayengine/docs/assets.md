@@ -83,7 +83,7 @@ For fonts or other native resources, use `InitContext::raylib` and
 `Frame::with_raylib`. These APIs keep the basic SDK small while preserving
 raylib access. Bounded CPU jobs and staged mesh uploads are covered in
 [background work](crate::guides::background_work); automatic file asset pipelines
-and hot reload remain outside 0.0.1.
+and hot reload remain outside 0.0.2.
 
 Generated or imported CPU images can upload directly during initialization:
 

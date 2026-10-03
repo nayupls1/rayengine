@@ -1,6 +1,6 @@
 # rayengine
 
-A Linux-first Rust game SDK and CLI built on raylib. **Version 0.0.1.**
+A Linux-first Rust game SDK and CLI built on raylib. **Version 0.0.2.**
 Games are ordinary Cargo projects, with a shared lifecycle and conventions for
 2D and 3D. No GUI editor or website toolchain is required.
 
@@ -67,8 +67,8 @@ cargo run --manifest-path ../my-game/Cargo.toml
 
 The CLI supports `new`, `new-plugin`, `info`, `check`, `build`, `run`, and `doctor`. Add
 `--json` for a versioned result, structured errors and preserved Cargo diagnostics.
-Scaffolds use the matching crates.io SDK version by default. Once 0.0.1 is
-published, install with `cargo install rayengine-cli --version 0.0.1 --locked`
+Scaffolds use the matching crates.io SDK version by default. Install the
+published CLI with `cargo install rayengine-cli --version 0.0.2 --locked`
 and create a project with `rayengine new my-game --kind 2d`. Pass
 `--sdk-path /path/to/rayengine/crates/rayengine` for local engine development.
 See the [release workflow and checklist](docs/crates_io_release.md).
@@ -77,6 +77,8 @@ Optional extensions live under `plugins/`; games select them through Cargo.
 Try `cargo run -p rayengine-beacons --example composition`, or create a library
 with `cargo run -p rayengine-cli -- new-plugin ../my-game/plugins/my-plugin --sdk-path "$PWD/crates/rayengine"`.
 The game owns plugin instances and calls their typed hooks explicitly.
+`plugins/particles` adds bounded CPU particle effects with optional 2D/3D
+rendering; try `cargo run -p rayengine-particles --features render --example effects`.
 
 Rust **1.89+**, CMake, a C compiler, libclang and Linux graphics/audio development
 libraries are required. See [installation and quickstart](crates/rayengine/docs/quickstart.md).
@@ -107,6 +109,9 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Sprite sheets and CPU animation](crates/rayengine/docs/sprites.md)
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
+- [Basic lighting](crates/rayengine/docs/lighting.md)
+- [Particle effects plugin](plugins/particles/README.md)
+- [Versioned project manifests](crates/rayengine/docs/project_manifest.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
 - [Background work and upload budgets](crates/rayengine/docs/background_work.md)
 - [Interactive UI and input routing](crates/rayengine/docs/interactive_ui.md)
@@ -175,7 +180,7 @@ navigation, networking or editor. Linux is the tested target; Windows/macOS are
 optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)
-is tracked separately and deferred beyond 0.0.1.
+is tracked separately and deferred beyond 0.0.2.
 
 Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
 See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)

@@ -1,7 +1,7 @@
 # rayengine-particles
 
-Optional, game-owned bounded particle effects for the 0.0.2 development cycle.
-The tested SDK requirement is the workspace's 0.0.1 API, Rust 1.89+, desktop Linux.
+Optional, game-owned bounded particle effects, introduced in 0.0.2.
+The tested SDK requirement is the workspace's 0.0.2 API, Rust 1.89+, desktop Linux.
 The engine never depends on this crate and performs no particle lifecycle work
 unless a game explicitly creates and ticks an instance. This crate is not part
 of the initial four-crate publication set; use a Cargo path dependency.

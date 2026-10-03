@@ -68,5 +68,5 @@ functions are internal Rust test access, not an external game protocol.
 
 The proposed pause → input → step → image/state → input workflow is tracked in
 [issue #1](https://github.com/nayupls1/rayengine/issues/1) and is deliberately not
-implemented in 0.0.1. Its event registration, schema, transport, screenshot
+implemented in 0.0.2. Its event registration, schema, transport, screenshot
 synchronization and repeatability contract need separate design work.

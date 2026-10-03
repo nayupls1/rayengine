@@ -4,7 +4,7 @@ Project scaffolding and Cargo tools for rayengine games. The installed binary
 is named `rayengine`.
 
 ```sh
-cargo install rayengine-cli --version 0.0.1 --locked
+cargo install rayengine-cli --version 0.0.2 --locked
 rayengine doctor
 rayengine new my-game --kind 2d
 rayengine check my-game

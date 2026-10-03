@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.0.2)
+## 0.0.2
 
 - Configurable native/2× supersampled world rendering and offscreen FXAA, native
   UI composition, checked manifest profiles, bounded allocations and visual/performance probes.
@@ -21,10 +21,17 @@
   playback, pause/resume/reset and single completion events.
 - Original MIT-licensed pixel-art playground, checked documentation, focused
   playback tests and a native sprite drawing probe across viewport policies.
-
 - Add optional versioned `rayengine.toml` descriptions with profiles, shared
   CLI/runtime validation, manifest-relative assets/font declarations, extension
   namespaces, scaffold examples and inspection/check integration.
+- Add the independently optional `rayengine-particles` Cargo plugin with bounded,
+  seeded CPU emitters, fixed-tick emission/bursts, lifetime variation, motion and
+  size/color evolution, and explicit stop/reset/removal.
+- Add optional 2D atlas sprites and transparent camera-facing 3D billboards using
+  existing asset/material/viewport APIs, with procedural sparks/smoke/pickup demo.
+- Add scoped 2D alpha blending that preserves target alpha and restores native
+  state, simulation/native coverage and bounded-load Criterion comparisons.
+- Coordinated 0.0.2 crate versions; `rayengine-particles` stays repository-only.
 
 ## 0.0.1
 
@@ -57,13 +64,3 @@
   exported benchmark samples with machine/toolchain/revision provenance.
 
 Interactive agent pause/input/image/state automation is deferred to issue #1.
-
-## Unreleased particle effects
-
-- Add the independently optional `rayengine-particles` Cargo plugin with bounded,
-  seeded CPU emitters, fixed-tick emission/bursts, lifetime variation, motion and
-  size/color evolution, and explicit stop/reset/removal.
-- Add optional 2D atlas sprites and transparent camera-facing 3D billboards using
-  existing asset/material/viewport APIs, with procedural sparks/smoke/pickup demo.
-- Add scoped 2D alpha blending that preserves target alpha and restores native
-  state, simulation/native coverage and bounded-load Criterion comparisons.
