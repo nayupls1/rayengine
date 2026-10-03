@@ -697,6 +697,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayengine-tilemap"
+version = "0.0.2"
+dependencies = [
+ "criterion",
+ "rayengine",
+ "rayengine-core",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "rayengine-voxel"
 version = "0.0.2"
 dependencies = [

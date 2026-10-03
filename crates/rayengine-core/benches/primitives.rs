@@ -6,6 +6,8 @@ use std::{hint::black_box, time::Duration};
 
 #[path = "support/first_person.rs"]
 mod first_person;
+#[path = "support/pathfinding.rs"]
+mod pathfinding;
 #[path = "support/saves.rs"]
 mod saves;
 
@@ -148,6 +150,20 @@ fn primitives(c: &mut Criterion) {
     let mut timer = Timer::repeating(Duration::from_millis(250));
     c.bench_function("timer_repeating", |b| {
         b.iter(|| black_box(timer.advance(black_box(Duration::from_millis(10)))))
+    });
+    let mut tweens = vec![
+        Tween::new(Vec2::ZERO, Vec2::ONE, Duration::from_millis(700))
+            .with_ease(Ease::BackOut)
+            .with_mode(TweenMode::PingPong);
+        1_000
+    ];
+    c.bench_function("tween_ping_pong_1000", |b| {
+        b.iter(|| {
+            for tween in &mut tweens {
+                tween.advance(black_box(Duration::from_millis(8)));
+                black_box(tween.value());
+            }
+        })
     });
     let mut events = Events::with_capacity(64);
     c.bench_function("event_queue_64", |b| {
@@ -487,5 +503,5 @@ fn ui_interaction(c: &mut Criterion) {
     routing.finish();
 }
 
-criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries, background_jobs, ui_interaction, saves::containers, saves::files, first_person::controller }
+criterion_group! { name = benches; config = Criterion::default().sample_size(30).warm_up_time(Duration::from_millis(500)).measurement_time(Duration::from_secs(2)); targets = primitives, spatial_queries, background_jobs, ui_interaction, saves::containers, saves::files, first_person::controller, pathfinding::queries }
 criterion_main!(benches);

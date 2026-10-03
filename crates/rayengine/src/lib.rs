@@ -3,6 +3,7 @@
 pub use rayengine_core as core;
 pub use rayengine_core::first_person;
 pub use rayengine_core::manifest;
+pub use rayengine_core::pathfinding;
 pub use rayengine_core::physics;
 pub use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 pub use rayengine_core::save;
@@ -70,6 +71,11 @@ pub mod guides {
     #[doc = include_str!("../examples/sprites.rs")]
     #[doc = "```"]
     pub mod sprites {}
+    #[doc = include_str!("../docs/tweens.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/tweens.rs")]
+    #[doc = "```"]
+    pub mod tweens {}
     #[doc = include_str!("../docs/generated_meshes.md")]
     pub mod generated_meshes {}
     #[doc = include_str!("../docs/materials.md")]
@@ -81,6 +87,11 @@ pub mod guides {
     pub mod lighting {}
     #[doc = include_str!("../docs/spatial_queries.md")]
     pub mod spatial_queries {}
+    #[doc = include_str!("../docs/pathfinding.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/pathfinding.rs")]
+    #[doc = "```"]
+    pub mod pathfinding {}
     #[doc = include_str!("../docs/background_work.md")]
     pub mod background_work {}
     #[doc = include_str!("../docs/interactive_ui.md")]
