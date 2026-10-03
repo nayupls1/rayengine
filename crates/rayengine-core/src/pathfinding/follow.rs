@@ -7,9 +7,10 @@ use glam::{UVec2, Vec2};
 /// The follower only chooses velocities; collision stays with
 /// [`Body2D::move_and_slide`] or [`Body3D::move_and_slide`]. A waypoint is
 /// reached within `arrive_radius`. Each step is shortened so it ends on the
-/// current waypoint instead of jumping past it, keeping the character on the
-/// path's segments, which [`smooth_path`](super::smooth_path) checked for
-/// clearance. Any waypoint but the last also counts once the character is
+/// current waypoint instead of jumping past it, keeping the character close
+/// to the path's segments, which [`smooth_path`](super::smooth_path) checked
+/// for clearance. Collision moves along each axis in turn, so keep steps
+/// (`speed * dt`) well under a cell. Any waypoint but the last also counts once the character is
 /// beyond it along its segment and within `arrive_radius` of that segment's
 /// line: the incoming segment, or the outgoing one for the first waypoint, so
 /// a character on the path ahead of its starting cell's center does not step
@@ -20,7 +21,7 @@ use glam::{UVec2, Vec2};
 /// use rayengine_core::glam::{UVec2, Vec2};
 /// use rayengine_core::pathfinding::{GridLayout, PathFollower};
 ///
-/// let layout = GridLayout::new(Vec2::ZERO, 1.0);
+/// let layout = GridLayout::new(Vec2::ZERO, Vec2::ONE);
 /// let mut follower = PathFollower::new(0.05);
 /// follower.set_cells(&layout, &[UVec2::new(0, 0), UVec2::new(3, 0)]);
 /// let mut body = Body2D::new(Vec2::splat(0.5), Vec2::splat(0.6));

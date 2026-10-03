@@ -42,8 +42,10 @@ pub trait NavGrid {
     /// [`PathError::InvalidCost`].
     fn cost(&self, cell: UVec2) -> Option<f32>;
 
-    /// Whether `cell` can be entered. Used for diagonal corner rules; the
-    /// default checks [`cost`](Self::cost).
+    /// Whether `cell` can be entered, for checks that need no cost: corner
+    /// rules, line of sight and clearance, and which cells get a distance
+    /// field entry. Overrides are only a faster path and must return exactly
+    /// `cost(cell).is_some()`, the default.
     fn walkable(&self, cell: UVec2) -> bool {
         self.cost(cell).is_some()
     }
@@ -273,23 +275,25 @@ impl fmt::Display for PathError {
 
 impl std::error::Error for PathError {}
 
-/// Maps grid cells to square world-space cells.
+/// Maps grid cells to world-space cells.
 ///
 /// Cell `(x, y)` covers `origin + (x, y) * cell_size` to one cell further along
-/// both axes. In 3D, use the vector's `y` as world `z`.
+/// both axes. In 3D, use the vector's `y` as world `z`. Searches measure
+/// distance in cells, so with non-square cells a path is shortest in cell
+/// steps rather than in world units.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GridLayout {
     /// World position of cell `(0, 0)`'s minimum corner.
     pub origin: Vec2,
     /// Width and height of one cell in world units. Must be finite and positive.
-    pub cell_size: f32,
+    pub cell_size: Vec2,
 }
 
 impl GridLayout {
     /// Creates a layout. Panics for a nonfinite origin or a nonpositive or
     /// nonfinite cell size.
-    pub fn new(origin: Vec2, cell_size: f32) -> Self {
-        assert!(origin.is_finite() && cell_size.is_finite() && cell_size > 0.0);
+    pub fn new(origin: Vec2, cell_size: Vec2) -> Self {
+        assert!(origin.is_finite() && cell_size.is_finite() && cell_size.min_element() > 0.0);
         Self { origin, cell_size }
     }
 
@@ -298,13 +302,20 @@ impl GridLayout {
         self.origin + (cell.as_vec2() + 0.5) * self.cell_size
     }
 
-    /// World bounds of a cell, for example as a static collider.
+    /// World bounds of a cell, for example as a static collider. Neighboring
+    /// cells share exact edges.
     pub fn cell_bounds(&self, cell: UVec2) -> Aabb2 {
-        let min = self.origin + cell.as_vec2() * self.cell_size;
         Aabb2 {
-            min,
-            max: min + Vec2::splat(self.cell_size),
+            min: self.origin + cell.as_vec2() * self.cell_size,
+            max: self.origin + (cell + 1).as_vec2() * self.cell_size,
         }
+    }
+
+    /// A body's clearance in cell units, for
+    /// [`smooth_path`] and [`line_of_sight`]: its half size divided by the
+    /// cell size, such as `layout.clearance(body.half_size)`.
+    pub fn clearance(&self, half_size: Vec2) -> Vec2 {
+        half_size / self.cell_size
     }
 
     /// Cell containing `point` in a grid of `size`, or `None` outside it.

@@ -41,6 +41,12 @@ in a blocked cell can still leave it. For a quick closure, use
 `set(cell, cost)` and `block_rect(min, max)`. A voxel world can expose one
 walkable layer, for example "air above solid ground", the same way.
 
+The optional `rayengine-tilemap` plugin implements `NavGrid` for `Tilemap`:
+a cell is blocked when any layer holds a solid tile, and one-way, trigger and
+custom tiles are walkable. `map.grid_layout()` gives the matching
+`GridLayout`, including rectangular tiles. For per-tile costs, wrap the map in
+a `GridFn`.
+
 ## Find a path
 
 `PathFinder` keeps its search buffers between queries. Write paths into a
@@ -123,10 +129,10 @@ segment can skip, keeping only corners. A shortcut must cross walkable cells
 only, respect the corner rule where it passes exactly through a cell corner,
 and cost no more than the cells it replaces, so cutting across mud must save
 more than the mud costs. The last argument is the following body's clearance:
-its half-extent divided by the cell size, below half a cell. Shortcuts then
-keep the whole body off walls instead of only its center; `0.0` checks bare
-lines, which lets a wide body catch on a corner. `line_of_sight` takes the
-same clearance.
+its half size in cells on each axis, below half a cell, from
+`layout.clearance(body.half_size)`. Shortcuts then keep the whole body off
+walls instead of only its center; `Vec2::ZERO` checks bare lines, which lets a
+wide body catch on a corner. `line_of_sight` takes the same clearance.
 
 `PathFollower` turns cells into world positions through a `GridLayout` and
 sets a body's velocity; collision stays with `move_and_slide`:
@@ -137,19 +143,19 @@ use rayengine::prelude::*;
 
 let mut grid = CostGrid::new(UVec2::new(6, 4), 1.0);
 grid.block_rect(UVec2::new(2, 0), UVec2::new(2, 2));
-let layout = GridLayout::new(Vec2::ZERO, 1.0);
+let layout = GridLayout::new(Vec2::ZERO, Vec2::ONE);
 let walls: Vec<Aabb2> = (0..3).map(|y| layout.cell_bounds(UVec2::new(2, y))).collect();
 
 let mut finder = PathFinder::new();
 let mut path = Vec::new();
 let options = PathOptions::default();
 finder.find_path(&grid, UVec2::ZERO, UVec2::new(5, 0), &options, &mut path).unwrap();
-// The 0.6-wide body below has a clearance of 0.3 cells.
-smooth_path(&grid, &mut path, options.neighborhood, 0.3).unwrap();
+let mut body = Body2D::new(layout.cell_center(UVec2::ZERO), Vec2::splat(0.6));
+let clearance = layout.clearance(body.half_size);
+smooth_path(&grid, &mut path, options.neighborhood, clearance).unwrap();
 
 let mut follower = PathFollower::new(0.05);
 follower.set_cells(&layout, &path);
-let mut body = Body2D::new(layout.cell_center(UVec2::ZERO), Vec2::splat(0.6));
 let dt = 1.0 / 60.0;
 for _ in 0..300 {
     follower.steer_body_2d(&mut body, 4.0, dt);
@@ -160,8 +166,10 @@ assert!(body.position.distance(layout.cell_center(UVec2::new(5, 0))) < 0.06);
 ```
 
 A waypoint counts as reached within the arrival radius. Steps are shortened
-so they end on the current waypoint instead of jumping past it, so even a fast
-body stays on the checked segments. A body pushed slightly past a waypoint
+so they end on the current waypoint instead of jumping past it, so a body
+stays close to the checked segments. `move_and_slide` moves along x, then y,
+so a step is not exactly straight; keep steps (`speed * dt`) well under a
+cell, or a diagonal step can clip a wall the segment cleared. A body pushed slightly past a waypoint
 along its segment moves on rather than turning back; pushed farther aside, it
 returns to the waypoint first.
 `steer_body_3d` reads waypoints as world `(x, z)` and keeps vertical velocity

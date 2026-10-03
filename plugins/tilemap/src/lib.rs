@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod format;
+mod navigation;
 mod queries;
 #[cfg(feature = "render")]
 pub mod render;

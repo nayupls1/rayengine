@@ -55,7 +55,7 @@ impl Navigation {
                 }
             }
         }
-        let layout = GridLayout::new(-size.as_vec2() * 0.5, 1.0);
+        let layout = GridLayout::new(-size.as_vec2() * 0.5, Vec2::ONE);
         let walls = (0..size.y)
             .flat_map(|y| (0..size.x).map(move |x| UVec2::new(x, y)))
             .filter(|&cell| !grid.walkable(cell))
@@ -134,8 +134,9 @@ impl Navigation {
             return;
         };
         if let Ok(PathStatus::Found { .. }) = status {
-            // The scout's half-extent, in cells, keeps shortcuts off corners.
-            smooth_path(&self.grid, &mut self.path, options.neighborhood, 0.3)
+            // Clearing the scout's half size keeps shortcuts off corners.
+            let clearance = self.layout.clearance(self.scout.half_size);
+            smooth_path(&self.grid, &mut self.path, options.neighborhood, clearance)
                 .expect("paths stay inside the grid");
             self.follower.set_cells(&self.layout, &self.path);
         }

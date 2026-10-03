@@ -80,7 +80,7 @@ pub fn queries(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("maze_eight", size), |b| {
             b.iter(|| {
                 path.clone_from(&fixture);
-                smooth_path(&grid, &mut path, eight.neighborhood, 0.3).unwrap();
+                smooth_path(&grid, &mut path, eight.neighborhood, Vec2::splat(0.3)).unwrap();
                 black_box(path.len())
             })
         });

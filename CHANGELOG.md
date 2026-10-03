@@ -16,6 +16,8 @@
   resumable expansion budgets.
 - Cost- and clearance-aware path smoothing, a path follower for 2D/3D character
   bodies, and distance fields for many agents chasing one target.
+- `rayengine-tilemap` maps implement `NavGrid` (solid tiles block) and expose
+  `grid_layout()`; `GridLayout` supports rectangular cells.
 - Checked pathfinding guide, an agents-around-walls example, unit tests against
   a reference search, and `pathfinding_*` Criterion workloads.
 
