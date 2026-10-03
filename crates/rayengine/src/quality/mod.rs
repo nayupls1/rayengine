@@ -18,9 +18,7 @@ fn target(
     size: (u32, u32),
     point: bool,
 ) -> Result<RenderTexture2D, Error> {
-    let target = rl
-        .load_render_texture(thread, size.0, size.1)
-        .map_err(|e| Error::Backend(format!("render target {}x{}: {e}", size.0, size.1)))?;
+    let target = gpu::load_target(rl, thread, size)?;
     if !target.is_render_texture_valid()
         || !target.texture().is_texture_valid()
         || !gpu::complete(&target, thread)
