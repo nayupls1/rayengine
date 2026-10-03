@@ -2,14 +2,20 @@
 use crate::gameplay::as_global;
 use crate::gameplay::{Interaction, InteractionReport, Player};
 use crate::persistence::{Saving, Store};
-use crate::terrain::{Terrain, TerrainSettings};
+use crate::sky::Sky;
+use crate::terrain::{DemoBlocks, Terrain, TerrainSettings};
 use crate::{
     breaking,
     hud::{Menu, MenuInput},
-    survival::{Survival, SurvivalInput, respawn_feet},
+    icons,
+    survival::{Item, Recipe, Survival, SurvivalInput, respawn_feet},
 };
+mod effects;
 mod hud;
+mod lighting;
 use crate::textures::{Atlas, TextureSet, Tile};
+use effects::Debris;
+use lighting::{FrameLight, WorldLighting};
 use rayengine::raylib::prelude::MouseButton;
 use rayengine::raylib::prelude::{Image, RaylibTexture2D, TextureFilter};
 use rayengine::{prelude::*, upload::UploadBudget};
@@ -44,7 +50,15 @@ const ACTIVATE: Action = Action(20);
 const CANCEL: Action = Action(21);
 const QUIT: Action = Action(22);
 const SAVE: Action = Action(23);
+const PAUSE: Action = Action(24);
+const DEBUG: Action = Action(25);
 const AUTOSAVE_SECONDS: f32 = 10.0;
+/// Horizontal streaming radius in chunks; fog distance follows it.
+const STREAM_RADIUS: u32 = 2;
+/// Seconds the hotbar shows the newly selected item's name.
+const ITEM_NAME_SECONDS: f32 = 2.0;
+/// Seconds the startup controls hint stays visible.
+const HINT_SECONDS: f32 = 12.0;
 
 /// Retain this handle before passing the game to App::run to report final native-
 /// close failures after the scene is dropped. No result means init never completed.
@@ -84,8 +98,17 @@ pub struct TerrainPreview {
     cpu: ChunkStreamer,
     gpu: StreamRenderer,
     materials: VoxelMaterials,
+    lighting: WorldLighting,
     atlas: Option<Atlas>,
     texture: Option<TextureId>,
+    /// Item icons in Item::ALL order, then full/half/empty hearts.
+    icons: Vec<TextureId>,
+    sky: Sky,
+    debris: Debris,
+    debug: bool,
+    play_time: f32,
+    item_name_timer: f32,
+    message: Option<(String, f32)>,
     focus: ChunkPos,
     player: Player,
     interaction: Interaction,
@@ -159,7 +182,7 @@ impl TerrainPreview {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let focus = player.focus();
         let config = StreamConfig {
-            radius: 2,
+            radius: STREAM_RADIUS,
             vertical_radius: 2,
             max_resident: 160,
             ..Default::default()
@@ -197,8 +220,16 @@ impl TerrainPreview {
                 ..Default::default()
             })?,
             materials: VoxelMaterials::new(),
+            lighting: WorldLighting::default(),
             atlas: Some(textures.pack()),
             texture: None,
+            icons: Vec::with_capacity(Item::ALL.len() + 3),
+            sky: Sky::default(),
+            debris: Debris::default(),
+            debug: false,
+            play_time: 0.0,
+            item_name_timer: 0.0,
+            message: None,
             focus,
             report: StreamReport::default(),
             render_report: StreamRenderReport::default(),
@@ -219,7 +250,78 @@ impl TerrainPreview {
         &self.render_report
     }
 }
+/// Debris tint for a broken block.
+fn block_color(block: BlockId, b: DemoBlocks) -> [u8; 3] {
+    if block == b.grass {
+        [91, 157, 55]
+    } else if block == b.dirt {
+        Item::Dirt.color()
+    } else if block == b.wood {
+        Item::Log.color()
+    } else if block == b.leaves {
+        Item::Leaves.color()
+    } else if block == b.coal {
+        [70, 74, 80]
+    } else if block == b.iron {
+        [170, 150, 135]
+    } else {
+        Item::Stone.color()
+    }
+}
+fn texture_from_png(ctx: &mut InitContext<'_, '_>, png: &[u8]) -> Result<TextureId, Error> {
+    let image = Image::load_image_from_mem(".png", png).map_err(|e| Error::Asset(e.to_string()))?;
+    let texture = ctx.texture_from_image(&image)?;
+    ctx.assets
+        .texture(texture)
+        .unwrap()
+        .set_texture_filter(ctx.thread, TextureFilter::TEXTURE_FILTER_POINT);
+    Ok(texture)
+}
 impl TerrainPreview {
+    /// Create every native resource, recording each handle as soon as it exists
+    /// so a failure part-way can be fully released.
+    fn load(&mut self, ctx: &mut InitContext<'_, '_>, atlas: &Atlas) -> Result<(), Error> {
+        let bytes = atlas.png().map_err(|e| Error::Asset(e.to_string()))?;
+        let texture = texture_from_png(ctx, &bytes)?;
+        self.texture = Some(texture);
+        for icon in icons::items(atlas).iter().chain(&icons::hearts()) {
+            let png = icon.png().map_err(|e| Error::Asset(e.to_string()))?;
+            let id = texture_from_png(ctx, &png)?;
+            self.icons.push(id);
+        }
+        let tiles = Tile::ALL.map(|tile| TileTexture {
+            tile: tile.id(),
+            texture,
+            rect: atlas.rects[tile as usize],
+        });
+        self.materials = self
+            .lighting
+            .create(ctx, &tiles, &self.icons[..Item::ALL.len()])?;
+        for stage in 0..breaking::STAGES {
+            let mesh = ctx.mesh(&breaking::mesh(stage))?;
+            self.cracks.push(mesh);
+        }
+        Ok(())
+    }
+    /// Meshes owned by the game itself, beyond streamed chunk meshes.
+    #[cfg(test)]
+    fn local_meshes(&self) -> usize {
+        self.cracks.len() + usize::from(self.lighting.cube.is_some())
+    }
+    fn release(&mut self, assets: &mut rayengine::assets::Assets<'_>) {
+        for mesh in self.cracks.drain(..) {
+            assets.unload_mesh(mesh);
+        }
+        self.lighting.unload(assets);
+        self.materials = VoxelMaterials::new();
+        for id in self.icons.drain(..).chain(self.texture.take()) {
+            assets.unload_texture(id);
+        }
+    }
+    fn notify_crafted(&mut self, recipe: Recipe) {
+        let (item, count) = recipe.output();
+        self.message = Some((format!("Crafted {count} x {}", item.name()), 2.5));
+    }
     fn try_respawn(&mut self) -> bool {
         let Some(feet) = respawn_feet(&self.world, self.spawn) else {
             return false;
@@ -262,17 +364,36 @@ impl TerrainPreview {
                 saving.request();
             }
         }
+        if input.pressed(DEBUG) {
+            self.debug = !self.debug;
+        }
         let report = self.menu.update(
             size,
             MenuInput {
                 ui: ui_input,
                 toggle: input.pressed(MENU),
+                pause: input.pressed(PAUSE),
                 mining_down: input.down(MINE),
                 place_down: input.down(PLACE),
                 jump_down: input.down(JUMP),
             },
             &mut self.survival,
         );
+        if !report.paused {
+            self.sky.advance(dt);
+            self.play_time += dt;
+            self.item_name_timer = (self.item_name_timer - dt).max(0.0);
+            self.debris.step(dt);
+            if let Some((_, timer)) = &mut self.message {
+                *timer -= dt;
+                if *timer <= 0.0 {
+                    self.message = None;
+                }
+            }
+        }
+        if let Some(recipe) = report.crafted {
+            self.notify_crafted(recipe);
+        }
         let quit = report.quit || input.pressed(QUIT);
         if quit {
             if let Some(saving) = &mut self.saving {
@@ -307,6 +428,7 @@ impl TerrainPreview {
             if input.pressed(action) {
                 self.survival.select(slot);
                 self.interaction.reset();
+                self.item_name_timer = ITEM_NAME_SECONDS;
             }
         }
         let mut movement = FirstPersonInput::from_actions(input, ACTIONS);
@@ -360,7 +482,17 @@ impl TerrainPreview {
                     .is_none_or(|admission| admission.allows(p))
             },
         ) {
-            Ok(report) => self.interaction_report = report,
+            Ok(report) => {
+                if let Some(edit) = report.edit
+                    && edit.current == BlockId::AIR
+                {
+                    self.debris.burst(
+                        edit.position,
+                        block_color(edit.previous, self.terrain.blocks()),
+                    );
+                }
+                self.interaction_report = report;
+            }
             Err(e) => self.error = Some(e.to_string()),
         }
         self.survival.collect(self.player.position());
@@ -386,7 +518,8 @@ impl Game for TerrainPreview {
             .bind(MINE, Button::Mouse(MouseButton::MOUSE_BUTTON_LEFT))
             .bind(PLACE, Button::Mouse(MouseButton::MOUSE_BUTTON_RIGHT))
             .bind(MENU, KeyboardKey::KEY_E)
-            .bind(MENU, KeyboardKey::KEY_ESCAPE)
+            .bind(PAUSE, KeyboardKey::KEY_ESCAPE)
+            .bind(DEBUG, KeyboardKey::KEY_F3)
             .bind(NEXT, KeyboardKey::KEY_TAB)
             .bind(NEXT, KeyboardKey::KEY_DOWN)
             .bind(PREVIOUS, KeyboardKey::KEY_UP)
@@ -415,40 +548,11 @@ impl Game for TerrainPreview {
             .atlas
             .take()
             .ok_or_else(|| Error::Asset("texture atlas already initialized".into()))?;
-        let bytes = atlas.png().map_err(|e| Error::Asset(e.to_string()))?;
-        let image =
-            Image::load_image_from_mem(".png", &bytes).map_err(|e| Error::Asset(e.to_string()))?;
-        let texture = ctx.texture_from_image(&image)?;
-        ctx.assets
-            .texture(texture)
-            .unwrap()
-            .set_texture_filter(ctx.thread, TextureFilter::TEXTURE_FILTER_POINT);
-        let tiles = Tile::ALL.map(|tile| TileTexture {
-            tile: tile.id(),
-            texture,
-            rect: atlas.rects[tile as usize],
-        });
-        match VoxelMaterials::create(ctx, &tiles, 0.5) {
-            Ok(materials) => self.materials = materials,
-            Err(error) => {
-                ctx.assets.unload_texture(texture);
-                return Err(error);
-            }
+        let result = self.load(ctx, &atlas);
+        if result.is_err() {
+            self.release(ctx.assets);
         }
-        for stage in 0..breaking::STAGES {
-            match ctx.mesh(&breaking::mesh(stage)) {
-                Ok(mesh) => self.cracks.push(mesh),
-                Err(error) => {
-                    for mesh in self.cracks.drain(..) {
-                        ctx.assets.unload_mesh(mesh);
-                    }
-                    self.materials.unload(ctx.assets);
-                    ctx.assets.unload_texture(texture);
-                    return Err(error);
-                }
-            }
-        }
-        self.texture = Some(texture);
+        result?;
         self.initialized = true;
         if let Some(saving) = &mut self.saving {
             saving.request();
@@ -498,23 +602,68 @@ impl Game for TerrainPreview {
             self.error = Some(e.to_string());
         }
         let origin = self.player.origin;
+        let frame_alpha = frame.alpha;
         let camera = self.player.controller.camera(frame.alpha);
         let view = Frustum3D::from_camera(&camera, &frame.viewport, 0.05, 4000.0).unwrap();
-        frame.clear(Color::new(104, 158, 194, 255));
+        let sky = self.sky.light();
+        let torch = self
+            .survival
+            .held()
+            .and_then(|stack| stack.item().light_radius())
+            .map(|range| (camera.position - Vec3::Y * 0.25, range));
+        // Fog ends inside the guaranteed streamed radius, hiding chunk edges.
+        let reach = (STREAM_RADIUS * 16) as f32;
+        if let Err(e) = self.lighting.apply(
+            frame.assets,
+            &FrameLight {
+                sky,
+                view: camera.position,
+                torch,
+                fog: Vec2::new(reach * 0.5, reach + 2.0),
+            },
+        ) {
+            self.error = Some(e.to_string());
+        }
+        let to_u8 = |c: Vec3| {
+            let c = (c * 255.0).round();
+            Color::new(c.x as u8, c.y as u8, c.z as u8, 255)
+        };
+        frame.clear(to_u8(sky.sky));
+        let time = self.play_time;
         frame.world_3d(camera, |canvas| {
-            for chunk in self.gpu.chunks() {
-                chunk.draw(canvas, &view, origin);
-            }
-            for pickup in self.survival.pickups() {
-                let center = (pickup.position - as_global(origin)).as_vec3();
-                if (center - self.player.controller.body.position).length_squared() <= 64.0 * 64.0 {
-                    let [r, g, b] = pickup.stack.item().color();
+            // Sun and moon sit beyond the terrain, opposite each other.
+            for (direction, size, color) in [
+                (sky.sun, 34.0, Color::new(255, 241, 186, 255)),
+                (-sky.sun, 26.0, Color::new(214, 222, 236, 255)),
+            ] {
+                if direction.y > -0.1 {
                     canvas.cube(
-                        Aabb3::from_center(center, Vec3::splat(0.22)),
-                        Color::new(r, g, b, 255),
+                        Aabb3::from_center(camera.position + direction * 400.0, Vec3::splat(size)),
+                        color,
                     );
                 }
             }
+            for chunk in self.gpu.chunks() {
+                chunk.draw(canvas, &view, origin);
+            }
+            if let Some(cube) = self.lighting.cube {
+                for (i, pickup) in self.survival.pickups().iter().enumerate() {
+                    let center = (pickup.position - as_global(origin)).as_vec3();
+                    if (center - self.player.controller.body.position).length_squared()
+                        > 64.0 * 64.0
+                    {
+                        continue;
+                    }
+                    let phase = time * 1.6 + i as f32 * 0.7;
+                    let transform =
+                        Mat4::from_translation(center + Vec3::Y * (phase.sin() * 0.08 - 0.15))
+                            * Mat4::from_rotation_y(phase)
+                            * Mat4::from_scale(Vec3::splat(0.28));
+                    let material = self.lighting.items[pickup.stack.item().index()];
+                    canvas.mesh_material_matrix(cube, material, transform, Color::WHITE);
+                }
+            }
+            self.debris.draw(canvas, origin, frame_alpha);
             if let Some(hit) = self.interaction_report.selected
                 && self.world.block(hit.position) == Some(hit.block)
                 && let Ok(mut bounds) = block_bounds(hit.position, origin)
@@ -528,7 +677,7 @@ impl Game for TerrainPreview {
                 }
                 bounds.min -= Vec3::splat(0.002);
                 bounds.max += Vec3::splat(0.002);
-                canvas.wire_cube(bounds, Color::BLACK);
+                canvas.wire_cube(bounds, Color::new(20, 20, 20, 255));
             }
         });
         self.draw_hud(frame);

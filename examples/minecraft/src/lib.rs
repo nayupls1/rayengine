@@ -9,9 +9,11 @@ pub mod guides {
 pub mod breaking;
 pub mod gameplay;
 pub mod hud;
+pub mod icons;
 pub mod persistence;
 #[cfg(feature = "render")]
 pub mod preview;
+pub mod sky;
 pub mod survival;
 pub mod terrain;
 pub mod textures;

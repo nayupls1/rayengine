@@ -34,12 +34,23 @@ Euclidean chunk/lattice division. It needs no display, raylib, or C toolchain.
 The native game starts at a safe spawn with an **empty inventory** and streams
 terrain around the player. WASD moves, mouse looks, Space jumps and Shift sprints.
 Hold left mouse to mine; right mouse places one held block. Keys 1–9 select the
-hotbar. E or Escape opens/closes inventory; F10, the Quit button or native close
-exits. Start by gathering two logs, crafting planks and sticks, then a wooden
+hotbar. E opens/closes the inventory and crafting screen; Escape opens the game
+menu (Back to Game, Save and Quit, controls). F3 toggles the debug overlay
+(position, chunk, target, time of day, streaming/GPU statistics); without it the
+HUD shows only the crosshair, hearts, hotbar and short item/craft messages. F10,
+the menu's quit button or native close exits. Start by gathering two logs, crafting planks and sticks, then a wooden
 pickaxe to harvest stone. Bedrock is unbreakable.
 
 The crosshair selects visible cells within five blocks of the current simulation
-eye. A black outline and HUD identify the target and mining progress. Releasing
+eye. A black outline and cracks show the target and mining progress; F3 names it.
+
+A ten-minute day/night cycle drives the sky color, a warm low sun, moonlight and
+distance fog. Terrain uses a demo-owned voxel shader that keeps per-tile repeat
+UVs and baked face shade while adding sun/moon Lambert light and sky ambient.
+Holding a torch adds a warm point light around the player; dropped pickups are
+spinning textured cubes using the SDK's built-in lit materials with the same sun
+and torch. Breaking a block emits short-lived debris through the optional
+`rayengine-particles` plugin. Releasing
 mining, changing targets or changing the target chunk's revision resets progress.
 Placement requires loaded air and cannot overlap the player's 0.6×1.8×0.6 body;
 touching its feet is allowed. Both queries stop at unloaded terrain. Movement
@@ -78,7 +89,9 @@ Inventory contains nine hotbar slots and 27 reserve slots. Blocks/ingredients
 stack to 64; each tool occupies a separate slot. Compatible stacks fill before
 empty slots. Click two inventory slots to exchange their entire stacks. Closing
 or losing focus cancels the selection without removing any items. Tab/Up/Down
-moves focus, Enter/Space activates. Available recipes are enabled automatically;
+moves focus, Enter/Space activates. Item slots show icons (block items reuse the
+active atlas, including imported packs). Recipe cards list ingredients with
+have/need counts; available recipes are enabled automatically;
 crafting searches the entire inventory and commits costs/results atomically.
 A full inventory or missing ingredients changes nothing.
 
@@ -88,6 +101,7 @@ A full inventory or missing ingredients changes nothing.
 | 4 sticks | 2 planks |
 | Wooden pickaxe / wooden axe | 3 planks + 2 sticks |
 | Stone pickaxe / stone axe | 3 stone + 2 sticks |
+| 4 torches | 1 coal + 1 stick |
 
 Hand mining takes block hardness seconds (stone/ores: two; other blocks: one).
 Matching wooden tools mine three times faster; stone tools mine six times faster.
@@ -108,7 +122,7 @@ buffers); no per-tick GPU uploads occur.
 | Iron ore | Stone pickaxe / 1 iron ore |
 
 Wrong tools can destroy rock but yield no resource. Dirt, stone, logs and leaves
-can be placed. Planks, sticks, coal, iron and tools are inventory items only;
+can be placed. Planks, sticks, coal, iron, torches and tools are inventory items only;
 smelting and additional registered block types are deferred. Placement consumes
 one item only after a successful world mutation; blocked/body-overlapping or
 unloaded placement consumes nothing.
@@ -131,7 +145,7 @@ columns of the original spawn, checking support and headroom. If unavailable,
 streaming refocuses on spawn and retries at most four times a second; it never
 spawns inside the original support blindly.
 
-Inventory/death screens pause movement, look, mining, placement, pickups and fall
+Inventory/menu/death screens pause movement, look, mining, placement, pickups and fall
 tracking while streaming/rendering continue. Opening and closing ticks stay
 masked. Mining, placement and jump held across a modal tick remain suppressed
 until physical release, preventing an inventory click/Space activation from
@@ -317,7 +331,8 @@ gutters, nearest filtering and per-block shader repetition on greedy faces.
 At 16 pixels this is 90×36 (12,960 RGBA bytes); at 256 it is 1,290×516 (2,662,560
 bytes). There are no generated mipmaps. The CPU atlas, encoded PNG and decoded
 raylib image are dropped after initialization; drawing retains one texture,
-one repeat shader and twenty opaque/cutout material descriptions. Loaded PNGs
+one lit repeat shader and twenty opaque/cutout material descriptions, plus small
+item/heart icon textures and one lit pickup cube. Loaded PNGs
 are limited to 4 MiB each and decoder allocation to 4 MiB per image. The separate
 extraction utility limits source archives to 512 MiB / 100,000 entries. These are admission limits, not a total
 process-memory or driver-overhead guarantee.
@@ -519,14 +534,14 @@ scripts/render_benchmark.sh compare minecraft-survival-render-v1 minecraft_survi
 Six fixed CPU `minecraft_survival_v1` cases measure: insert into 36 full dirt
 stacks (2,304 items); craft a wooden pickaxe from two 64-item ingredient stacks;
 reject the same recipe with all 36 slots occupied; collect 128 nearby one-log
-pickups into an empty inventory; hover a warmed 44-region inventory; and build
+pickups into an empty inventory; hover a warmed 43-region inventory; and build
 the fifth crack stage (1,248 vertices). Fixture construction, clones, validation
 and output drops are untimed. UI response storage/pickup collection reuse
 capacity; timing includes real slot/recipe scans, admission and mesh construction.
 
 Two opt-in native `minecraft_survival_render_v1` cases draw the fifth cached
 crack mesh 16 times, and submit a panel with 36 populated slot buttons/count
-labels, six recipe buttons and Resume/Quit buttons. All inventory slots contain
+labels and seven recipe buttons. All inventory slots contain
 64 dirt items; recipes are disabled. Labels, layout and assets are prepared
 outside timing. The native harness uses a 960×960 logical view in a 64×64 target,
 vsync disabled; measurements include CPU submissions/driver stalls, not GPU

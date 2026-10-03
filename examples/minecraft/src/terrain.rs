@@ -190,6 +190,10 @@ impl Terrain {
             blocks,
         })
     }
+    /// World seed this recipe generates from.
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
     /// Shared allocation for VoxelWorld/GenerationContext.
     pub fn registry(&self) -> Arc<BlockRegistry> {
         self.registry.clone()

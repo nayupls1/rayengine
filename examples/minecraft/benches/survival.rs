@@ -4,7 +4,7 @@ use rayengine_core::{glam::Vec2, ui::UiInput};
 use rayengine_minecraft::{
     breaking,
     gameplay::{Interaction, Player},
-    hud::{Layout, Menu, MenuInput},
+    hud::{INVENTORY_REGIONS, Layout, Menu, MenuInput},
     survival::{Inventory, Item, MAX_PICKUPS, Recipe, Survival, SurvivalInput},
     terrain::{Terrain, TerrainSettings},
 };
@@ -122,8 +122,8 @@ fn workloads(c: &mut Criterion) {
         &mut session,
     );
     menu.update(size, input, &mut session);
-    assert_eq!(menu.state().responses().len(), 44);
-    group.bench_function("inventory_hover_44", |b| {
+    assert_eq!(menu.state().responses().len(), INVENTORY_REGIONS);
+    group.bench_function("inventory_hover_43", |b| {
         b.iter(|| black_box(menu.update(black_box(size), black_box(input), &mut session)))
     });
     let mesh = breaking::mesh(4);

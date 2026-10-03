@@ -172,20 +172,14 @@ impl Game for Probe {
         let r = self.game.gpu.resources();
         assert_eq!(
             frame.assets.resource_counts().meshes as usize,
-            r.meshes + self.game.cracks.len()
+            r.meshes + self.game.local_meshes()
         );
         assert!(frame.assets.resource_counts().generated_mesh_bytes as usize > r.buffer_bytes);
         assert!(r.meshes > 0);
         *self.result.lock().unwrap() = Some((r.meshes, r.buffer_bytes));
         self.game.gpu.unload(&mut self.game.cpu, frame.assets);
         self.game.cpu.shutdown();
-        for mesh in self.game.cracks.drain(..) {
-            frame.assets.unload_mesh(mesh);
-        }
-        self.game.materials.unload(frame.assets);
-        frame
-            .assets
-            .unload_texture(self.game.texture.take().unwrap());
+        self.game.release(frame.assets);
         let counts = frame.assets.resource_counts();
         assert_eq!(counts.meshes, 0);
         assert_eq!(counts.textures, 0);
