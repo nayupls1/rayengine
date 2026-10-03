@@ -3,6 +3,7 @@
 pub use rayengine_core as core;
 pub use rayengine_core::first_person;
 pub use rayengine_core::manifest;
+pub use rayengine_core::pathfinding;
 pub use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 pub use rayengine_core::save;
 pub use rayengine_core::sprite;
@@ -75,6 +76,11 @@ pub mod guides {
     pub mod lighting {}
     #[doc = include_str!("../docs/spatial_queries.md")]
     pub mod spatial_queries {}
+    #[doc = include_str!("../docs/pathfinding.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/pathfinding.rs")]
+    #[doc = "```"]
+    pub mod pathfinding {}
     #[doc = include_str!("../docs/background_work.md")]
     pub mod background_work {}
     #[doc = include_str!("../docs/interactive_ui.md")]

@@ -28,6 +28,13 @@ dt-independent mouse look, pitch limits, input masks/edge consumption, jump/grac
 walls/ceilings/fall limits, camera interpolation and teleport/reconfiguration.
 Meadow retains its stone landing, contact, checkpoint and pickup regressions.
 
+Pathfinding CPU tests compare A* costs and distance-field walks with an
+independent Bellman-Ford reference on seeded random weighted grids in every
+neighborhood mode. They cover unreachable/blocked goals, deterministic ties
+across buffer reuse and stamp wraparound, diagonal rules, invalid costs,
+resumed budgets, unchanged buffers in steady state, corner-exact line of sight,
+cost-aware smoothing, follower overshoot, and bodies sliding around walls.
+
 Native rendering is separate and requires a display/OpenGL context:
 
 ```sh
@@ -109,6 +116,13 @@ Use `scripts/benchmark.sh save spatial-v1 spatial_` to save only these workloads
 with the normal provenance/export workflow. Rebuild cases measure the complete
 snapshot update; query cases reuse a built index and visitor callbacks do not
 allocate output vectors.
+
+`scripts/benchmark.sh save pathfinding-v1 pathfinding_` measures grid A*
+corner to corner on 64², 256² and 512² serpentine mazes with scattered cost-3
+cells (four- and eight-way) and on open eight-way grids, line-of-sight
+smoothing of the maze path, and full distance-field computation. Search buffers
+are warmed outside measurement, so queries reuse them as in a running game;
+smoothing includes copying the fixture path into a reused vector.
 
 `scripts/benchmark.sh save background-v1 jobs_` measures idle polling, full-queue
 rejection, scheduling/receipt latency and an eight-job batch. Synchronous payload

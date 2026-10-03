@@ -14,6 +14,7 @@ pub mod input;
 pub mod jobs;
 pub mod manifest;
 pub mod mesh;
+pub mod pathfinding;
 pub mod quality;
 pub mod save;
 pub mod scene;
@@ -36,6 +37,10 @@ pub mod prelude {
     pub use crate::input::{Action, Axis, Input, InputView};
     pub use crate::jobs::{Cancellation, Completion, JobHandle, JobId, JobOutcome, JobPool};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
+    pub use crate::pathfinding::{
+        CostGrid, DiagonalRule, DistanceField, GridFn, GridLayout, NavGrid, Neighborhood,
+        PathError, PathFinder, PathFollower, PathOptions, PathStatus,
+    };
     pub use crate::quality::{AntiAliasing, RenderPlan, RenderQuality};
     pub use crate::scene::Scene;
     pub use crate::spatial::{
@@ -54,6 +59,6 @@ pub mod prelude {
         UiActions, UiButton, UiCapture, UiId, UiInput, UiRect, UiRegion, UiResponse, UiState,
     };
     pub use crate::viewport::{ScaleMode, Viewport};
-    pub use glam::{Quat, Vec2, Vec3};
+    pub use glam::{IVec2, Quat, UVec2, Vec2, Vec3};
     pub use hecs::{Entity, World};
 }

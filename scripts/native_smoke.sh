@@ -43,6 +43,8 @@ cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 
 cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/controls-portrait.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/sprites-wide.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/sprites-portrait.png"
+cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 1280x720 --screenshot "artifacts/smoke/$backend/pathfinding-wide.png"
+cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 800x1000 --screenshot "artifacts/smoke/$backend/pathfinding-portrait.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/first-person-wide.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/first-person-portrait.png"
 cargo run -p rayengine-beacons "${demo_features[@]}" --example composition -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/plugins-wide.png"
