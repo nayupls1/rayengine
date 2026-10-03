@@ -128,11 +128,13 @@ fn native_quality_runner_resize_letterbox_screenshot_and_error_teardown() {
     config.window_size = (320, 180);
     config.scale_mode = ScaleMode::Expand;
     config.render_quality.render_scale = 2.0;
+    config.vsync = false;
+    config.target_fps = 60;
     let error = App::new(config)
         .with_options(RunOptions {
-            frames: Some(4),
+            frames: Some(6),
             hidden: true,
-            uncapped: true,
+            uncapped: false,
             ..Default::default()
         })
         .run(Oversize)
@@ -203,5 +205,109 @@ fn checked_quality_manifest_profiles_and_rust_override_precedence() {
             .to_string()
             .contains("IntegerFit")
     );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+#[ignore = "requires native OpenGL; scripts/native_smoke.sh runs serially"]
+fn native_quality_transparent_clear_world_and_ui_present_without_double_alpha() {
+    struct Probe {
+        clear: Color,
+        world: bool,
+    }
+    impl Game for Probe {
+        fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+        fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+            frame.clear(self.clear);
+            if self.world {
+                frame.world_2d(rayengine_core::camera::Camera2D::default(), |c| {
+                    c.rectangle(
+                        rayengine_core::collision::Aabb2::from_center(
+                            Vec2::ZERO,
+                            Vec2::splat(10000.0),
+                        ),
+                        Color::new(0, 255, 0, 128),
+                    );
+                });
+            }
+            frame.ui(|ui| {
+                ui.rectangle(
+                    rayengine_core::collision::Aabb2 {
+                        min: Vec2::ZERO,
+                        max: ui.logical_size,
+                    },
+                    Color::new(255, 0, 0, 128),
+                );
+            });
+        }
+    }
+    let directory =
+        std::env::temp_dir().join(format!("rayengine-quality-alpha-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    for (i, quality) in [
+        RenderQuality::default(),
+        RenderQuality {
+            anti_aliasing: AntiAliasing::Fxaa,
+            ..Default::default()
+        },
+        RenderQuality {
+            render_scale: 2.0,
+            ..Default::default()
+        },
+        RenderQuality {
+            render_scale: 2.0,
+            anti_aliasing: AntiAliasing::Fxaa,
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        for (j, (clear, world, expected)) in [
+            (Color::BLANK, false, Color::new(128, 0, 0, 255)),
+            (
+                Color::new(0, 0, 255, 128),
+                false,
+                Color::new(128, 0, 64, 255),
+            ),
+            (Color::BLANK, true, Color::new(128, 64, 0, 255)),
+            (
+                Color::new(0, 0, 255, 128),
+                true,
+                Color::new(128, 64, 32, 255),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut config = Config::new("alpha presentation");
+            config.window_size = (64, 64);
+            config.reference_size = Vec2::splat(64.0);
+            config.bar_color = Color::BLACK;
+            config.render_quality = quality;
+            let path = directory.join(format!("{i}-{j}.png"));
+            App::new(config)
+                .with_options(RunOptions {
+                    hidden: true,
+                    uncapped: true,
+                    frames: Some(2),
+                    screenshot: Some(path.clone()),
+                    ..Default::default()
+                })
+                .run(Probe { clear, world })
+                .unwrap();
+            let image = Image::load_image(path.to_str().unwrap()).unwrap();
+            let actual = image.get_color(32, 32);
+            for (got, want) in [
+                (actual.r, expected.r),
+                (actual.g, expected.g),
+                (actual.b, expected.b),
+            ] {
+                assert!(
+                    (i32::from(got) - i32::from(want)).abs() <= 1,
+                    "quality {quality:?}, clear {clear:?}, world {world}: got {actual:?}, expected {expected:?}"
+                );
+            }
+        }
+    }
     std::fs::remove_dir_all(directory).unwrap();
 }

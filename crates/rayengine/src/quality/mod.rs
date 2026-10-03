@@ -1,7 +1,7 @@
 //! Offscreen quality resolve and context-owned render targets.
 mod gpu;
 use crate::Error;
-pub(crate) use gpu::{graphics_info, ui_blend_factors};
+pub(crate) use gpu::{coverage_blend, graphics_info};
 use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 use raylib::prelude::*;
 

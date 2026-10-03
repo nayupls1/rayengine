@@ -544,6 +544,7 @@ fn native_material_2d_scoped_alpha_without_materials_and_unwind() {
                     ..Default::default()
                 },
                 |canvas| {
+                    let pass_before = gpu::snapshot(thread);
                     canvas
                         .with_alpha_blend(|canvas| {
                             canvas.rectangle(
@@ -552,7 +553,7 @@ fn native_material_2d_scoped_alpha_without_materials_and_unwind() {
                             );
                         })
                         .unwrap();
-                    assert_eq!(gpu::snapshot(thread), before);
+                    assert_eq!(gpu::snapshot(thread), pass_before);
                     let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         canvas
                             .with_alpha_blend(|canvas| {
@@ -565,7 +566,7 @@ fn native_material_2d_scoped_alpha_without_materials_and_unwind() {
                             .unwrap();
                     }));
                     assert!(unwound.is_err());
-                    assert_eq!(gpu::snapshot(thread), before);
+                    assert_eq!(gpu::snapshot(thread), pass_before);
                 },
             );
             assert_eq!(gpu::snapshot(thread), before);

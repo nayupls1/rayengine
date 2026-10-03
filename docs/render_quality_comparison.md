@@ -1,6 +1,6 @@
 # Render quality comparison
 
-Recorded 2026-10-02T21:50:07.491225+00:00; release build on 12th Gen Intel(R) Core(TM) i7-12700K, Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44.
+Recorded 2026-10-02T21:57:39.439095+00:00; release build on 12th Gen Intel(R) Core(TM) i7-12700K, Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44.
 Backend: x11 (XWayland display), renderer: NVIDIA Corporation / NVIDIA GeForce RTX 4070/PCIe/SSE2 / 3.3.0 NVIDIA 610.57.04.
 Toolchain: cargo 1.98.1 (797e8a9bc 2026-08-05); rustc 1.98.1 (48a229cea 2026-09-01).
 
@@ -12,10 +12,10 @@ Default and 64-pixel custom font atlas, diagonal lines, cube and sphere are iden
 
 | Mode | World pixels | Estimated targets (MiB) | Frame median (ms) | Per-run range (ms) | Render median (ms) | Present median (ms) | Relative frame wall time |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: |
-| native | 1280×720 | 7.031 | 0.0994 | 0.0948–0.1020 | 0.0575 | 0.0399 | 1.00× |
-| fxaa | 1280×720 | 21.094 | 0.1312 | 0.1256–0.1375 | 0.0810 | 0.0498 | 1.32× |
-| 2x | 2560×1440 | 42.188 | 0.1454 | 0.1445–0.1484 | 0.0840 | 0.0622 | 1.46× |
-| 2x-fxaa | 2560×1440 | 42.188 | 0.1483 | 0.1480–0.1494 | 0.0828 | 0.0652 | 1.49× |
+| native | 1280×720 | 7.031 | 0.1174 | 0.1083–0.1289 | 0.0629 | 0.0531 | 1.00× |
+| fxaa | 1280×720 | 21.094 | 0.1425 | 0.1269–0.1634 | 0.0846 | 0.0586 | 1.21× |
+| 2x | 2560×1440 | 42.188 | 0.1532 | 0.1413–0.1988 | 0.0867 | 0.0665 | 1.30× |
+| 2x-fxaa | 2560×1440 | 42.188 | 0.1552 | 0.1457–0.2074 | 0.0854 | 0.0702 | 1.32× |
 
 These are uncapped CPU frame wall times, including driver stalls and window
 presentation, **not GPU execution timings or expected FPS for a game**. Hidden
@@ -32,9 +32,10 @@ at 4096×4096, 2× requires 768 MiB and fails the 512 MiB budget explicitly.
 
 The [recorded summary](render-quality-evidence/summary.json) includes repeated
 samples, effective settings, actual GL vendor/renderer/version, toolchain, OS, CPU,
-environment, base revision, and the dirty files identifying the implementation
-under measurement. The code was measured before its PR commit; that dirty state
-is recorded explicitly. Re-run the script to measure the final checkout.
+environment and the exact clean implementation revision under measurement.
+The measured commit integrates project profiles, input, lighting and state APIs;
+subsequent documentation/master updates do not change this static workload.
+Re-run the script to measure the final checkout.
 
 Screenshots from the identical release workload:
 

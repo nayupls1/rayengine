@@ -48,8 +48,12 @@ remains unchanged. Games should draw world passes before UI in all modes for
 consistent ordering. World text drawn through `with_raylib` is filtered with the
 world; native text belongs in `ui`.
 
-UI composition retains coverage alpha and uses premultiplied blending so
+World and UI targets consistently store premultiplied RGBA. SDK colors and
+`Frame::clear` take straight RGBA, drawing accumulates coverage alpha, and both
+resolve and final window presentation use premultiplied blending so
 translucent panels and glyph edges are not darkened by multiplying alpha twice.
+Advanced raw shaders/blend modes must preserve that target representation; use
+`Frame::clear` for straight-color clears.
 `UiCanvas::pixel_scale()` exposes target pixels per logical UI unit for raw
 custom-font drawing. Font atlases must still be rasterized at a suitable physical
 size: supersampling does not add detail to a small atlas. The comparison fixture
@@ -142,6 +146,6 @@ fields override Rust defaults individually; omitted fields retain Rust settings.
 `RunOptions::size` applies last and triggers fresh allocation validation.
 Unknown anti-aliasing strings, unsupported scales, incompatible pixel profiles,
 and excessive initial allocations fail in both CLI and runtime loading.
-The native comparison uses [checked manifest profiles](../examples/render_quality.toml).
-See the [measured comparison](../../../docs/render_quality_comparison.md) for
+The native comparison uses [checked manifest profiles](https://github.com/nayupls1/rayengine/blob/master/crates/rayengine/examples/render_quality.toml).
+See the [measured comparison](https://github.com/nayupls1/rayengine/blob/master/docs/render_quality_comparison.md) for
 resource and performance results and their environment limits.

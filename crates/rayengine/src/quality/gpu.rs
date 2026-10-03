@@ -29,12 +29,25 @@ pub(super) fn complete(target: &RenderTexture2D, _: &RaylibThread) -> bool {
     unsafe { ffi::rlFramebufferComplete(target.id) }
 }
 
-pub(crate) fn ui_blend_factors(_: &RaylibThread) {
-    // SAFETY: Called on the live render thread immediately before a scoped
-    // BLEND_CUSTOM_SEPARATE pass. RGB becomes premultiplied; alpha uses coverage
-    // (ONE) rather than multiplying coverage by itself. The guard restores ALPHA.
+/// Scoped straight-source alpha blending into premultiplied offscreen targets.
+/// Kept separate from the drawing guard so public raw pass types stay unchanged.
+pub(crate) struct CoverageBlend<'thread>(std::marker::PhantomData<&'thread RaylibThread>);
+pub(crate) fn coverage_blend(_: &RaylibThread) -> CoverageBlend<'_> {
+    // SAFETY: Called on the live render thread within a texture drawing pass.
+    // RGB becomes premultiplied; alpha accumulates coverage (ONE), avoiding
+    // coverage squared. Begin/EndBlendMode flush batches at the scope boundaries.
     unsafe {
         ffi::rlSetBlendFactorsSeparate(0x0302, 0x0303, 1, 0x0303, 0x8006, 0x8006);
+        ffi::BeginBlendMode(BlendMode::BLEND_CUSTOM_SEPARATE as i32);
+    }
+    CoverageBlend(std::marker::PhantomData)
+}
+impl Drop for CoverageBlend<'_> {
+    fn drop(&mut self) {
+        // SAFETY: The borrowed thread token keeps this guard within the live pass.
+        unsafe {
+            ffi::EndBlendMode();
+        }
     }
 }
 

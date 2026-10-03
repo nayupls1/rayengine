@@ -815,6 +815,8 @@ impl App {
                 {
                     let mut draw = raylib.begin_drawing(&thread);
                     draw.clear_background(config.bar_color);
+                    // SDK world/UI targets consistently store premultiplied RGBA.
+                    let mut draw = draw.begin_blend_mode(BlendMode::BLEND_ALPHA_PREMULTIPLY);
                     draw.draw_texture_pro(
                         targets.presented().texture(),
                         Rectangle::new(

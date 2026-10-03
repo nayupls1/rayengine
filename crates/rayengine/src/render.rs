@@ -32,9 +32,6 @@ macro_rules! count {
 /// Concrete offscreen raylib drawing guard, available for advanced passes.
 pub type TargetDraw<'draw, 'target> = RaylibTextureMode<'draw, 'target, RaylibHandle>;
 
-/// Native UI pass with coverage-preserving alpha blending.
-pub type UiTargetDraw<'draw, 'target, 'blend> = RaylibBlendMode<'blend, TargetDraw<'draw, 'target>>;
-
 /// One render frame. Game code chooses passes; the engine owns presentation.
 pub struct Frame<'frame, 'audio> {
     pub(crate) counters: Option<DrawCounters>,
@@ -137,11 +134,12 @@ impl Frame<'_, '_> {
     }
 
     /// Clears world color/depth and the optional transparent native UI layer.
+    /// Input color is straight RGBA; targets store premultiplied RGBA.
     pub fn clear(&mut self, color: Color) {
         count!(self.counters, clears, 1);
         self.raylib
             .begin_texture_mode(self.thread, self.target)
-            .clear_background(color);
+            .clear_background(premultiply(color));
         if let Some(ui) = self.ui_target.as_mut() {
             self.raylib
                 .begin_texture_mode(self.thread, ui)
@@ -167,6 +165,7 @@ impl Frame<'_, '_> {
             zoom: size.y / camera.view_height,
         };
         let mut target = self.raylib.begin_texture_mode(self.thread, self.target);
+        let _blend = crate::quality::coverage_blend(self.thread);
         let mut raw = target.begin_mode2D(camera);
         let surface = self.assets.material_pass();
         draw(&mut Canvas2D {
@@ -193,6 +192,7 @@ impl Frame<'_, '_> {
             projection: CameraProjection::CAMERA_PERSPECTIVE,
         };
         let mut target = self.raylib.begin_texture_mode(self.thread, self.target);
+        let _blend = crate::quality::coverage_blend(self.thread);
         let mut raw = target.begin_mode3D(camera);
         let surface = self.assets.material_pass();
         draw(&mut Canvas3D {
@@ -206,7 +206,7 @@ impl Frame<'_, '_> {
     /// Draws UI in reference units. Quality modes use a native-resolution layer
     /// composed over all world passes after filtering; call order within UI is preserved.
     /// Default and IntegerFit modes keep the original immediate pass ordering.
-    pub fn ui(&mut self, draw: impl FnOnce(&mut UiCanvas<'_, UiTargetDraw<'_, '_, '_>>)) {
+    pub fn ui(&mut self, draw: impl FnOnce(&mut UiCanvas<'_, TargetDraw<'_, '_>>)) {
         count!(self.counters, ui_passes, 1);
         let target = self.ui_target.as_deref_mut().unwrap_or(self.target);
         let pixels = Vec2::new(
@@ -215,9 +215,8 @@ impl Frame<'_, '_> {
         );
         let scale = pixels / self.viewport.logical_size;
         let font = self.raylib.get_font_default();
-        crate::quality::ui_blend_factors(self.thread);
         let mut raw = self.raylib.begin_texture_mode(self.thread, target);
-        let mut raw = raw.begin_blend_mode(BlendMode::BLEND_CUSTOM_SEPARATE);
+        let _blend = crate::quality::coverage_blend(self.thread);
         draw(&mut UiCanvas {
             raw: &mut raw,
             scale,
@@ -229,9 +228,13 @@ impl Frame<'_, '_> {
     }
 
     /// Direct raylib texture pass for shaders or drawing beyond the SDK primitives.
+    /// Normal drawing uses straight source colors with coverage alpha blending.
+    /// Custom shaders/blend modes must preserve premultiplied target RGBA; use
+    /// [`Self::clear`] for straight-color clears rather than raw clear_background.
     pub fn with_raylib(&mut self, draw: impl FnOnce(&mut TargetDraw<'_, '_>)) {
         count!(self.counters, raw_passes, 1);
         let mut raw = self.raylib.begin_texture_mode(self.thread, self.target);
+        let _blend = crate::quality::coverage_blend(self.thread);
         draw(&mut raw);
     }
 }
@@ -787,6 +790,16 @@ pub(crate) fn matrix(matrix: Mat4) -> Matrix {
 }
 pub(crate) fn rect(bounds: Aabb2) -> Rectangle {
     Rectangle::new(bounds.min.x, bounds.min.y, bounds.size().x, bounds.size().y)
+}
+
+fn premultiply(color: Color) -> Color {
+    let channel = |value: u8| ((u16::from(value) * u16::from(color.a) + 127) / 255) as u8;
+    Color::new(
+        channel(color.r),
+        channel(color.g),
+        channel(color.b),
+        color.a,
+    )
 }
 
 #[cfg(test)]
