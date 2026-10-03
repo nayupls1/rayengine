@@ -129,7 +129,10 @@ fn respond<const N: usize>(a: &mut Node<N>, b: &mut Node<N>, normal: [f32; N]) {
     let impulse = -(1.0 + a.restitution.max(b.restitution)) * vn;
     a.velocity = add(a.velocity, scale(normal, impulse * ratio_a));
     b.velocity = sub(b.velocity, scale(normal, impulse * ratio_b));
-    let tangent = sub(relative, scale(normal, vn));
+    land_on_platform(a, b, normal);
+    land_on_platform(b, a, scale(normal, -1.0));
+    let relative = sub(a.motion(), b.motion());
+    let tangent = sub(relative, scale(normal, dot(relative, normal)));
     let speed = dot(tangent, tangent).sqrt();
     if speed > 0.0 {
         let friction = speed.min(impulse * a.friction.max(b.friction));
@@ -137,6 +140,23 @@ fn respond<const N: usize>(a: &mut Node<N>, b: &mut Node<N>, normal: [f32; N]) {
         b.velocity = add(b.velocity, scale(tangent, friction * ratio_b / speed));
     }
 }
+// On landing, the normal impulse has supplied the platform's normal speed.
+// Transfer that contribution to carry before storing intrinsic velocity, and
+// add tangential carry immediately. A separating bounce remains detached.
+fn land_on_platform<const N: usize>(rider: &mut Node<N>, platform: &Node<N>, normal: [f32; N]) {
+    if rider.kind != BodyKind::Dynamic
+        || platform.kind != BodyKind::Kinematic
+        || normal[1] * up::<N>() <= 0.5
+        || dot(sub(rider.motion(), platform.motion()), normal) > 0.00001
+    {
+        return;
+    }
+    let carry = platform.motion();
+    let transferred = dot(sub(carry, rider.carry), normal);
+    rider.velocity = sub(rider.velocity, scale(normal, transferred));
+    rider.carry = carry;
+}
+
 fn separate<const N: usize>(a: &mut Node<N>, b: &mut Node<N>, contact: Contact<N>) {
     let wa = a.inverse_mass();
     let wb = b.inverse_mass();

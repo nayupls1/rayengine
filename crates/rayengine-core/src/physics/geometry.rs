@@ -116,7 +116,7 @@ pub(super) fn sweep<const N: usize>(
         (Shape::Box(ha), Shape::Box(hb)) => {
             let h = add(ha, hb);
             let mut enter = 0.0_f64;
-            let mut exit = 1.0_f64;
+            let mut exit = f64::INFINITY;
             let mut normal = [0.0; N];
             for i in 0..N {
                 if delta[i] == 0.0 {
@@ -136,7 +136,7 @@ pub(super) fn sweep<const N: usize>(
                     exit = exit.min(t1.max(t2));
                 }
             }
-            (enter <= exit && enter <= 1.0 && dot(normal, delta) < 0.0)
+            (enter < exit && enter <= 1.0 && dot(normal, delta) < 0.0)
                 .then_some((enter as f32, normal))
         }
         (Shape::Round(ra), Shape::Round(rb)) => rounded_sweep(p, delta, [0.0; N], ra + rb),

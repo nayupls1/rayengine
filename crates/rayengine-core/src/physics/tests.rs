@@ -258,6 +258,75 @@ macro_rules! scenarios {
                 }
             }
             #[test]
+            fn grazing_a_box_corner_does_not_collide_or_enter_a_trigger() {
+                for trigger in [false, true] {
+                    let mut world = $world::new(4.0);
+                    let mut wall = body($v::ZERO, false);
+                    wall.kind = BodyKind::Static;
+                    wall.is_trigger = trigger;
+                    world.insert(wall);
+                    let mut mover = body(x(-3.0) + y(-1.0), false);
+                    mover.velocity = x(4.0) + y(-4.0);
+                    let id = world.insert(mover);
+                    let mut events = Events::default();
+                    let report = world.step(tick(1.0), &mut events);
+                    assert_eq!(report.contacts, 0);
+                    assert!(events.read().is_empty());
+                    assert_eq!(world.body(id).unwrap().position, x(1.0) + y(-5.0));
+                    assert_eq!(world.body(id).unwrap().velocity, x(4.0) + y(-4.0));
+                }
+                // Entering a face exactly at the end of a tick still responds.
+                let mut world = $world::new(4.0);
+                let mut wall = body($v::ZERO, false);
+                wall.kind = BodyKind::Static;
+                world.insert(wall);
+                let mut mover = body(x(-3.0), false);
+                mover.velocity = x(1.0);
+                let id = world.insert(mover);
+                world.step(tick(1.0), &mut Events::default());
+                near(world.body(id).unwrap().position.x, -2.0);
+                assert_eq!(world.body(id).unwrap().velocity, $v::ZERO);
+            }
+            #[test]
+            fn landing_on_a_diagonally_rising_platform_transfers_velocity_to_carry() {
+                for round in [false, true] {
+                    let mut world = $world::new(4.0);
+                    let mut p = $body::new(
+                        $v::ZERO,
+                        $shape::box_shape({
+                            let mut v = $v::splat(20.0);
+                            v.y = 2.0;
+                            v
+                        }),
+                    );
+                    p.kind = BodyKind::Kinematic;
+                    p.velocity = x(3.0) + y(2.0 * up());
+                    let p = world.insert(p);
+                    let mut r = body(y(3.0 * up()), round);
+                    r.velocity = y(-10.0 * up());
+                    r.gravity = Some(y(-20.0 * up()));
+                    let r = world.insert(r);
+                    for _ in 0..3 {
+                        world.step(tick(0.05), &mut Events::default());
+                    }
+                    let offset =
+                        world.body(r).unwrap().position.x - world.body(p).unwrap().position.x;
+                    for _ in 0..30 {
+                        let report = world.step(tick(0.05), &mut Events::default());
+                        assert_eq!(report.dropped_time, 0.0);
+                        let rider = world.body(r).unwrap();
+                        let platform = world.body(p).unwrap();
+                        near(rider.position.x - platform.position.x, offset);
+                        near(rider.position.y - platform.position.y, 2.0 * up());
+                        near(rider.velocity.y, 0.0);
+                        assert!(rider.grounded);
+                    }
+                    world.body_mut(r).unwrap().velocity = y(10.0 * up());
+                    world.step(tick(0.05), &mut Events::default());
+                    assert!(!world.body(r).unwrap().grounded);
+                }
+            }
+            #[test]
             fn forces_speed_cap_and_contact_friction() {
                 let mut world = $world::new(4.0);
                 let mut b = body($v::ZERO, false);
