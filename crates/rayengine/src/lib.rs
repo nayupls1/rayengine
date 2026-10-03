@@ -10,6 +10,7 @@ pub use rayengine_core::sprite;
 pub use raylib;
 
 pub mod assets;
+pub mod audio;
 pub mod diagnostics;
 pub mod fonts;
 pub mod input;
@@ -54,6 +55,11 @@ pub mod guides {
     #[doc = include_str!("../examples/first_person.rs")]
     #[doc = "```"]
     pub mod first_person {}
+    #[doc = include_str!("../docs/audio.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/audio.rs")]
+    #[doc = "```"]
+    pub mod audio {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
     #[doc = include_str!("../docs/fonts.md")]
@@ -109,6 +115,7 @@ pub mod guides {
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
     pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
+    pub use crate::audio::{AudioMixer, MusicId, MusicOptions, MusicStatus, SoundOptions};
     pub use crate::fonts::{
         FontId, FontOptions, FontRasterization, FontSampling, TextMetrics, TextStyle,
     };
