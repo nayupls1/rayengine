@@ -394,6 +394,85 @@ macro_rules! scenarios {
                 }
             }
             #[test]
+            fn contact_rounding_at_large_coordinates_cannot_freeze_the_world() {
+                for center in [1100.0, 10000.0, -1100.0, -10000.0] {
+                    for round in [false, true] {
+                        let mut world = $world::new(4.0);
+                        let mut wall = $body::new(
+                            x(center),
+                            $shape::box_shape({
+                                let mut v = $v::splat(10.0);
+                                v.x = 2.2;
+                                v
+                            }),
+                        );
+                        wall.kind = BodyKind::Static;
+                        let wall = world.insert(wall);
+                        let mut b = $body::new(
+                            x(center - 2.3),
+                            if round {
+                                $shape::round(1.1)
+                            } else {
+                                $shape::box_shape($v::splat(2.2))
+                            },
+                        );
+                        b.velocity = x(10.0);
+                        let b = world.insert(b);
+                        let mut free = body(y(30.0), false);
+                        free.velocity = x(1.0);
+                        let free = world.insert(free);
+                        for _ in 0..20 {
+                            let report = world.step(tick(1.0 / 60.0), &mut Events::default());
+                            assert_eq!(
+                                report.dropped_time, 0.0,
+                                "center={center}, round={round}, {report:?}"
+                            );
+                            assert!(!report.unresolved_overlaps);
+                            let b = world.body(b).unwrap();
+                            let wall = world.body(wall).unwrap();
+                            assert!(
+                                b.shape
+                                    .overlap(b.position, wall.shape, wall.position)
+                                    .is_none()
+                            );
+                        }
+                        near(world.body(free).unwrap().position.x, 20.0 / 60.0);
+                    }
+                }
+            }
+            #[test]
+            fn rebounds_detach_carry_and_keep_airborne_world_velocity() {
+                for rise in [0.0, 2.0] {
+                    let mut world = $world::new(4.0);
+                    let mut p = $body::new(
+                        $v::ZERO,
+                        $shape::box_shape({
+                            let mut v = $v::splat(20.0);
+                            v.y = 2.0;
+                            v
+                        }),
+                    );
+                    p.kind = BodyKind::Kinematic;
+                    p.velocity = x(3.0) + y(rise * up());
+                    world.insert(p);
+                    let mut ball = body(y(2.0 * up()), true);
+                    ball.gravity = Some(y(-20.0 * up()));
+                    ball.restitution = 1.0;
+                    let ball = world.insert(ball);
+                    world.step(tick(0.1), &mut Events::default());
+                    let b = world.body(ball).unwrap();
+                    near(b.velocity.x, 3.0);
+                    near(b.velocity.y, (rise + 2.0) * up());
+                    near(b.position.x, 0.3);
+                    assert!(!b.grounded);
+                    let vy = b.velocity.y;
+                    world.body_mut(ball).unwrap().gravity = None;
+                    world.step(tick(0.1), &mut Events::default());
+                    near(world.body(ball).unwrap().position.x, 0.6);
+                    near(world.body(ball).unwrap().velocity.y, vy);
+                }
+            }
+            #[test]
             fn small_masses_do_not_overflow_separation_weights() {
                 let mut world = $world::new(4.0);
                 let mut a = body($v::ZERO, false);

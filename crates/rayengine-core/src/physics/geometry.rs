@@ -18,6 +18,25 @@ pub(super) fn scale<const N: usize>(a: [f32; N], s: f32) -> [f32; N] {
 pub(super) fn dot<const N: usize>(a: [f32; N], b: [f32; N]) -> f32 {
     (0..N).map(|i| a[i] * b[i]).sum()
 }
+// Outward correction must advance even when a contact depth/skin is smaller
+// than one f32 ULP at the current coordinate. Static/zero-weight corrections
+// pass zero distance and remain unchanged.
+pub(super) fn outward<const N: usize>(
+    position: [f32; N],
+    normal: [f32; N],
+    distance: f32,
+) -> [f32; N] {
+    let delta = scale(normal, distance);
+    let mut result = add(position, delta);
+    for i in 0..N {
+        if delta[i] > 0.0 && result[i] <= position[i] {
+            result[i] = position[i].next_up();
+        } else if delta[i] < 0.0 && result[i] >= position[i] {
+            result[i] = position[i].next_down();
+        }
+    }
+    result
+}
 impl<const N: usize> Shape<N> {
     pub(super) fn half(self) -> [f32; N] {
         match self {

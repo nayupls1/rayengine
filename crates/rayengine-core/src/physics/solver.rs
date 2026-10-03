@@ -147,8 +147,14 @@ fn land_on_platform<const N: usize>(rider: &mut Node<N>, platform: &Node<N>, nor
     if rider.kind != BodyKind::Dynamic
         || platform.kind != BodyKind::Kinematic
         || normal[1] * up::<N>() <= 0.5
-        || dot(sub(rider.motion(), platform.motion()), normal) > 0.00001
     {
+        return;
+    }
+    if dot(sub(rider.motion(), platform.motion()), normal) > 0.00001 {
+        // A rebound is airborne now. Preserve its world velocity across the
+        // boundary instead of carrying this tick and losing momentum next tick.
+        rider.velocity = add(rider.velocity, rider.carry);
+        rider.carry = [0.0; N];
         return;
     }
     let carry = platform.motion();
@@ -165,13 +171,12 @@ fn separate<const N: usize>(a: &mut Node<N>, b: &mut Node<N>, contact: Contact<N
     }
     // Tiny outward skin protects subsequent sweeps from contact rounding.
     let amount = contact.depth + 1e-5;
-    a.position = add(
-        a.position,
-        scale(contact.normal, amount * (wa / (wa + wb)) as f32),
-    );
-    b.position = sub(
+    a.position =
+        super::geometry::outward(a.position, contact.normal, amount * (wa / (wa + wb)) as f32);
+    b.position = super::geometry::outward(
         b.position,
-        scale(contact.normal, amount * (wb / (wa + wb)) as f32),
+        scale(contact.normal, -1.0),
+        amount * (wb / (wa + wb)) as f32,
     );
     respond(a, b, contact.normal);
 }

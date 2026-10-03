@@ -392,10 +392,7 @@ pub(crate) fn depenetrate_box<const N: usize>(
             if let Some(contact) =
                 geometry::overlap(Shape::Box(half), *position, Shape::Box(extent), center)
             {
-                *position = geometry::add(
-                    *position,
-                    geometry::scale(contact.normal, contact.depth + 1e-5),
-                );
+                *position = geometry::outward(*position, contact.normal, contact.depth + 1e-5);
                 changed = true;
             }
         }
