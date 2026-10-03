@@ -27,6 +27,8 @@ cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored
 cargo test -p rayengine-beacons "${demo_features[@]}" native_plugin -- --ignored --test-threads=1
 cargo test -p rayengine-voxel --features render "${demo_features[@]}" native_voxel -- --ignored --test-threads=1
 cargo test -p rayengine-minecraft --features render "${demo_features[@]}" native_minecraft -- --ignored --test-threads=1
+cargo test -p rayengine-tilemap --features render "${demo_features[@]}" native_tilemap -- --ignored --test-threads=1
+cargo run -p rayengine-tilemap --features render "${demo_features[@]}" --example level -- --hidden --frames 120 --screenshot "artifacts/smoke/$backend/tilemap.png"
 cargo test -p rayengine-particles --features render "${demo_features[@]}" native_particles -- --ignored --test-threads=1
 cargo run -p rayengine-particles --features render "${demo_features[@]}" --example effects -- --hidden --frames 120 --size 1280x720 --screenshot "artifacts/smoke/$backend/particles-wide.png"
 cargo run -p rayengine-particles --features render "${demo_features[@]}" --example effects -- --hidden --frames 120 --size 800x1000 --screenshot "artifacts/smoke/$backend/particles-portrait.png"
@@ -43,6 +45,8 @@ cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 
 cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/controls-portrait.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/sprites-wide.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/sprites-portrait.png"
+cargo run -p rayengine "${features[@]}" --example tweens -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/tweens-wide.png"
+cargo run -p rayengine "${features[@]}" --example tweens -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/tweens-portrait.png"
 cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 1280x720 --screenshot "artifacts/smoke/$backend/pathfinding-wide.png"
 cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 800x1000 --screenshot "artifacts/smoke/$backend/pathfinding-portrait.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/first-person-wide.png"

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Display-independent tweens in `rayengine-core`: 22 pure easing functions,
+  typed `f32`/`Vec2`/`Vec3`/`Vec4`/`Quat`/RGBA tweens with delay, loop/ping-pong,
+  finite cycles, retargeting, pause/resume/reset/cancel/finish and one-shot
+  `TweenCompleted` events; drift-free integer-nanosecond timing.
+- Allocation-free sequences and parallel groups over arrays, `Vec`s and tuples,
+  with leftover time carried between members and nesting.
+- Seeded trauma-based screen shake for `Camera2D` and `Camera3D`.
+- `Frame::delta` exposes render-frame wall time for presentation-only animation;
+  new tweens guide and playable example animating UI and world objects.
 - Grid A* pathfinding in the core: four/eight-way movement, per-cell costs,
   diagonal corner rules, borrowed `NavGrid` cells, reusable search buffers and
   resumable expansion budgets.

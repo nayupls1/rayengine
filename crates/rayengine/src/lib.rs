@@ -65,6 +65,11 @@ pub mod guides {
     #[doc = include_str!("../examples/sprites.rs")]
     #[doc = "```"]
     pub mod sprites {}
+    #[doc = include_str!("../docs/tweens.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/tweens.rs")]
+    #[doc = "```"]
+    pub mod tweens {}
     #[doc = include_str!("../docs/generated_meshes.md")]
     pub mod generated_meshes {}
     #[doc = include_str!("../docs/materials.md")]

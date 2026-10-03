@@ -827,6 +827,7 @@ impl App {
                         viewport: view,
                         alpha: plan.alpha,
                         index: report.frames,
+                        delta: elapsed,
                     };
                     frame.clear(Color::BLACK);
                     game.draw(&mut frame);

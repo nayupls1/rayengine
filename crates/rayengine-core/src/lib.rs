@@ -22,6 +22,7 @@ pub mod spatial;
 pub mod sprite;
 pub mod time;
 pub mod transform;
+pub mod tween;
 pub mod ui;
 pub mod viewport;
 
@@ -55,10 +56,14 @@ pub mod prelude {
     pub use crate::transform::{
         GlobalTransform2D, GlobalTransform3D, Parent, Transform2D, Transform3D,
     };
+    pub use crate::tween::{
+        Animate, Ease, Parallel, Sequence, Shake, ShakeConfig, Tween, TweenCompleted, TweenId,
+        TweenMode, Tweenable,
+    };
     pub use crate::ui::{
         UiActions, UiButton, UiCapture, UiId, UiInput, UiRect, UiRegion, UiResponse, UiState,
     };
     pub use crate::viewport::{ScaleMode, Viewport};
-    pub use glam::{IVec2, Quat, UVec2, Vec2, Vec3};
+    pub use glam::{IVec2, Quat, UVec2, Vec2, Vec3, Vec4};
     pub use hecs::{Entity, World};
 }
