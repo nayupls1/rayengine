@@ -889,6 +889,23 @@ fn layouts_map_cells_and_world_points() {
     assert_eq!(wide.cell_bounds(cell(1, 2)).max, Vec2::new(4.0, 3.0));
     assert_eq!(wide.cell_at(Vec2::new(3.9, 0.5), size), Some(cell(1, 0)));
     assert_eq!(wide.clearance(Vec2::splat(0.3)), Vec2::new(0.15, 0.3));
+
+    // Shared edges belong to the larger cell despite division rounding.
+    for layout in [
+        GridLayout::new(Vec2::splat(0.1), Vec2::splat(0.1)),
+        GridLayout::new(Vec2::splat(0.3), Vec2::new(0.7, 0.3)),
+    ] {
+        let size = cell(64, 64);
+        for i in 0..64 {
+            let bounds = layout.cell_bounds(cell(i, 63 - i));
+            assert_eq!(layout.cell_at(bounds.min, size), Some(cell(i, 63 - i)));
+        }
+        assert_eq!(
+            layout.cell_at(layout.cell_bounds(cell(63, 0)).max, size),
+            None
+        );
+    }
+    assert_eq!(layout.cell_at(Vec2::ZERO, cell(0, 3)), None);
 }
 
 #[test]

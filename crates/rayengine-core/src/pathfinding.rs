@@ -321,10 +321,26 @@ impl GridLayout {
     /// Cell containing `point` in a grid of `size`, or `None` outside it.
     /// Points on a shared edge belong to the cell with the larger coordinate.
     pub fn cell_at(&self, point: Vec2, size: UVec2) -> Option<UVec2> {
-        let local = ((point - self.origin) / self.cell_size).floor();
-        (local.is_finite() && local.cmpge(Vec2::ZERO).all() && local.cmplt(size.as_vec2()).all())
-            .then(|| local.as_uvec2())
-            .filter(|cell| cell.cmplt(size).all())
+        let estimate = ((point - self.origin) / self.cell_size).floor();
+        let mut cell = UVec2::ZERO;
+        for axis in 0..2 {
+            // Compare against the same edges as `cell_bounds`, correcting
+            // rounding in the division.
+            let edge = |i: u32| self.origin[axis] + i as f32 * self.cell_size[axis];
+            let count = size[axis];
+            if !point[axis].is_finite() || point[axis] < edge(0) || point[axis] >= edge(count) {
+                return None;
+            }
+            let mut i = estimate[axis].clamp(0.0, (count - 1) as f32) as u32;
+            while i > 0 && point[axis] < edge(i) {
+                i -= 1;
+            }
+            while i + 1 < count && point[axis] >= edge(i + 1) {
+                i += 1;
+            }
+            cell[axis] = i;
+        }
+        Some(cell)
     }
 }
 

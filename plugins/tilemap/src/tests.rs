@@ -417,6 +417,11 @@ fn maps_are_navigation_grids_with_rectangular_cells() {
         map.world_to_tile(Vec2::new(0.5, 7.0)).map(UVec2::from)
     );
 
+    for (x, y) in [(0, 0), (3, 5), (9, 2)] {
+        let corner = map.tile_to_world(x, y).unwrap();
+        assert_eq!(layout.cell_at(corner, map.size()), Some(UVec2::new(x, y)));
+    }
+
     let (start, goal) = (UVec2::new(0, 0), UVec2::new(9, 0));
     let mut finder = PathFinder::new();
     let mut path = Vec::new();
