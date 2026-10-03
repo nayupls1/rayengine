@@ -66,7 +66,9 @@ uniform defaults and per-material overrides work as they do for mesh surfaces,
 including separate parameters for two passes sharing the same shader.
 
 Changes to chain membership or UI placement take effect on the next frame.
-Parameter updates before resolve affect the current frame. Invalid configurations
+Parameter updates during drawing affect the current frame. The after-draw lifecycle
+boundary runs after effects finish, so it can safely clear the chain and release
+its dependencies for the next frame. Invalid configurations
 fail atomically. Unloading or invalidating a dependency of the active chain makes
 the runner return an error with normal shutdown cleanup; clear the chain before
 releasing its materials/shaders at a boundary.

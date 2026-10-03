@@ -717,7 +717,7 @@ impl App {
                 ..RunReport::default()
             };
             let mut quit = false;
-            let mut screenshot = None;
+            let mut last_view = None;
             while !quit
                 && !raylib.window_should_close()
                 && options.frames.is_none_or(|limit| report.frames < limit)
@@ -876,11 +876,6 @@ impl App {
                     game.draw(&mut frame);
                     frame.draw_counters()
                 };
-                game.boundary(&mut InitContext {
-                    raylib: &mut raylib,
-                    thread: &thread,
-                    assets: &mut assets,
-                })?;
                 assets.validate_post_processing(&chain)?;
                 if effects {
                     targets.resolve_with_ui(
@@ -900,6 +895,11 @@ impl App {
                 } else {
                     targets.resolve(&mut raylib, &thread, fxaa.as_mut());
                 }
+                game.boundary(&mut InitContext {
+                    raylib: &mut raylib,
+                    thread: &thread,
+                    assets: &mut assets,
+                })?;
                 let presented = post_targets
                     .as_ref()
                     .map(|t| t.presented())
@@ -910,35 +910,15 @@ impl App {
                         .record(render_start.expect("diagnostics enabled").elapsed());
                 }
                 let present_start = report.diagnostics.as_ref().map(|_| Instant::now());
-                {
-                    let mut draw = raylib.begin_drawing(&thread);
-                    draw.clear_background(config.bar_color);
-                    // SDK world/UI targets consistently store premultiplied RGBA.
-                    let mut presented_draw =
-                        draw.begin_blend_mode(BlendMode::BLEND_ALPHA_PREMULTIPLY);
-                    presented_draw.draw_texture_pro(
-                        presented.texture(),
-                        Rectangle::new(
-                            0.0,
-                            0.0,
-                            target_plan.output.0 as f32,
-                            -(target_plan.output.1 as f32),
-                        ),
-                        rect(rayengine_core::collision::Aabb2 {
-                            min: view.origin,
-                            max: view.origin + view.size,
-                        }),
-                        Vector2::zero(),
-                        0.0,
-                        Color::WHITE,
-                    );
-                    // EndBlendMode flushes the final blit. Read before buffer swap,
-                    // retaining only the latest rendered frame for early close/quit.
-                    drop(presented_draw);
-                    if options.screenshot.is_some() {
-                        screenshot = Some(draw.load_image_from_screen(&thread));
-                    }
-                }
+                present_frame(
+                    &mut raylib,
+                    &thread,
+                    presented,
+                    view,
+                    config.bar_color,
+                    false,
+                );
+                last_view = Some(view);
                 if let Some(metrics) = &mut report.diagnostics {
                     metrics
                         .present
@@ -953,7 +933,18 @@ impl App {
                 report.frames += 1;
             }
             if let Some(path) = &options.screenshot {
-                let image = screenshot.unwrap_or_else(|| raylib.load_image_from_screen(&thread));
+                // Re-submit the last resolved image after final event polling. This
+                // avoids reading a stale back buffer or a pending-resize drawable.
+                let image = if let Some((targets, view)) = targets.as_ref().zip(last_view) {
+                    let source = post_targets
+                        .as_ref()
+                        .map(|t| t.presented())
+                        .unwrap_or_else(|| targets.presented());
+                    present_frame(&mut raylib, &thread, source, view, config.bar_color, true)
+                        .expect("requested capture")
+                } else {
+                    raylib.load_image_from_screen(&thread)
+                };
                 let png = image
                     .export_image_to_memory(".png")
                     .map_err(|e| Error::Backend(e.to_string()))?;
@@ -985,6 +976,38 @@ impl App {
         });
         result
     }
+}
+
+fn present_frame(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    source: &RenderTexture2D,
+    view: Viewport,
+    bars: Color,
+    capture: bool,
+) -> Option<Image> {
+    let mut draw = rl.begin_drawing(thread);
+    draw.clear_background(bars);
+    let mut presented = draw.begin_blend_mode(BlendMode::BLEND_ALPHA_PREMULTIPLY);
+    presented.draw_texture_pro(
+        source.texture(),
+        Rectangle::new(
+            0.0,
+            0.0,
+            source.texture().width as f32,
+            -(source.texture().height as f32),
+        ),
+        rect(rayengine_core::collision::Aabb2 {
+            min: view.origin,
+            max: view.origin + view.size,
+        }),
+        Vector2::zero(),
+        0.0,
+        Color::WHITE,
+    );
+    // EndBlendMode flushes the blit before readback and EndDrawing swaps buffers.
+    drop(presented);
+    capture.then(|| draw.load_image_from_screen(thread))
 }
 
 fn validate_size(size: (u32, u32)) -> Result<(), Error> {
