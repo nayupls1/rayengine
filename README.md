@@ -107,6 +107,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Assets and ownership](crates/rayengine/docs/assets.md)
 - [Custom fonts, text measurement, and pixel text](crates/rayengine/docs/fonts.md)
 - [Sprite sheets and CPU animation](crates/rayengine/docs/sprites.md)
+- [Tweens, easing and screen shake](crates/rayengine/docs/tweens.md)
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Basic lighting](crates/rayengine/docs/lighting.md)
@@ -166,6 +167,10 @@ for normalization, fixed-tick sampling, routing, and game-owned persistence.
 Try the original pixel-art sprite playground with idle, walking and one-shot
 sword animations: `cargo run -p rayengine --example sprites`. A/D or arrows move;
 Space swings at the golden orb, P pauses, and R restarts the current clip.
+
+Try tweened world objects and UI: `cargo run -p rayengine --example tweens`.
+Space slides a door, H flashes a training dummy and shakes the camera, and P
+pauses the world tweens; each door completion slides in a UI toast.
 
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
 The CPU suite measures primitives and gameplay simulation; the opt-in native

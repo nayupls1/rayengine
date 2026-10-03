@@ -95,6 +95,7 @@ fn native_quality_offscreen_edges_text_alpha_dpi_and_cleanup() {
                     viewport: view,
                     alpha: 0.0,
                     index: 0,
+                    delta: std::time::Duration::ZERO,
                 };
                 frame.clear(Color::BLACK);
                 frame.with_raylib(|raw| {

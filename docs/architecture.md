@@ -6,8 +6,8 @@ are optional targets; browser and mobile are outside the current scope.
 ## Crate boundaries
 
 - `rayengine-core`: CPU-only entities/components, transforms and hierarchy,
-  fixed simulation timing, action input, viewport math, cameras, collision,
-  UI layout, validated CPU mesh data, and versioned save containers. No window, audio device, C toolchain,
+  fixed simulation timing, tweens/easing/screen shake, action input, viewport
+  math, cameras, collision, UI layout, validated CPU mesh data, and versioned save containers. No window, audio device, C toolchain,
   or GPU required.
 - `rayengine`: raylib runtime, rendering and asset ownership. One shared
   lifecycle for 2D and 3D. Rendering stays on raylib's owning thread.
