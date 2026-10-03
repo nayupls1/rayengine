@@ -126,7 +126,7 @@ pub(crate) fn edit(
                     (Some(expected), Some(actual)) => {
                         expected.canonicalize().ok() == Path::new(actual).canonicalize().ok()
                     }
-                    (None, None) => sdk["req"] == dep["req"],
+                    (None, None) => sdk["req"] == dep["req"] && sdk["source"] == dep["source"],
                     _ => false,
                 };
                 if !compatible {

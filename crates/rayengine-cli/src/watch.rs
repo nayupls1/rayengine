@@ -195,7 +195,31 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
             let result = (|| -> Result<(Value, Option<Process>)> {
                 let (project, _) = project_manifest(&options.path, options.profile.as_deref())?;
                 // Re-inspect targets after manifest edits, including executable changes.
-                let meta = lifecycle::metadata_with_features(&manifest, true, &options.features)?;
+                let mut inspect = Command::new("cargo");
+                inspect
+                    .args(["metadata", "--format-version", "1", "--manifest-path"])
+                    .arg(&manifest)
+                    .current_dir(root);
+                if !options.features.is_empty() {
+                    inspect.arg("--features").arg(options.features.join(","));
+                }
+                let mut inspect = Process::spawn(inspect, &logs.0, "metadata")?;
+                let status = inspect.wait_until(stopped)?;
+                if status.is_none() {
+                    return Ok((
+                        json!({"ok":false,"error":{"code":"watch_interrupted","message":"metadata interrupted","details":inspect.output()}}),
+                        None,
+                    ));
+                }
+                let output = inspect.output();
+                if !status.expect("checked status").success() {
+                    return Ok((
+                        json!({"ok":false,"error":{"code":"cargo_failed","message":"metadata failed","details":output}}),
+                        None,
+                    ));
+                }
+                let meta: Value = serde_json::from_str(output["stdout"].as_str().unwrap_or(""))
+                    .map_err(|e| Failure::new("invalid_metadata", e.to_string()))?;
                 roots = watch_roots(&meta, project.as_ref());
                 let package = lifecycle::project_package(&meta, &manifest)?;
                 let selected =
@@ -213,7 +237,7 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
                     build.arg("--release");
                 }
                 let mut build = Process::spawn(build, &logs.0, "build")?;
-                let status = build.wait_until(&stopped)?;
+                let status = build.wait_until(stopped)?;
                 let output = build.output();
                 let diagnostics: Vec<Value> = output["stdout"]
                     .as_str()
