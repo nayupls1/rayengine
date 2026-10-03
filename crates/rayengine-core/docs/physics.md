@@ -26,7 +26,8 @@ assert!(world.body(ball).unwrap().position.y < 9.0);
 
 Use `BodyKind::Kinematic` and velocity for a moving platform. Riders touching
 its upward face inherit its translation while their intrinsic velocity stays
-independent. Jumping away detaches. A restitution rebound detaches immediately and keeps
+independent. Walking off transfers current world velocity into ordinary airborne motion;
+landing on another solid keeps the resolved world velocity. Jumping away detaches. A restitution rebound detaches immediately and keeps
 its current world velocity, including inherited platform motion. Teleporting a platform by editing position
 is a teleport, not carry. Kinematics follow their prescribed velocity through
 solids; games must reverse them at route endpoints and avoid crushing riders.

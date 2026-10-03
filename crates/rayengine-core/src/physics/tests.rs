@@ -441,6 +441,36 @@ macro_rules! scenarios {
                 }
             }
             #[test]
+            fn descending_platform_to_static_floor_does_not_launch_a_rider() {
+                let mut world = $world::new(4.0);
+                let mut p = body($v::ZERO, false);
+                p.kind = BodyKind::Kinematic;
+                p.velocity = y(-6.0 * up());
+                world.insert(p);
+                let mut floor = $body::new(
+                    x(4.0) + y(-0.05 * up()),
+                    $shape::box_shape({
+                        let mut v = $v::splat(2.0);
+                        v.x = 4.0;
+                        v
+                    }),
+                );
+                floor.kind = BodyKind::Static;
+                world.insert(floor);
+                let mut r = body(x(1.95) + y(2.0 * up()), false);
+                r.velocity = x(6.0);
+                let r = world.insert(r);
+                for _ in 0..5 {
+                    let report = world.step(tick(1.0 / 60.0), &mut Events::default());
+                    assert_eq!(report.dropped_time, 0.0);
+                    assert!(!report.unresolved_overlaps);
+                    let rider = world.body(r).unwrap();
+                    assert!(rider.grounded);
+                    near(rider.position.y, 1.95 * up());
+                    near(rider.velocity.y, 0.0);
+                }
+            }
+            #[test]
             fn rebounds_detach_carry_and_keep_airborne_world_velocity() {
                 for rise in [0.0, 2.0] {
                     let mut world = $world::new(4.0);
@@ -474,17 +504,19 @@ macro_rules! scenarios {
             }
             #[test]
             fn small_masses_do_not_overflow_separation_weights() {
-                let mut world = $world::new(4.0);
-                let mut a = body($v::ZERO, false);
-                a.mass = f32::MIN_POSITIVE;
-                let mut b = body(x(1.0), false);
-                b.mass = f32::MIN_POSITIVE;
-                let a = world.insert(a);
-                let b = world.insert(b);
-                let report = world.step(tick(0.0), &mut Events::default());
-                assert!(!report.unresolved_overlaps);
-                near(world.body(a).unwrap().position.x, -0.5);
-                near(world.body(b).unwrap().position.x, 1.5);
+                for mass in [f32::MIN_POSITIVE, f32::from_bits(1)] {
+                    let mut world = $world::new(4.0);
+                    let mut a = body($v::ZERO, false);
+                    a.mass = mass;
+                    let mut b = body(x(1.0), false);
+                    b.mass = mass;
+                    let a = world.insert(a);
+                    let b = world.insert(b);
+                    let report = world.step(tick(0.0), &mut Events::default());
+                    assert!(!report.unresolved_overlaps);
+                    near(world.body(a).unwrap().position.x, -0.5);
+                    near(world.body(b).unwrap().position.x, 1.5);
+                }
             }
             #[test]
             fn deterministic_hundreds_of_bodies() {

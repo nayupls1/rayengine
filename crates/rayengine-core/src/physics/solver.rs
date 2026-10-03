@@ -53,7 +53,7 @@ impl<const N: usize> Node<N> {
                 .all(|v| v.is_finite())
                 && self.shape.valid()
                 && self.mass.is_finite()
-                && self.mass >= f32::MIN_POSITIVE
+                && self.mass > 0.0
                 && self.gravity.is_none_or(|g| g.iter().all(|v| v.is_finite()))
                 && self.restitution.is_finite()
                 && (0.0..=1.0).contains(&self.restitution)
@@ -153,14 +153,18 @@ fn land_on_platform<const N: usize>(rider: &mut Node<N>, platform: &Node<N>, nor
     if dot(sub(rider.motion(), platform.motion()), normal) > 0.00001 {
         // A rebound is airborne now. Preserve its world velocity across the
         // boundary instead of carrying this tick and losing momentum next tick.
-        rider.velocity = add(rider.velocity, rider.carry);
-        rider.carry = [0.0; N];
+        detach_carry(rider);
         return;
     }
     let carry = platform.motion();
     let transferred = dot(sub(carry, rider.carry), normal);
     rider.velocity = sub(rider.velocity, scale(normal, transferred));
     rider.carry = carry;
+}
+
+fn detach_carry<const N: usize>(node: &mut Node<N>) {
+    node.velocity = add(node.velocity, node.carry);
+    node.carry = [0.0; N];
 }
 
 fn separate<const N: usize>(a: &mut Node<N>, b: &mut Node<N>, contact: Contact<N>) {
@@ -369,6 +373,7 @@ pub(super) fn step<const N: usize>(
         node.grounded = false;
     }
     let mut current = BTreeSet::new();
+    let mut supported = BTreeSet::new();
     for (i, j) in candidates(nodes, grid, 0.0, 0.002) {
         let (a, b) = both_mut(nodes, i, j);
         let contact = overlap(a.shape, a.position, b.shape, b.position);
@@ -378,21 +383,17 @@ pub(super) fn step<const N: usize>(
             }
         } else if is_solid(a, b) {
             report.unresolved_overlaps |= contact.is_some();
-            // Persistent resting contacts do not need an inward velocity.
-            let probe =
-                std::array::from_fn(|axis| if axis == 1 { -up::<N>() * 0.002 } else { 0.0 });
-            if a.kind == BodyKind::Dynamic
-                && sweep(a.shape, a.position, b.shape, b.position, probe)
-                    .is_some_and(|(_, n)| n[1] * up::<N>() > 0.5)
-            {
-                a.grounded = true;
-            }
-            if b.kind == BodyKind::Dynamic
-                && sweep(b.shape, b.position, a.shape, a.position, probe)
-                    .is_some_and(|(_, n)| n[1] * up::<N>() > 0.5)
-            {
-                b.grounded = true;
-            }
+            mark_support(a, b, &mut supported);
+            mark_support(b, a, &mut supported);
+        }
+    }
+    // Carry is an integration contribution only while supported. A wall/floor
+    // can cancel it through the normal impulse, leaving an opposing intrinsic
+    // velocity. Convert to world velocity on detachment before the next tick
+    // initializes carry to zero, avoiding a spurious rebound on static landings.
+    for node in nodes.iter_mut() {
+        if !supported.contains(&node.id) {
+            detach_carry(node);
         }
     }
     let all: BTreeSet<_> = previous
@@ -430,6 +431,32 @@ pub(super) fn step<const N: usize>(
     }
     *previous = current;
     report
+}
+
+fn mark_support<const N: usize>(
+    rider: &mut Node<N>,
+    other: &Node<N>,
+    supported: &mut BTreeSet<BodyId>,
+) {
+    if rider.kind != BodyKind::Dynamic {
+        return;
+    }
+    let probe = std::array::from_fn(|axis| if axis == 1 { -up::<N>() * 0.002 } else { 0.0 });
+    if let Some((_, normal)) = sweep(
+        rider.shape,
+        rider.position,
+        other.shape,
+        other.position,
+        probe,
+    ) && normal[1] * up::<N>() > 0.5
+    {
+        rider.grounded = true;
+        if other.kind == BodyKind::Kinematic
+            && dot(sub(rider.motion(), other.motion()), normal) <= 0.001
+        {
+            supported.insert(rider.id);
+        }
+    }
 }
 
 fn set_support<const N: usize>(rider: &mut Node<N>, platform: &Node<N>) {
