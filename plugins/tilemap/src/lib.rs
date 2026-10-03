@@ -5,6 +5,18 @@ mod queries;
 #[cfg(feature = "render")]
 pub mod render;
 
+/// Checked guides exported with the plugin's offline Rust documentation.
+pub mod guides {
+    #[doc = include_str!("../docs/performance.md")]
+    pub mod performance {}
+    /// Disk-loaded example: manifest assets, drawing, movement and tile edits.
+    /// Enable the `render` feature to include its checked source below.
+    #[cfg_attr(feature = "render", doc = "\n\n```no_run")]
+    #[cfg_attr(feature = "render", doc = include_str!("../examples/level.rs"))]
+    #[cfg_attr(feature = "render", doc = "```")]
+    pub mod level {}
+}
+
 use rayengine_core::{collision::Aabb2, glam::Vec2, sprite::SpriteRegion};
 use std::fmt;
 

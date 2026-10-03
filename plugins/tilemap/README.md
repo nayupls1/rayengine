@@ -51,7 +51,7 @@ resolve `project.asset("level.toml")`, then call `Tilemap::load(path)`. Resolve
 `map.atlas_asset()` through the same project and load with `ctx.texture(path)`.
 Source rectangles are checked against the actual cached texture on each draw;
 unloaded handles and invalid source rectangles skip submissions safely.
-See the runnable [level example](examples/level.rs) for disk loading, player
+See the runnable [level example](crate::guides::level) for disk loading, player
 collision, manifest asset lookup and runtime tile edits:
 
 ```sh
@@ -90,4 +90,4 @@ the same camera automatically.
 Validation: `cargo test -p rayengine-tilemap` (including this checked example),
 `cargo test -p rayengine-tilemap --features render native_tilemap -- --ignored --test-threads=1`
 (requires a display), and `cargo bench -p rayengine-tilemap --bench tilemap`.
-The [performance guide](docs/performance.md) describes the 512×512 comparison.
+The [performance guide](crate::guides::performance) describes the 512×512 comparison.
