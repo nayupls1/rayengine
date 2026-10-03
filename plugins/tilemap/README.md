@@ -80,8 +80,9 @@ contacts and accepts infinite distance. Its chunk traversal is linear in chunk
 count; equal-distance contacts prefer layer, row, then column.
 
 Every query reads current cells: set/clear needs no dirty-cache synchronization.
-`visit_visible` restricts traversal to camera-AABB chunks, rejects chunks and
-cells against the rotated camera rectangle, and preserves layer order. It uses
+`visit_visible` conservatively selects chunks with a camera AABB (including a
+rounding margin), tests cells against the rotated camera rectangle, and preserves
+layer order. It uses
 the current `Viewport`, so Fit/Expand/IntegerFit, resizing, rotation and DPI share
 the SDK camera contract. `TileAtlas::draw_frame` pairs culling and rendering with
 the same camera automatically.

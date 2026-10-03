@@ -10,7 +10,7 @@ use rayengine_core::{
 /// Work performed by a culled submission. Empty chunks produce no tile visits.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SubmissionStats {
-    /// Nonempty chunks passing the camera test, across all layers.
+    /// Nonempty chunks admitted by the conservative camera AABB, across layers.
     pub visible_chunks: usize,
     /// Occupied visible cells emitted to the visitor.
     pub tiles: usize,
@@ -114,9 +114,14 @@ impl Tilemap {
         let rotation = Mat2::from_angle(-camera.rotation);
         let extent =
             (rotation * Vec2::new(half.x, 0.0)).abs() + (rotation * Vec2::new(0.0, half.y)).abs();
+        // Bound rounding in the camera/tile SAT arithmetic. At large world
+        // coordinates even a cell center can round by half an ulp. Keep the
+        // chunk broadphase conservative and leave oriented tests to the cells:
+        // f32 SAT is not monotone between a chunk and its contained tiles.
+        let padding = camera.target.abs().max(extent) * (4.0 * f32::EPSILON);
         let area = Aabb2 {
-            min: camera.target - extent,
-            max: camera.target + extent,
+            min: camera.target - extent - padding,
+            max: camera.target + extent + padding,
         };
         if !valid_area(area) {
             return Err(SpatialError::InvalidCamera);
@@ -129,7 +134,7 @@ impl Tilemap {
             for cy in y0 / CHUNK_SIZE..=y1 / CHUNK_SIZE {
                 for cx in x0 / CHUNK_SIZE..=x1 / CHUNK_SIZE {
                     let chunk = &data.chunks[(cy * self.chunks_x + cx) as usize];
-                    if chunk.occupied == 0 || !frustum.intersects(self.chunk_bounds(cx, cy)) {
+                    if chunk.occupied == 0 || !touches(self.chunk_bounds(cx, cy), area) {
                         continue;
                     }
                     stats.visible_chunks += 1;

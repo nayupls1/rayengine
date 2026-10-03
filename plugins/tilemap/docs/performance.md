@@ -5,7 +5,8 @@ Run `cargo bench --locked -p rayengine-tilemap --bench tilemap` or include it in
 map (262,144 cells, one layer, 16×16 chunks, 32-unit tiles) using the same
 `black_box((tile_id, bounds))` submission callback. Construction/filling is
 outside timing. The naive loop visits/submits every occupied cell; the culled
-path selects chunks and cells with the engine's rotated-camera tests. This
+path selects chunks with the camera AABB and tests cells with the engine's
+rotated-camera tests. This
 measures CPU traversal and submission preparation, not GPU/frame time.
 
 The camera is centered at (8192,8192), has 540 world-unit height and a 16:9 Fit
@@ -20,16 +21,19 @@ measurement produced these mean estimates:
 
 | Traversal | Mean | 95% confidence interval |
 | --- | ---: | ---: |
-| Naive full map | 611.5 µs | 528.4–709.2 µs |
-| Culled chunks | 12.05 µs | 11.80–12.39 µs |
+| Naive full map | 484.57 µs | 482.53–486.96 µs |
+| Culled chunks | 11.68 µs | 11.64–11.74 µs |
 
-Other workspace checks were compiling during this run; the wide naive interval
-reflects machine load. The roughly 50× local reduction is illustrative, not a
-portable performance guarantee. Criterion artifacts in `target/criterion` are
-regenerated locally; compare baselines on the same machine/settings.
+The full workspace and native suites had finished; targeted native/MSRV checks
+ran alongside this measurement. The roughly 41× local reduction is
+illustrative, not a portable performance guarantee. Criterion artifacts in
+`target/criterion` are regenerated locally; compare baselines on the same
+machine/settings. The raw mean estimates are retained in `measurements.json`.
 
-Culling visits only chunks in the camera AABB, then applies exact rotated
-rectangle tests. Visible nonempty chunks each scan at most 256 cells. Empty
+Culling visits only chunks in a conservative camera AABB, then applies rotated
+rectangle tests to cells. Chunk selection includes a world-coordinate rounding
+margin; it avoids oriented chunk rejection because f32 SAT can disagree between
+a chunk and its contained cells near the map's precision limit. Visible nonempty chunks each scan at most 256 cells. Empty
 chunks are skipped immediately. Layer ordering is stable and source regions
 stay in one cached atlas; the SDK/raylib sprite path batches ordinary draws.
 Runtime edits update cell occupancy immediately and allocate no new chunks.

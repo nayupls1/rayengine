@@ -334,3 +334,58 @@ fn large_map_visits_only_visible_chunks_and_runtime_edits() {
     let after = map.visit_visible(&camera, &view, |_| {}).unwrap();
     assert_eq!(before.tiles, after.tiles + 1);
 }
+
+#[test]
+fn chunk_culling_is_conservative_near_world_precision_limit() {
+    let mut map = Tilemap::new(
+        65,
+        33,
+        Vec2::new(-3388247.0, -4846099.5),
+        Vec2::new(1.3458133, 1.3569688),
+        vec![TileDefinition {
+            region: SpriteRegion::new(0, 0, 1, 1).unwrap(),
+            collision: CollisionFlags::default(),
+        }],
+        vec!["ground".into()],
+    )
+    .unwrap();
+    map.set_tile(0, 48, 24, Some(TileId(0))).unwrap();
+    let camera = Camera2D {
+        target: Vec2::new(-3388187.8, -4846065.5),
+        rotation: 5.540631,
+        view_height: 7.59082,
+    };
+    let view = Viewport::new(Vec2::ONE, Vec2::ONE, ScaleMode::Fit).unwrap();
+    let frustum = Frustum2D::from_camera(&camera, &view).unwrap();
+    assert!(frustum.intersects(map.tile_bounds(48, 24).unwrap()));
+    let mut actual = Vec::new();
+    let stats = map
+        .visit_visible(&camera, &view, |tile| actual.push(tile.coordinate))
+        .unwrap();
+    assert_eq!(actual, vec![(48, 24)]);
+    assert_eq!(stats.tiles, 1);
+
+    // Compare every occupied cell across nearby rotations, not only the seed
+    // reproduction, so conservative chunk selection remains independent of SAT.
+    for y in 0..33 {
+        for x in 0..65 {
+            map.set_tile(0, x, y, Some(TileId(0))).unwrap();
+        }
+    }
+    for rotation in [0.0, 0.7, 1.57, 3.2, 5.540631] {
+        let camera = Camera2D { rotation, ..camera };
+        let frustum = Frustum2D::from_camera(&camera, &view).unwrap();
+        let mut expected = Vec::new();
+        map.visit_region(map.bounds(), |tile| {
+            if frustum.intersects(tile.bounds) {
+                expected.push(tile.coordinate);
+            }
+        });
+        let mut actual = Vec::new();
+        map.visit_visible(&camera, &view, |tile| actual.push(tile.coordinate))
+            .unwrap();
+        expected.sort();
+        actual.sort();
+        assert_eq!(actual, expected);
+    }
+}
