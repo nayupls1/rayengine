@@ -1,6 +1,7 @@
 //! Immediate drawing with corresponding 2D/3D passes and shared logical UI.
 
 use crate::diagnostics::DrawCounters;
+use crate::fonts::{FontId, FontOptions, TextMetrics, TextStyle};
 use crate::{
     Error,
     assets::{
@@ -49,6 +50,14 @@ pub struct Frame<'frame, 'audio> {
 }
 
 impl Frame<'_, '_> {
+    /// Loads/caches a font on the render thread, including after initialization.
+    pub fn font(
+        &mut self,
+        path: impl AsRef<std::path::Path>,
+        options: FontOptions,
+    ) -> Result<FontId, Error> {
+        self.assets.load_font(self.thread, path.as_ref(), options)
+    }
     /// Enables/disables submission counters for this frame. Runtime diagnostics
     /// enable them automatically; changing mode resets counters. Useful for
     /// identical enabled/disabled native benchmark workloads.
@@ -209,7 +218,9 @@ impl Frame<'_, '_> {
             scale,
             logical_size: self.viewport.logical_size,
             font,
-            textures: self.assets,
+            fonts: &mut self.assets.fonts,
+            thread: self.thread,
+            textures: &self.assets.textures,
             counters: &mut self.counters,
         });
     }
@@ -238,6 +249,11 @@ trait TextureSource {
 impl TextureSource for Assets<'_> {
     fn texture(&self, id: TextureId) -> Option<&Texture2D> {
         self.texture(id)
+    }
+}
+impl TextureSource for Vec<Option<Texture2D>> {
+    fn texture(&self, id: TextureId) -> Option<&Texture2D> {
+        self.get(id.0).and_then(Option::as_ref)
     }
 }
 
@@ -606,6 +622,8 @@ pub struct UiCanvas<'draw, D: RaylibDraw> {
     pub logical_size: Vec2,
     scale: Vec2,
     font: WeakFont,
+    fonts: &'draw mut crate::fonts::FontAssets,
+    thread: &'draw RaylibThread,
     textures: &'draw dyn TextureSource,
 }
 
@@ -626,6 +644,10 @@ pub struct UiButtonStyle {
     pub focus: Color,
     /// Font size in reference UI units.
     pub font_size: f32,
+    /// Custom font selection; None keeps raylib's built-in font.
+    pub font: Option<FontId>,
+    /// Extra label spacing in UI units.
+    pub spacing: f32,
 }
 
 impl Default for UiButtonStyle {
@@ -638,6 +660,8 @@ impl Default for UiButtonStyle {
             text: Color::WHITE,
             focus: Color::new(93, 217, 225, 255),
             font_size: 20.0,
+            font: None,
+            spacing: 1.0,
         }
     }
 }
@@ -652,6 +676,18 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
         response: &UiResponse,
         style: UiButtonStyle,
     ) {
+        let _ = self.try_button(bounds, label, response, style);
+    }
+
+    /// Draws a button and reports invalid/stale custom fonts or atlas failures.
+    /// Custom text failures omit the label; the button body still draws.
+    pub fn try_button(
+        &mut self,
+        bounds: Aabb2,
+        label: &str,
+        response: &UiResponse,
+        style: UiButtonStyle,
+    ) -> Result<(), Error> {
         let fill = if !response.enabled {
             style.disabled
         } else if response.held {
@@ -673,13 +709,35 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
                 style.focus,
             );
         }
-        let measured = self.font.measure_text(label, style.font_size, 1.0);
-        self.text(
-            label,
-            bounds.center() - Vec2::new(measured.x, measured.y) * 0.5,
-            style.font_size,
-            style.text,
-        );
+        if let Some(font) = style.font {
+            let text_style = TextStyle {
+                spacing: style.spacing,
+                ..TextStyle::new(font, style.font_size)
+            };
+            let measured = self.measure_text(label, text_style)?;
+            let position =
+                bounds.center() - (measured.ink_bounds.min + measured.ink_bounds.max) * 0.5;
+            self.text_with(label, position, text_style, style.text)?;
+        } else {
+            TextStyle {
+                spacing: style.spacing,
+                ..TextStyle::new(FontId(0), style.font_size)
+            }
+            .validate(label)?;
+            let measured = self
+                .font
+                .measure_text(label, style.font_size, style.spacing);
+            count!(self.counters, text, 1);
+            self.raw.draw_text_ex(
+                &self.font,
+                label,
+                v2((bounds.center() - Vec2::new(measured.x, measured.y) * 0.5) * self.scale),
+                style.font_size * self.scale.y,
+                style.spacing * self.scale.y,
+                style.text,
+            );
+        }
+        Ok(())
     }
 
     /// Draws a loaded texture icon into UI-unit bounds. Returns false for a
@@ -725,6 +783,33 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
             self.scale.y,
             color,
         );
+    }
+    /// Measures the shared logical layout; no atlas upload is required.
+    pub fn measure_text(&self, text: &str, style: TextStyle) -> Result<TextMetrics, Error> {
+        self.fonts.measure(text, style)
+    }
+
+    /// Draws a custom label at the top-left line box, rasterizing at the actual
+    /// target pixel scale. Returns matching logical metrics. Invalid handles,
+    /// NUL text, and allocation limits are errors; no default-font substitution.
+    pub fn text_with(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: TextStyle,
+        color: Color,
+    ) -> Result<TextMetrics, Error> {
+        let metrics = self.fonts.draw(
+            self.thread,
+            self.raw,
+            text,
+            position,
+            style,
+            self.scale,
+            color,
+        )?;
+        count!(self.counters, text, 1);
+        Ok(metrics)
     }
     /// UI circle, preserving its proportions.
     pub fn circle(&mut self, center: Vec2, radius: f32, color: Color) {

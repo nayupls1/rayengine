@@ -2,6 +2,9 @@
 
 ## Unreleased (0.0.2)
 
+- Owned custom fonts with typed handles, target-aware sharp UI atlases, shared
+  measurement/spacing, per-button selection, explicit pixel sampling, named
+  manifest/profile integration, and a licensed two-font comparison example.
 - Minecraft demo: game menu, F3-only debug overlay, icon-based inventory and
   recipe cards, day/night lighting with a lit voxel shader, held torches, lit
   pickups and particle block debris.

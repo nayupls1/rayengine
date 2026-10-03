@@ -68,7 +68,9 @@ on a mode transition; use it for controlled overhead benchmarks.
 Successful replacement counts one live resource. Transient upload overlap or
 assets created and unloaded between samples are not high-water measurements.
 Counts cover standalone textures, models, sounds, generated meshes, materials,
-custom shaders and the SDK material shader. Logical texture bytes include mips;
+custom shaders and the SDK material shader, plus custom font handles and atlases.
+`font_bytes` counts RGBA atlas payloads separately from standalone `texture_bytes`.
+Logical texture bytes include mips;
 generated geometry includes fallback UVs; model geometry covers standard
 vertex/attribute/index arrays. Bytes exclude driver allocation padding, audio,
 shader storage, imported model textures/bones/animations, default raylib assets,

@@ -27,6 +27,8 @@ const BUTTON: UiButtonStyle = UiButtonStyle {
     text: Color::WHITE,
     focus: Color::new(255, 255, 160, 255),
     font_size: 16.0,
+    font: None,
+    spacing: 1.0,
 };
 
 fn rectangle(min: Vec2, size: Vec2) -> Aabb2 {
