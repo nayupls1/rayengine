@@ -5,7 +5,7 @@
 - Grid A* pathfinding in the core: four/eight-way movement, per-cell costs,
   diagonal corner rules, borrowed `NavGrid` cells, reusable search buffers and
   resumable expansion budgets.
-- Cost-aware line-of-sight path smoothing, a path follower for 2D/3D character
+- Cost- and clearance-aware path smoothing, a path follower for 2D/3D character
   bodies, and distance fields for many agents chasing one target.
 - Checked pathfinding guide, an agents-around-walls example, unit tests against
   a reference search, and `pathfinding_*` Criterion workloads.

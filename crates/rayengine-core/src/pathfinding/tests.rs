@@ -588,13 +588,13 @@ fn stamp_wraparound_forgets_old_searches() {
 fn line_of_sight_checks_cells_and_exact_corners() {
     let grid = parse(&[".....", "..#..", "....."]);
     let rule = Neighborhood::default();
-    assert!(line_of_sight(&grid, cell(0, 0), cell(4, 0), rule).unwrap());
-    assert!(!line_of_sight(&grid, cell(0, 1), cell(4, 1), rule).unwrap());
-    assert!(!line_of_sight(&grid, cell(0, 0), cell(4, 2), rule).unwrap());
-    assert!(line_of_sight(&grid, cell(0, 0), cell(1, 2), rule).unwrap());
-    assert!(line_of_sight(&grid, cell(1, 1), cell(1, 1), rule).unwrap());
+    assert!(line_of_sight(&grid, cell(0, 0), cell(4, 0), rule, 0.0).unwrap());
+    assert!(!line_of_sight(&grid, cell(0, 1), cell(4, 1), rule, 0.0).unwrap());
+    assert!(!line_of_sight(&grid, cell(0, 0), cell(4, 2), rule, 0.0).unwrap());
+    assert!(line_of_sight(&grid, cell(0, 0), cell(1, 2), rule, 0.0).unwrap());
+    assert!(line_of_sight(&grid, cell(1, 1), cell(1, 1), rule, 0.0).unwrap());
     assert_eq!(
-        line_of_sight(&grid, cell(0, 0), cell(5, 0), rule),
+        line_of_sight(&grid, cell(0, 0), cell(5, 0), rule, 0.0),
         Err(PathError::OutOfBounds(cell(5, 0)))
     );
 
@@ -608,11 +608,11 @@ fn line_of_sight_checks_cells_and_exact_corners() {
         (Neighborhood::Eight(DiagonalRule::IfBothOpen), false, false),
     ] {
         assert_eq!(
-            line_of_sight(&squeeze, cell(0, 0), cell(2, 2), mode),
+            line_of_sight(&squeeze, cell(0, 0), cell(2, 2), mode, 0.0),
             Ok(through_squeeze)
         );
         assert_eq!(
-            line_of_sight(&corner, cell(0, 0), cell(2, 2), mode),
+            line_of_sight(&corner, cell(0, 0), cell(2, 2), mode, 0.0),
             Ok(past_corner)
         );
     }
@@ -625,12 +625,12 @@ fn smoothing_removes_redundant_waypoints_without_entering_walls() {
         let (status, mut path) = find(&grid, cell(0, 3), cell(7, 2), mode);
         cost_of(status);
         let original = path.clone();
-        smooth_path(&grid, &mut path, mode).unwrap();
+        smooth_path(&grid, &mut path, mode, 0.0).unwrap();
         assert!(path.len() < original.len(), "{mode:?}");
         assert_eq!((path[0], *path.last().unwrap()), (cell(0, 3), cell(7, 2)));
         for pair in path.windows(2) {
             assert!(
-                line_of_sight(&grid, pair[0], pair[1], mode).unwrap(),
+                line_of_sight(&grid, pair[0], pair[1], mode, 0.0).unwrap(),
                 "{mode:?} {path:?}"
             );
         }
@@ -649,7 +649,7 @@ fn smoothing_removes_redundant_waypoints_without_entering_walls() {
         cell(2, 2),
         cell(3, 2),
     ];
-    smooth_path(&open, &mut path, Neighborhood::Four).unwrap();
+    smooth_path(&open, &mut path, Neighborhood::Four, 0.0).unwrap();
     assert_eq!(path, vec![cell(0, 0), cell(3, 2)]);
 
     // A stale path through newly blocked cells gains no blocked shortcut.
@@ -658,18 +658,110 @@ fn smoothing_removes_redundant_waypoints_without_entering_walls() {
     stale.set(cell(2, 1), None);
     let mut path = vec![cell(0, 0), cell(1, 0), cell(2, 1), cell(3, 1), cell(4, 1)];
     let original = path.clone();
-    smooth_path(&stale, &mut path, Neighborhood::default()).unwrap();
+    smooth_path(&stale, &mut path, Neighborhood::default(), 0.0).unwrap();
     assert_eq!(path, original);
 
     let mut short = vec![cell(0, 0), cell(1, 1)];
-    smooth_path(&open, &mut short, Neighborhood::Four).unwrap();
+    smooth_path(&open, &mut short, Neighborhood::Four, 0.0).unwrap();
     assert_eq!(short, vec![cell(0, 0), cell(1, 1)]);
     let mut outside = vec![cell(0, 0), cell(9, 0)];
     assert_eq!(
-        smooth_path(&open, &mut outside, Neighborhood::Four),
+        smooth_path(&open, &mut outside, Neighborhood::Four, 0.0),
         Err(PathError::OutOfBounds(cell(9, 0)))
     );
     assert_eq!(outside, vec![cell(0, 0), cell(9, 0)]);
+    for clearance in [-0.1, 0.5, f32::NAN] {
+        assert_eq!(
+            smooth_path(&open, &mut short, Neighborhood::Four, clearance),
+            Err(PathError::InvalidOptions)
+        );
+        assert_eq!(
+            line_of_sight(&open, cell(0, 0), cell(1, 1), Neighborhood::Four, clearance),
+            Err(PathError::InvalidOptions)
+        );
+    }
+}
+
+#[test]
+fn clearance_keeps_shortcuts_off_wall_corners() {
+    // The segment (8,10)-(9,4) passes 1/14 of a cell (in the max norm) from
+    // the corner of the wall at (9,8).
+    let mut grid = CostGrid::new(cell(12, 12), 1.0);
+    grid.set(cell(9, 8), None);
+    let mode = Neighborhood::Four;
+    assert!(line_of_sight(&grid, cell(8, 10), cell(9, 4), mode, 0.0).unwrap());
+    assert!(line_of_sight(&grid, cell(8, 10), cell(9, 4), mode, 0.07).unwrap());
+    assert!(!line_of_sight(&grid, cell(8, 10), cell(9, 4), mode, 0.08).unwrap());
+    // Passing a wall face at exactly the clearance is allowed.
+    assert!(line_of_sight(&grid, cell(8, 0), cell(8, 11), mode, 0.49).unwrap());
+
+    let (status, original) = find(&grid, cell(8, 10), cell(9, 4), mode);
+    cost_of(status);
+    let mut path = original.clone();
+    smooth_path(&grid, &mut path, mode, 0.0).unwrap();
+    assert_eq!(path, vec![cell(8, 10), cell(9, 4)]);
+    path.clone_from(&original);
+    smooth_path(&grid, &mut path, mode, 0.3).unwrap();
+    assert!(path.len() > 2);
+    for pair in path.windows(2) {
+        assert!(line_of_sight(&grid, pair[0], pair[1], mode, 0.3).unwrap());
+    }
+}
+
+#[test]
+fn wide_bodies_follow_smoothed_paths_on_random_maps() {
+    let mut rng = Rng(0x5eed_cafe);
+    let mut finder = PathFinder::new();
+    let mut follower = PathFollower::new(0.05);
+    let mut path = Vec::new();
+    let layout = GridLayout::new(Vec2::ZERO, 1.0);
+    let dt = 1.0 / 60.0;
+    for round in 0..600 {
+        let grid = random_grid(&mut rng, UVec2::new(16, 12));
+        let solids: Vec<_> = (0..12)
+            .flat_map(|y| (0..16).map(move |x| cell(x, y)))
+            .filter(|&cell| !grid.walkable(cell))
+            .map(|cell| layout.cell_bounds(cell))
+            .collect();
+        let start = cell(rng.next() % 16, rng.next() % 12);
+        let goal = cell(rng.next() % 16, rng.next() % 12);
+        let (size, speed) = if round % 2 == 0 {
+            (0.6, 4.0)
+        } else {
+            (0.8, 8.0)
+        };
+        let mode = MODES[round % 4];
+        let walkable = grid.walkable(start) && grid.walkable(goal);
+        let found = walkable
+            && matches!(
+                finder.find_path(&grid, start, goal, &options(mode), &mut path),
+                Ok(PathStatus::Found { .. })
+            );
+        // Diagonal squeezes leave no room for a body; only the strict rule
+        // guarantees clearance along the grid path itself.
+        if !found
+            || mode != Neighborhood::Eight(DiagonalRule::IfBothOpen) && mode != Neighborhood::Four
+        {
+            continue;
+        }
+        smooth_path(&grid, &mut path, mode, size / 2.0).unwrap();
+        follower.set_cells(&layout, &path);
+        let mut body = Body2D::new(layout.cell_center(start), Vec2::splat(size));
+        for _ in 0..3000 {
+            follower.steer_body_2d(&mut body, speed, dt);
+            // With clearance the body never even slides along a wall.
+            let free = body.position + body.velocity * dt;
+            body.move_and_slide(dt, &solids);
+            assert!(
+                body.position.distance(free) < 1e-4,
+                "round {round}: {path:?}"
+            );
+            if follower.is_finished() {
+                break;
+            }
+        }
+        assert!(follower.is_finished(), "round {round}: {path:?}");
+    }
 }
 
 #[test]
@@ -684,7 +776,7 @@ fn smoothing_keeps_detours_around_expensive_cells() {
         cell(4, 1),
         cell(4, 2),
     ];
-    smooth_path(&grid, &mut path, Neighborhood::Four).unwrap();
+    smooth_path(&grid, &mut path, Neighborhood::Four, 0.0).unwrap();
     // The diagonal (0,0)-(4,2) would cross the swamp, so the corner stays.
     assert_eq!(path, vec![cell(0, 0), cell(4, 0), cell(4, 2)]);
     let open = CostGrid::new(cell(5, 3), 1.0);
@@ -697,7 +789,7 @@ fn smoothing_keeps_detours_around_expensive_cells() {
         cell(4, 1),
         cell(4, 2),
     ];
-    smooth_path(&open, &mut path, Neighborhood::Four).unwrap();
+    smooth_path(&open, &mut path, Neighborhood::Four, 0.0).unwrap();
     assert_eq!(path, vec![cell(0, 0), cell(4, 2)]);
 }
 
@@ -857,8 +949,13 @@ fn followers_finish_only_at_the_goal() {
 
     // Pushed aside past a corner, the character goes back to round it.
     follower.set_waypoints([Vec2::ZERO, Vec2::new(5.0, 0.0), Vec2::new(5.0, 5.0)]);
+    follower.velocity(Vec2::new(4.0, 0.0), 1.0, 0.1);
     follower.velocity(Vec2::new(5.5, 2.0), 1.0, 0.1);
     assert_eq!(follower.next_waypoint(), Some(Vec2::new(5.0, 0.0)));
+    // Off the path beside the first waypoint, the character returns to it.
+    follower.set_waypoints([Vec2::ZERO, Vec2::new(5.0, 0.0)]);
+    follower.velocity(Vec2::new(0.4, 0.3), 1.0, 0.1);
+    assert_eq!(follower.next_waypoint(), Some(Vec2::ZERO));
 }
 
 #[test]
@@ -911,7 +1008,7 @@ fn agents_navigate_around_walls_with_bodies() {
             .find_path(&grid, start, goal, &PathOptions::default(), &mut path)
             .unwrap();
         cost_of(status);
-        smooth_path(&grid, &mut path, mode).unwrap();
+        smooth_path(&grid, &mut path, mode, 0.3).unwrap();
         follower.set_cells(&layout, &path);
         for _ in 0..600 {
             follower.steer_body_2d(&mut body, 4.0, 1.0 / 60.0);

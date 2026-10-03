@@ -5,14 +5,15 @@ use glam::{UVec2, Vec2};
 /// Steers a character through world-space waypoints.
 ///
 /// The follower only chooses velocities; collision stays with
-/// [`Body2D::move_and_slide`] or [`Body3D::move_and_slide`]. An intermediate
-/// waypoint is reached within `arrive_radius` or one step (`speed * dt`),
-/// whichever is larger, or once the character has moved beyond it along the
-/// segment leading to it while staying within that tolerance of the
-/// segment's line, so overshooting never turns back. The first waypoint is skipped when the character is
-/// already ahead of it toward the second, avoiding a step back to its
-/// starting cell's center. The final waypoint is finished only inside
-/// `arrive_radius`, and velocity is limited so the character stops on it.
+/// [`Body2D::move_and_slide`] or [`Body3D::move_and_slide`]. A waypoint is
+/// reached within `arrive_radius`. Each step is shortened so it ends on the
+/// current waypoint instead of jumping past it, keeping the character on the
+/// path's segments, which [`smooth_path`](super::smooth_path) checked for
+/// clearance. Any waypoint but the last also counts once the character is
+/// beyond it along its segment and within `arrive_radius` of that segment's
+/// line: the incoming segment, or the outgoing one for the first waypoint, so
+/// a character on the path ahead of its starting cell's center does not step
+/// back. A character pushed farther aside returns to the waypoint first.
 ///
 /// ```
 /// use rayengine_core::collision::Body2D;
@@ -92,39 +93,24 @@ impl PathFollower {
     /// Velocity toward the current waypoint at `speed` units per second.
     ///
     /// Advances past reached waypoints first, returns zero once finished, and
-    /// slows down so one step of `dt` seconds does not overshoot the final
+    /// slows down so one step of `dt` seconds does not overshoot the current
     /// waypoint. Panics for a nonfinite position, a negative or nonfinite
     /// speed, or a negative or nonfinite `dt`.
     pub fn velocity(&mut self, position: Vec2, speed: f32, dt: f32) -> Vec2 {
         assert!(position.is_finite() && speed.is_finite() && speed >= 0.0);
         assert!(dt.is_finite() && dt >= 0.0);
         let last = self.waypoints.len().saturating_sub(1);
-        // One step can jump over the arrival radius, so intermediate
-        // waypoints accept anything within a step; the speed limit below
-        // lets the final waypoint keep the strict radius.
-        let tolerance = self.arrive_radius.max(speed * dt);
         while let Some(&target) = self.waypoints.get(self.next) {
             let offset = position - target;
-            let radius = if self.next == last {
-                self.arrive_radius
-            } else {
-                tolerance
+            let reached = offset.length() <= self.arrive_radius;
+            let segment = match self.next {
+                next if next == last => Vec2::ZERO,
+                0 => self.waypoints[1] - target,
+                next => target - self.waypoints[next - 1],
             };
-            let reached = offset.length() <= radius;
-            // An intermediate waypoint is also passed once the character is
-            // beyond it along the incoming segment and within the tolerance
-            // of that segment's line, so overshoots do not turn back but a
-            // character pushed aside still rounds the corner. The first
-            // waypoint (usually the start cell's center) is skipped once the
-            // character is ahead of it. The final one must be reached.
-            let passed = match self.next.checked_sub(1) {
-                _ if self.next == last => false,
-                Some(previous) => {
-                    let direction = (target - self.waypoints[previous]).normalize_or_zero();
-                    direction.dot(offset) > 0.0 && direction.perp_dot(offset).abs() <= tolerance
-                }
-                None => (self.waypoints[1] - target).dot(offset) > 0.0,
-            };
+            let direction = segment.normalize_or_zero();
+            let passed = direction.dot(offset) > 0.0
+                && direction.perp_dot(offset).abs() <= self.arrive_radius;
             if !(reached || passed) {
                 break;
             }
@@ -135,10 +121,11 @@ impl PathFollower {
         };
         let offset = target - position;
         let distance = offset.length();
-        let mut speed = speed;
-        if self.next + 1 == self.waypoints.len() && dt > 0.0 {
-            speed = speed.min(distance / dt);
-        }
+        let speed = if dt > 0.0 {
+            speed.min(distance / dt)
+        } else {
+            speed
+        };
         offset / distance * speed
     }
 

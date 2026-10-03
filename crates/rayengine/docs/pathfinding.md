@@ -122,7 +122,11 @@ Grid paths turn at cell centers. `smooth_path` removes waypoints a straight
 segment can skip, keeping only corners. A shortcut must cross walkable cells
 only, respect the corner rule where it passes exactly through a cell corner,
 and cost no more than the cells it replaces, so cutting across mud must save
-more than the mud costs.
+more than the mud costs. The last argument is the following body's clearance:
+its half-extent divided by the cell size, below half a cell. Shortcuts then
+keep the whole body off walls instead of only its center; `0.0` checks bare
+lines, which lets a wide body catch on a corner. `line_of_sight` takes the
+same clearance.
 
 `PathFollower` turns cells into world positions through a `GridLayout` and
 sets a body's velocity; collision stays with `move_and_slide`:
@@ -140,7 +144,8 @@ let mut finder = PathFinder::new();
 let mut path = Vec::new();
 let options = PathOptions::default();
 finder.find_path(&grid, UVec2::ZERO, UVec2::new(5, 0), &options, &mut path).unwrap();
-smooth_path(&grid, &mut path, options.neighborhood).unwrap();
+// The 0.6-wide body below has a clearance of 0.3 cells.
+smooth_path(&grid, &mut path, options.neighborhood, 0.3).unwrap();
 
 let mut follower = PathFollower::new(0.05);
 follower.set_cells(&layout, &path);
@@ -154,17 +159,17 @@ assert!(follower.is_finished());
 assert!(body.position.distance(layout.cell_center(UVec2::new(5, 0))) < 0.06);
 ```
 
-An intermediate waypoint counts as reached within the arrival radius or one
-step of movement, whichever is larger, or once the body has moved beyond it
-along the segment leading to it, within that tolerance of the segment's line,
-so a fast body never turns back. The final waypoint must be reached within the
-arrival radius, and speed is limited so the body stops on it.
+A waypoint counts as reached within the arrival radius. Steps are shortened
+so they end on the current waypoint instead of jumping past it, so even a fast
+body stays on the checked segments. A body pushed slightly past a waypoint
+along its segment moves on rather than turning back; pushed farther aside, it
+returns to the waypoint first.
 `steer_body_3d` reads waypoints as world `(x, z)` and keeps vertical velocity
 for gravity. `GridLayout::cell_at` converts a world position back to a cell.
 
-Segments are checked as lines between cell centers. A body wider than a point
-can brush a wall corner and slide along it; keep bodies smaller than a cell
-and prefer `DiagonalRule::IfBothOpen` for tight maps.
+Clearance covers shortcuts only. Grid steps keep a body narrower than a cell
+off walls under `Neighborhood::Four` or `DiagonalRule::IfBothOpen`; the looser
+diagonal rules let paths squeeze past corners that a wide body catches on.
 
 ## Many agents, one target
 

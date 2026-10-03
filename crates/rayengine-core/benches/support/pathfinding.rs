@@ -48,12 +48,17 @@ pub fn queries(c: &mut Criterion) {
         }
 
         let mut group = c.benchmark_group("pathfinding_astar");
-        group.throughput(Throughput::Elements(cells));
         for (name, grid, options) in [
             ("maze_four", &grid, &four),
             ("maze_eight", &grid, &eight),
             ("open_eight", &open, &eight),
         ] {
+            // Throughput counts expanded cells: an open map expands only the
+            // diagonal, a maze most of the grid.
+            finder
+                .find_path(grid, start, goal, options, &mut path)
+                .unwrap();
+            group.throughput(Throughput::Elements(finder.expanded()));
             group.bench_function(BenchmarkId::new(name, size), |b| {
                 b.iter(|| {
                     black_box(
@@ -75,7 +80,7 @@ pub fn queries(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("maze_eight", size), |b| {
             b.iter(|| {
                 path.clone_from(&fixture);
-                smooth_path(&grid, &mut path, eight.neighborhood).unwrap();
+                smooth_path(&grid, &mut path, eight.neighborhood, 0.3).unwrap();
                 black_box(path.len())
             })
         });

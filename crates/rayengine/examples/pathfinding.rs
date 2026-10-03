@@ -40,7 +40,8 @@ struct Navigation {
     previous: Vec<Vec2>,
     scout: Body2D,
     previous_scout: Vec2,
-    replan_in: f32,
+    /// Set when the target moves; nothing else invalidates the scout's path.
+    replan: bool,
 }
 
 impl Navigation {
@@ -73,7 +74,7 @@ impl Navigation {
             previous: Vec::new(),
             scout: Body2D::new(Vec2::ZERO, Vec2::splat(0.6)),
             previous_scout: Vec2::ZERO,
-            replan_in: 0.0,
+            replan: false,
         };
         navigation.reset();
         navigation
@@ -110,7 +111,7 @@ impl Navigation {
         // Drop a half-finished search for the old target.
         self.finder.cancel();
         self.follower.clear();
-        self.replan_in = 0.0;
+        self.replan = true;
     }
 
     fn plan_scout(&mut self) {
@@ -120,8 +121,8 @@ impl Navigation {
         };
         let status = if self.finder.is_pending() {
             self.finder.resume(&self.grid, Some(BUDGET), &mut self.path)
-        } else if self.replan_in <= 0.0 {
-            self.replan_in = 0.5;
+        } else if self.replan {
+            self.replan = false;
             let (Some(start), Some(goal)) =
                 (self.cell(self.scout.position), self.cell(self.target))
             else {
@@ -133,7 +134,8 @@ impl Navigation {
             return;
         };
         if let Ok(PathStatus::Found { .. }) = status {
-            smooth_path(&self.grid, &mut self.path, options.neighborhood)
+            // The scout's half-extent, in cells, keeps shortcuts off corners.
+            smooth_path(&self.grid, &mut self.path, options.neighborhood, 0.3)
                 .expect("paths stay inside the grid");
             self.follower.set_cells(&self.layout, &self.path);
         }
@@ -179,7 +181,6 @@ impl Game for Navigation {
         }
 
         self.previous_scout = self.scout.position;
-        self.replan_in -= dt;
         self.plan_scout();
         self.follower.steer_body_2d(&mut self.scout, SPEED, dt);
         self.scout.move_and_slide(dt, &self.walls);
