@@ -13,9 +13,9 @@ environment["CARGO_TARGET_DIR"] = str(Path(environment.get("CARGO_TARGET_DIR", r
 subprocess.run(["cargo", "build", "-p", "rayengine-cli", "--locked"], cwd=root, env=environment, check=True)
 binary = Path(environment["CARGO_TARGET_DIR"]) / "debug" / "rayengine"
 with tempfile.TemporaryDirectory(prefix="rayengine-template-") as temporary:
-    for kind in ("2d", "3d"):
+    for kind in ("2d", "3d", "topdown", "platformer"):
         project = Path(temporary) / f"game-{kind}"
-        for arguments in (["new", str(project), "--kind", kind, "--sdk-path", str(root / "crates/rayengine")], ["check", str(project)]):
+        for arguments in (["new", str(project), "--template", kind, "--sdk-path", str(root / "crates/rayengine")], ["check", str(project)]):
             result = subprocess.run([str(binary), "--json", *arguments], env=environment, text=True, capture_output=True)
             response = json.loads(result.stdout)
             if result.returncode or not response["ok"]:

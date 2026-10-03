@@ -9,6 +9,11 @@ use std::{
     process::{Command, ExitCode},
 };
 
+mod lifecycle;
+mod package;
+mod plugins;
+mod watch;
+
 #[derive(Parser)]
 #[command(version, about = "Small Rust game projects over raylib")]
 struct Cli {
@@ -26,6 +31,9 @@ enum Action {
         path: PathBuf,
         #[arg(long, value_enum, default_value = "2d")]
         kind: Kind,
+        /// Named starter; supersedes --kind (which remains a compatibility alias).
+        #[arg(long, value_enum, conflicts_with = "kind")]
+        template: Option<Kind>,
         /// Override the package name (default: directory name).
         #[arg(long)]
         name: Option<String>,
@@ -85,7 +93,79 @@ enum Action {
         args: Vec<String>,
     },
     /// Check Linux native build prerequisites without modifying the system.
-    Doctor,
+    Doctor {
+        /// Print distro-specific install commands without running them.
+        #[arg(long)]
+        fix_hints: bool,
+    },
+    /// List available playable starters.
+    Templates,
+    /// Build a release executable, relocatable Linux folder and .tar.gz archive.
+    #[command(alias = "bundle")]
+    Package {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        bin: Option<String>,
+        /// Parent directory for bundles (default: project bundles/).
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Enable Cargo features required by the selected executable.
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
+    },
+    /// Add a first-party Cargo dependency and its manifest namespace.
+    Add {
+        plugin: String,
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Local plugin crate; otherwise infer from a local SDK or match its version.
+        #[arg(long)]
+        plugin_path: Option<PathBuf>,
+        /// Enable optional plugin features, comma separated.
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
+    },
+    /// Remove a first-party dependency and its base/profile namespaces.
+    Remove {
+        plugin: String,
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Rebuild and restart on source, asset and manifest changes; Ctrl-C stops.
+    Watch {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        release: bool,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        bin: Option<String>,
+        #[arg(long, default_value = "200", value_parser = clap::value_parser!(u64).range(1..))]
+        debounce_ms: u64,
+        /// Enable Cargo features required by the selected executable.
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
+        /// Stop after this many rebuild cycles (includes the initial build).
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        cycles: Option<u32>,
+        /// Stop after this many milliseconds, including builds (for automation).
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+        timeout_ms: Option<u64>,
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+    /// Remove Cargo build outputs and CLI-generated bundles.
+    Clean {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Also clean bundles generated in this custom output directory.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -94,6 +174,8 @@ enum Kind {
     TwoD,
     #[value(name = "3d")]
     ThreeD,
+    Topdown,
+    Platformer,
 }
 
 struct Failure {
@@ -147,7 +229,13 @@ fn main() -> ExitCode {
         Action::Check { .. } => "check",
         Action::Build { .. } => "build",
         Action::Run { .. } => "run",
-        Action::Doctor => "doctor",
+        Action::Doctor { .. } => "doctor",
+        Action::Templates => "templates",
+        Action::Package { .. } => "package",
+        Action::Add { .. } => "add",
+        Action::Remove { .. } => "remove",
+        Action::Watch { .. } => "watch",
+        Action::Clean { .. } => "clean",
     };
     match execute(cli.command, cli.json) {
         Ok(data) => {
@@ -170,6 +258,13 @@ fn main() -> ExitCode {
                 );
             } else {
                 eprintln!("rayengine: {}", error.message);
+                if command == "doctor"
+                    && let Some(hints) = error.details["fix_hints"].as_array()
+                {
+                    for hint in hints {
+                        eprintln!("Hint (not executed): {}", hint.as_str().unwrap_or(""));
+                    }
+                }
                 if let Some(stderr) = error.details.get("stderr").and_then(Value::as_str) {
                     eprint!("{stderr}");
                 }
@@ -184,9 +279,10 @@ fn execute(action: Action, json_mode: bool) -> Result<Value> {
         Action::New {
             path,
             kind,
+            template,
             name,
             sdk_path,
-        } => create_project(&path, kind, name, sdk_path),
+        } => create_project(&path, template.unwrap_or(kind), name, sdk_path),
         Action::NewPlugin {
             path,
             name,
@@ -254,7 +350,56 @@ fn execute(action: Action, json_mode: bool) -> Result<Value> {
             &args,
             json_mode,
         ),
-        Action::Doctor => doctor(),
+        Action::Doctor { fix_hints } => doctor(fix_hints),
+        Action::Templates => Ok(json!({ "templates": [
+            {"name": "2d", "description": "Platform physics with primitive drawing", "plugins": []},
+            {"name": "3d", "description": "First-person 3D movement", "plugins": []},
+            {"name": "topdown", "description": "Top-down tilemap movement and collision", "plugins": ["tilemap"]},
+            {"name": "platformer", "description": "Tilemap platform physics and jumping", "plugins": ["tilemap"]}
+        ] })),
+        Action::Package {
+            path,
+            profile,
+            bin,
+            output,
+            features,
+        } => package::package(
+            &path,
+            profile.as_deref(),
+            bin.as_deref(),
+            output.as_deref(),
+            &features,
+        ),
+        Action::Add {
+            plugin,
+            path,
+            plugin_path,
+            features,
+        } => plugins::edit(&path, &plugin, true, plugin_path.as_deref(), &features),
+        Action::Remove { plugin, path } => plugins::edit(&path, &plugin, false, None, &[]),
+        Action::Clean { path, output } => lifecycle::clean(&path, output.as_deref()),
+        Action::Watch {
+            path,
+            release,
+            profile,
+            bin,
+            debounce_ms,
+            features,
+            cycles,
+            timeout_ms,
+            args,
+        } => watch::watch(watch::Options {
+            path,
+            release,
+            profile,
+            bin,
+            debounce_ms,
+            features,
+            cycles,
+            timeout_ms,
+            args,
+            json_mode,
+        }),
     }
 }
 
@@ -378,6 +523,10 @@ fn create_package(
             format!("{}: {e}", path.display()),
         )
     })?;
+    let mut destination = NewDirectory {
+        path: path.to_path_buf(),
+        committed: false,
+    };
     fs::create_dir(path.join("src")).map_err(io_error)?;
     // Nested standalone plugins are explicit dependencies, not automatically
     // adopted members of a generated game's workspace.
@@ -393,10 +542,24 @@ fn create_package(
     let (source_path, source, kind) = match template {
         Template::Game(Kind::TwoD) => ("src/main.rs", include_str!("templates/2d.rs"), "2d"),
         Template::Game(Kind::ThreeD) => ("src/main.rs", include_str!("templates/3d.rs"), "3d"),
+        Template::Game(Kind::Topdown) => (
+            "src/main.rs",
+            include_str!("templates/topdown.rs"),
+            "topdown",
+        ),
+        Template::Game(Kind::Platformer) => (
+            "src/main.rs",
+            include_str!("templates/platformer.rs"),
+            "platformer",
+        ),
         Template::Plugin => ("src/lib.rs", include_str!("templates/plugin.rs"), "plugin"),
     };
     fs::write(path.join(source_path), source).map_err(io_error)?;
-    fs::write(path.join(".gitignore"), "/target/\n/artifacts/\n").map_err(io_error)?;
+    fs::write(
+        path.join(".gitignore"),
+        "/target/\n/artifacts/\n/bundles/\n",
+    )
+    .map_err(io_error)?;
     let readme = match template {
         Template::Game(_) => format!(
             "# {name}\n\nA rayengine game.\n\n```sh\ncargo run\ncargo check\ncargo run -- --frames 60 --screenshot artifacts/frame.png\n```\n\nrayengine.toml describes runtime defaults and asset discovery; Cargo.toml
@@ -419,10 +582,33 @@ The SDK dependency can be changed in Cargo.toml. Keep game state in\nordinary Ru
         fs::create_dir(path.join("assets")).map_err(io_error)?;
         fs::write(path.join("assets/.gitkeep"), "").map_err(io_error)?;
         files.extend(["rayengine.toml", "assets/.gitkeep"]);
+        if matches!(template, Template::Game(Kind::Topdown | Kind::Platformer)) {
+            plugins::edit(path, "tilemap", true, None, &[])?;
+            let level = if kind == "topdown" {
+                include_str!("templates/topdown.toml")
+            } else {
+                include_str!("templates/platformer.toml")
+            };
+            fs::write(path.join("assets/level.toml"), level).map_err(io_error)?;
+            files.push("assets/level.toml");
+        }
     }
     let project = path.canonicalize().map_err(io_error)?;
+    destination.committed = true;
     Ok(json!({ "path": project, "name": name, "kind": kind,
         "sdk_path": sdk, "files": files }))
+}
+
+struct NewDirectory {
+    path: PathBuf,
+    committed: bool,
+}
+impl Drop for NewDirectory {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 }
 
 fn validate_name(name: &str) -> Result<()> {
@@ -516,7 +702,7 @@ fn cargo_task(
     )
 }
 
-fn doctor() -> Result<Value> {
+fn doctor(fix_hints: bool) -> Result<Value> {
     let mut checks = Vec::new();
     for (name, args) in [
         ("rustc", &["--version"][..]),
@@ -550,12 +736,17 @@ fn doctor() -> Result<Value> {
             let ok = Command::new("pkg-config")
                 .arg("--exists")
                 .args(packages)
-                .status()
-                .is_ok_and(|s| s.success());
+                .output()
+                .is_ok_and(|out| out.status.success());
             checks.push(json!({ "name": name, "required": required, "ok": ok, "detail": packages.join(", ") }));
         }
     }
-    let data = json!({ "engine_version": env!("CARGO_PKG_VERSION"), "platform": std::env::consts::OS, "checks": checks });
+    let hints = if fix_hints {
+        lifecycle::fix_hints()
+    } else {
+        vec![]
+    };
+    let data = json!({ "engine_version": env!("CARGO_PKG_VERSION"), "platform": std::env::consts::OS, "checks": checks, "fix_hints": hints });
     if checks
         .iter()
         .any(|c| c["required"] == true && c["ok"] == false)
@@ -616,12 +807,21 @@ fn print_success(command: &str, data: &Value) {
                     );
                 }
             }
+            if let Some(hints) = data["fix_hints"].as_array() {
+                for hint in hints {
+                    println!("Hint (not executed): {}", hint.as_str().unwrap_or(""));
+                }
+            }
         }
         "info" => println!(
             "{}",
             serde_json::to_string_pretty(data).expect("JSON value")
         ),
-        _ => println!("cargo {command} completed"),
+        "check" | "build" | "run" => println!("cargo {command} completed"),
+        _ => println!(
+            "{}",
+            serde_json::to_string_pretty(data).expect("JSON value")
+        ),
     }
 }
 
