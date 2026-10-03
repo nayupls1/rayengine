@@ -12,12 +12,18 @@ pub(crate) struct QualityTargets {
     pub plan: RenderPlan,
 }
 
-fn target(
+pub(crate) fn target(
     rl: &mut RaylibHandle,
     thread: &RaylibThread,
     size: (u32, u32),
     point: bool,
 ) -> Result<RenderTexture2D, Error> {
+    let limit = gpu::max_dimension(thread)?;
+    if size.0 == 0 || size.1 == 0 || size.0.max(size.1) > limit {
+        return Err(Error::Backend(format!(
+            "render dimensions exceed device limit {limit}"
+        )));
+    }
     let target = gpu::load_target(rl, thread, size)?;
     if !target.is_render_texture_valid()
         || !target.texture().is_texture_valid()
@@ -82,6 +88,15 @@ impl QualityTargets {
         thread: &RaylibThread,
         fxaa: Option<&mut Shader>,
     ) {
+        self.resolve_with_ui(rl, thread, fxaa, true);
+    }
+    pub fn resolve_with_ui(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        fxaa: Option<&mut Shader>,
+        include_ui: bool,
+    ) {
         let Some(output) = &mut self.output else {
             return;
         };
@@ -105,7 +120,7 @@ impl QualityTargets {
             blit(&mut world, self.world.texture(), self.plan.output);
         }
         drop(world);
-        if let Some(ui) = &self.ui {
+        if include_ui && let Some(ui) = &self.ui {
             let mut overlay = raw.begin_blend_mode(BlendMode::BLEND_ALPHA_PREMULTIPLY);
             blit(&mut overlay, ui.texture(), self.plan.output);
         }
@@ -115,7 +130,7 @@ impl QualityTargets {
     }
 }
 
-fn blit(raw: &mut impl RaylibDraw, texture: &WeakTexture2D, size: (u32, u32)) {
+pub(crate) fn blit(raw: &mut impl RaylibDraw, texture: &WeakTexture2D, size: (u32, u32)) {
     raw.draw_texture_pro(
         texture,
         Rectangle::new(0.0, 0.0, texture.width as f32, -(texture.height as f32)),

@@ -47,6 +47,9 @@ pub struct MeshId {
 
 /// Runtime asset collection. Load during initialization; draw using typed handles.
 pub struct Assets<'audio> {
+    pub(crate) targets: crate::targets::TargetAssets,
+    pub(crate) post_processing: crate::post_processing::PostProcessing,
+    pub(crate) target_reservation: u64,
     pub(crate) fonts: crate::fonts::FontAssets,
     pub(crate) textures: Vec<Option<Texture2D>>,
     models: Vec<Option<Model>>,
@@ -71,6 +74,8 @@ impl<'audio> Assets<'audio> {
         let (shaders, materials) = self.surfaces.resource_counts();
         let (fonts, font_atlases, font_bytes) = self.fonts.usage();
         crate::diagnostics::ResourceCounts {
+            render_targets: self.targets.usage().0,
+            render_target_bytes: self.targets.usage().1,
             fonts,
             font_atlases,
             font_bytes,
@@ -96,6 +101,9 @@ impl<'audio> Assets<'audio> {
     }
     pub(crate) fn new(audio: Option<&'audio RaylibAudio>) -> Self {
         Self {
+            targets: crate::targets::TargetAssets::default(),
+            post_processing: crate::post_processing::PostProcessing::default(),
+            target_reservation: 0,
             fonts: crate::fonts::FontAssets::new(),
             textures: Vec::new(),
             models: Vec::new(),
@@ -134,6 +142,78 @@ impl<'audio> Assets<'audio> {
         options: crate::fonts::FontOptions,
     ) -> Result<crate::fonts::FontId, Error> {
         self.fonts.load(thread, path, options)
+    }
+
+    /// Registers an engine-owned target. Storage is allocated before the next draw.
+    /// Viewport-relative targets are recreated on resize/DPI changes and start transparent.
+    pub fn create_render_target(
+        &mut self,
+        desc: crate::targets::RenderTargetDesc,
+    ) -> Result<crate::targets::RenderTargetId, Error> {
+        self.targets.create(desc)
+    }
+    /// Releases a target and invalidates its handle. An active target cannot be unloaded.
+    pub fn unload_render_target(&mut self, id: crate::targets::RenderTargetId) -> bool {
+        self.targets.unload(id)
+    }
+    /// Borrows the target color attachment. None before allocation, while drawing
+    /// into it, or after unloading. Native sampling has vertically inverted UVs.
+    pub fn render_target_texture(
+        &self,
+        id: crate::targets::RenderTargetId,
+    ) -> Option<&WeakTexture2D> {
+        self.targets.texture(id)
+    }
+    /// Current allocated custom target count and RGBA+depth bytes.
+    pub fn render_target_usage(&self) -> (u64, u64) {
+        self.targets.usage()
+    }
+    /// Selects an ordered chain for the next frame. Validation is atomic; materials
+    /// and shaders remain owned by Assets and may be reused when toggling effects.
+    pub fn set_post_processing(
+        &mut self,
+        chain: crate::post_processing::PostProcessing,
+    ) -> Result<(), Error> {
+        self.validate_post_processing(&chain)?;
+        self.post_processing = chain;
+        Ok(())
+    }
+    pub(crate) fn post_blit(
+        &mut self,
+        material: MaterialId,
+        raw: &mut impl RaylibDraw,
+        source: &WeakTexture2D,
+        size: (u32, u32),
+    ) -> Result<(), Error> {
+        let mut surface = self
+            .surfaces
+            .prepare(material, &self.textures, &self.targets, Color::WHITE)
+            .ok_or_else(|| Error::Asset("post-processing dependency is unloaded".into()))?;
+        surface.blit(raw, source, size);
+        Ok(())
+    }
+    /// Current frame-effect configuration.
+    pub fn post_processing(&self) -> &crate::post_processing::PostProcessing {
+        &self.post_processing
+    }
+    pub(crate) fn validate_post_processing(
+        &self,
+        chain: &crate::post_processing::PostProcessing,
+    ) -> Result<(), Error> {
+        for id in &chain.materials {
+            let desc = self
+                .material(*id)
+                .ok_or_else(|| Error::Asset("post-processing material is unloaded".into()))?;
+            self.validate_material(desc)?;
+            if desc.shader.is_none()
+                || desc.shading != Shading::Unlit
+                || desc.texture.is_some()
+                || desc.render_target.is_some()
+            {
+                return Err(Error::Asset("post-processing requires a custom unlit shader with no material texture (texture0 is the previous pass)".into()));
+            }
+        }
+        Ok(())
     }
 
     /// Borrow a loaded texture, or `None` after it has been unloaded.
@@ -175,7 +255,11 @@ impl<'audio> Assets<'audio> {
         if desc.shading == Shading::Lit {
             // Preserve Ok(false) for stale dependencies, even if transform/normals
             // are also invalid. prepare() will reject the stale resource handle.
-            if desc.texture.is_some_and(|id| self.texture(id).is_none()) {
+            if desc.texture.is_some_and(|id| self.texture(id).is_none())
+                || desc
+                    .render_target
+                    .is_some_and(|id| self.targets.texture(id).is_none())
+            {
                 return Ok(());
             }
             let valid = if let Some(id) = mesh {
@@ -208,7 +292,7 @@ impl<'audio> Assets<'audio> {
     /// without creating or replacing a material. Useful before a plugin commits
     /// several resource changes as one transaction.
     pub fn validate_material(&self, desc: &MaterialDesc) -> Result<(), Error> {
-        self.surfaces.validate(desc, &self.textures)
+        self.surfaces.validate(desc, &self.textures, &self.targets)
     }
 
     /// Unloads only this description; shared shaders/textures stay alive.
@@ -237,7 +321,8 @@ impl<'audio> Assets<'audio> {
         if self.material(id).is_none() {
             return Err(Error::Asset("material is unloaded".into()));
         }
-        self.surfaces.validate(&desc, &self.textures)?;
+        self.surfaces
+            .validate(&desc, &self.textures, &self.targets)?;
         self.surfaces.materials[id.0] = Some(desc);
         Ok(())
     }
@@ -260,7 +345,8 @@ impl<'audio> Assets<'audio> {
         desc: MaterialDesc,
     ) -> Result<MaterialId, Error> {
         self.surfaces.initialize(raylib, thread)?;
-        self.surfaces.validate(&desc, &self.textures)?;
+        self.surfaces
+            .validate(&desc, &self.textures, &self.targets)?;
         let id = MaterialId(self.surfaces.materials.len());
         self.surfaces.materials.push(Some(desc));
         Ok(id)
@@ -321,7 +407,9 @@ impl<'audio> Assets<'audio> {
         tint: Color,
     ) -> Option<(&Mesh, materials::Prepared<'_>)> {
         let mesh = self.meshes.get(mesh)?;
-        let material = self.surfaces.prepare(material, &self.textures, tint)?;
+        let material = self
+            .surfaces
+            .prepare(material, &self.textures, &self.targets, tint)?;
         Some((mesh, material))
     }
 
@@ -332,7 +420,9 @@ impl<'audio> Assets<'audio> {
         tint: Color,
     ) -> Option<(&Model, materials::Prepared<'_>)> {
         let model = self.models.get(model.0)?.as_ref()?;
-        let material = self.surfaces.prepare(material, &self.textures, tint)?;
+        let material = self
+            .surfaces
+            .prepare(material, &self.textures, &self.targets, tint)?;
         Some((model, material))
     }
 

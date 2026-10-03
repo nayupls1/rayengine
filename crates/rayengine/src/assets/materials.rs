@@ -18,6 +18,7 @@ pub(super) struct ShaderAsset {
     mode: i32,
     cutoff: i32,
     last_alpha: Option<(i32, f32)>,
+    premultiplied: i32,
     uniforms: Vec<Uniform>,
     names: HashMap<String, usize>,
 }
@@ -71,9 +72,11 @@ impl ShaderAsset {
         }
         let mode = native.get_shader_location("rayengineAlphaMode");
         let cutoff = native.get_shader_location("rayengineAlphaCutoff");
+        let premultiplied = native.get_shader_location("rayenginePremultipliedTexture");
         for (name, location, kind) in [
             ("rayengineAlphaMode", mode, 0x1404),
             ("rayengineAlphaCutoff", cutoff, 0x1406),
+            ("rayenginePremultipliedTexture", premultiplied, 0x1404),
         ] {
             if location >= 0 && gpu::uniform_type(&native, name)? != kind {
                 return Err(Error::Asset(format!("{name} has an invalid GLSL type")));
@@ -84,6 +87,7 @@ impl ShaderAsset {
             mode,
             cutoff,
             last_alpha: None,
+            premultiplied,
             uniforms: Vec::new(),
             names: HashMap::new(),
         })
@@ -109,6 +113,7 @@ impl ShaderAsset {
                     | "texture0"
                     | "rayengineAlphaMode"
                     | "rayengineAlphaCutoff"
+                    | "rayenginePremultipliedTexture"
             )
         {
             return Err(Error::Asset(
@@ -230,8 +235,17 @@ impl MaterialAssets {
         &self,
         desc: &MaterialDesc,
         textures: &[Option<Texture2D>],
+        targets: &crate::targets::TargetAssets,
     ) -> Result<(), Error> {
         desc.alpha.validate()?;
+        if desc.texture.is_some() && desc.render_target.is_some() {
+            return Err(Error::Asset(
+                "material may sample a texture or a render target, not both".into(),
+            ));
+        }
+        if desc.render_target.is_some_and(|id| !targets.valid(id)) {
+            return Err(Error::Asset("material render target is unloaded".into()));
+        }
         if desc.shading == Shading::Lit && desc.shader.is_some() {
             return Err(Error::Asset("Shading::Lit uses the built-in lighting shader; remove the custom shader or use Shading::Unlit".into()));
         }
@@ -299,13 +313,17 @@ impl MaterialAssets {
         &'a mut self,
         id: MaterialId,
         textures: &'a [Option<Texture2D>],
+        targets: &'a crate::targets::TargetAssets,
         tint: Color,
     ) -> Option<Prepared<'a>> {
         let desc = self.materials.get(id.0)?.as_ref()?;
-        let texture = match desc.texture {
-            Some(TextureId(id)) => Some(textures.get(id)?.as_ref()?),
-            None => None,
-        };
+        let texture: Option<&dyn AsRef<raylib::ffi::Texture2D>> =
+            match (desc.texture, desc.render_target) {
+                (Some(TextureId(id)), None) => Some(textures.get(id)?.as_ref()?),
+                (None, Some(id)) => Some(targets.texture(id)?),
+                (None, None) => None,
+                _ => return None,
+            };
         let shader = match desc.shader {
             Some(ShaderId(id)) => self.shaders.get_mut(id)?.as_mut()?,
             None => {
@@ -338,6 +356,12 @@ impl MaterialAssets {
                 uniform.uploaded = Some(effective);
             }
         }
+        if shader.premultiplied >= 0 {
+            shader.native.set_shader_value(
+                shader.premultiplied,
+                i32::from(desc.render_target.is_some()),
+            );
+        }
         let (mode, cutoff) = match desc.alpha {
             AlphaMode::Opaque => (0, 0.0),
             AlphaMode::Cutout(t) => (1, t),
@@ -356,7 +380,7 @@ impl MaterialAssets {
         }
         let mul = |a: u8, b: u8| ((u16::from(a) * u16::from(b) + 127) / 255) as u8;
         Some(Prepared {
-            shader: &shader.native,
+            shader: &mut shader.native,
             texture,
             tint: Color::new(
                 mul(desc.tint.r, tint.r),
@@ -370,12 +394,28 @@ impl MaterialAssets {
 }
 
 pub(crate) struct Prepared<'a> {
-    shader: &'a Shader,
-    texture: Option<&'a Texture2D>,
+    shader: &'a mut Shader,
+    texture: Option<&'a dyn AsRef<raylib::ffi::Texture2D>>,
     tint: Color,
     pub(crate) alpha: AlphaMode,
 }
 impl Prepared<'_> {
+    pub(crate) fn blit(
+        &mut self,
+        raw: &mut impl RaylibDraw,
+        source: &WeakTexture2D,
+        size: (u32, u32),
+    ) {
+        let mut shader = raw.begin_shader_mode(self.shader);
+        shader.draw_texture_pro(
+            source,
+            Rectangle::new(0.0, 0.0, source.width as f32, -(source.height as f32)),
+            Rectangle::new(0.0, 0.0, size.0 as f32, size.1 as f32),
+            Vector2::zero(),
+            0.0,
+            crate::render::premultiply(self.tint),
+        );
+    }
     pub(crate) fn draw<D: RaylibDraw + RaylibDraw3D>(
         &self,
         raw: &mut D,
