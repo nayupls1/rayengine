@@ -39,6 +39,7 @@ pub struct Frame<'frame, 'audio> {
     pub(crate) raylib: &'frame mut RaylibHandle,
     pub(crate) thread: &'frame RaylibThread,
     pub(crate) target: &'frame mut RenderTexture2D,
+    pub(crate) ui_target: Option<&'frame mut RenderTexture2D>,
     /// Assets available on the render thread, including explicit unloading.
     pub assets: &'frame mut Assets<'audio>,
     /// Current viewport in logical window coordinates.
@@ -141,12 +142,18 @@ impl Frame<'_, '_> {
         self.assets.replace_mesh(self.thread, id, data)
     }
 
-    /// Clears color and depth at the start of the game frame.
+    /// Clears world color/depth and the optional transparent native UI layer.
+    /// Input color is straight RGBA; targets store premultiplied RGBA.
     pub fn clear(&mut self, color: Color) {
         count!(self.counters, clears, 1);
         self.raylib
             .begin_texture_mode(self.thread, self.target)
-            .clear_background(color);
+            .clear_background(premultiply(color));
+        if let Some(ui) = self.ui_target.as_mut() {
+            self.raylib
+                .begin_texture_mode(self.thread, ui)
+                .clear_background(Color::BLANK);
+        }
     }
 
     /// Draws a 2D pass in world units, maintaining the camera's visible height.
@@ -167,6 +174,7 @@ impl Frame<'_, '_> {
             zoom: size.y / camera.view_height,
         };
         let mut target = self.raylib.begin_texture_mode(self.thread, self.target);
+        let _blend = crate::quality::coverage_blend(self.thread);
         let mut raw = target.begin_mode2D(camera);
         let surface = self.assets.material_pass();
         draw(&mut Canvas2D {
@@ -193,6 +201,7 @@ impl Frame<'_, '_> {
             projection: CameraProjection::CAMERA_PERSPECTIVE,
         };
         let mut target = self.raylib.begin_texture_mode(self.thread, self.target);
+        let _blend = crate::quality::coverage_blend(self.thread);
         let mut raw = target.begin_mode3D(camera);
         let surface = self.assets.material_pass();
         draw(&mut Canvas3D {
@@ -203,16 +212,20 @@ impl Frame<'_, '_> {
         });
     }
 
-    /// Draws screen UI in reference units, scaled independently from the world camera.
+    /// Draws UI in reference units. Quality modes use a native-resolution layer
+    /// composed over all world passes after filtering; call order within UI is preserved.
+    /// Default and IntegerFit modes keep the original immediate pass ordering.
     pub fn ui(&mut self, draw: impl FnOnce(&mut UiCanvas<'_, TargetDraw<'_, '_>>)) {
         count!(self.counters, ui_passes, 1);
+        let target = self.ui_target.as_deref_mut().unwrap_or(self.target);
         let pixels = Vec2::new(
-            self.target.texture().width as f32,
-            self.target.texture().height as f32,
+            target.texture().width as f32,
+            target.texture().height as f32,
         );
         let scale = pixels / self.viewport.logical_size;
         let font = self.raylib.get_font_default();
-        let mut raw = self.raylib.begin_texture_mode(self.thread, self.target);
+        let mut raw = self.raylib.begin_texture_mode(self.thread, target);
+        let _blend = crate::quality::coverage_blend(self.thread);
         draw(&mut UiCanvas {
             raw: &mut raw,
             scale,
@@ -226,9 +239,13 @@ impl Frame<'_, '_> {
     }
 
     /// Direct raylib texture pass for shaders or drawing beyond the SDK primitives.
+    /// Normal drawing uses straight source colors with coverage alpha blending.
+    /// Custom shaders/blend modes must preserve premultiplied target RGBA; use
+    /// [`Self::clear`] for straight-color clears rather than raw clear_background.
     pub fn with_raylib(&mut self, draw: impl FnOnce(&mut TargetDraw<'_, '_>)) {
         count!(self.counters, raw_passes, 1);
         let mut raw = self.raylib.begin_texture_mode(self.thread, self.target);
+        let _blend = crate::quality::coverage_blend(self.thread);
         draw(&mut raw);
     }
 }
@@ -667,6 +684,12 @@ impl Default for UiButtonStyle {
 }
 
 impl<D: RaylibDraw> UiCanvas<'_, D> {
+    /// Native target pixels per logical UI unit. Use for advanced raw text drawing
+    /// and choosing font atlas rasterization size; independent of world quality.
+    pub fn pixel_scale(&self) -> Vec2 {
+        self.scale
+    }
+
     /// Draws an already-resolved button response; activation is handled during
     /// fixed update. Use short labels that fit the supplied bounds.
     pub fn button(
@@ -852,6 +875,16 @@ pub(crate) fn matrix(matrix: Mat4) -> Matrix {
 }
 pub(crate) fn rect(bounds: Aabb2) -> Rectangle {
     Rectangle::new(bounds.min.x, bounds.min.y, bounds.size().x, bounds.size().y)
+}
+
+fn premultiply(color: Color) -> Color {
+    let channel = |value: u8| ((u16::from(value) * u16::from(color.a) + 127) / 255) as u8;
+    Color::new(
+        channel(color.r),
+        channel(color.g),
+        channel(color.b),
+        color.a,
+    )
 }
 
 #[cfg(test)]

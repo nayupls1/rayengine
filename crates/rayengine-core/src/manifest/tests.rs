@@ -370,6 +370,72 @@ fn an_intermediate_file_does_not_block_later_asset_roots() {
 }
 
 #[test]
+fn render_quality_profiles_validate_settings_combinations_and_allocations() {
+    let dir = Scratch::new();
+    let manifest = dir
+        .load(
+            r#"
+schema_version = 1
+[render]
+render_scale = 1.0
+anti_aliasing = "none"
+[profiles.smooth.render]
+anti_aliasing = "fxaa"
+[profiles.ultra.render]
+render_scale = 2.0
+anti_aliasing = "fxaa"
+"#,
+        )
+        .unwrap();
+    let native = manifest.resolve(None).unwrap();
+    assert_eq!(native.settings.render.render_scale, 1.0);
+    assert_eq!(
+        native.settings.render.anti_aliasing,
+        crate::quality::AntiAliasing::None
+    );
+    let smooth = manifest.resolve(Some("smooth")).unwrap();
+    assert_eq!(smooth.settings.render.render_scale, 1.0);
+    assert_eq!(
+        smooth.settings.render.anti_aliasing,
+        crate::quality::AntiAliasing::Fxaa
+    );
+    let ultra = manifest.resolve(Some("ultra")).unwrap();
+    assert_eq!(ultra.settings.render.render_scale, 2.0);
+    assert_eq!(
+        ultra.settings.render.anti_aliasing,
+        crate::quality::AntiAliasing::Fxaa
+    );
+    assert!(ultra.is_declared("render", "render_scale"));
+    for (source, expected) in [
+        ("[render]\nanti_aliasing = 'msaa'", "msaa"),
+        ("[render]\nrender_scale = 1.5", "render_scale"),
+        ("[render]\nrender_scale = nan", "render_scale"),
+        (
+            "[render]\nscale_mode = 'integer_fit'\nanti_aliasing = 'fxaa'",
+            "IntegerFit",
+        ),
+        (
+            "[render]\nscale_mode = 'integer_fit'\nrender_scale = 2.0",
+            "IntegerFit",
+        ),
+        (
+            "[window]\nsize = [4096,4096]\n[render]\nreference_size = [1.0,1.0]\nrender_scale = 2.0",
+            "bytes",
+        ),
+        (
+            "[profiles.bad.render]\nanti_aliasing = 'unknown'",
+            "unknown",
+        ),
+    ] {
+        let error = dir
+            .load(&format!("schema_version = 1\n{source}"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
 fn font_rasterization_and_coverage_follow_profiles_and_loader_limits() {
     let dir = Scratch::new();
     let file = dir.0.join("rayengine.toml");

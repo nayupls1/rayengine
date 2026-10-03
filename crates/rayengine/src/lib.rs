@@ -3,6 +3,7 @@
 pub use rayengine_core as core;
 pub use rayengine_core::first_person;
 pub use rayengine_core::manifest;
+pub use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 pub use rayengine_core::save;
 pub use rayengine_core::sprite;
 pub use raylib;
@@ -14,6 +15,7 @@ pub mod input;
 pub mod lighting;
 pub mod material;
 pub mod plugin;
+mod quality;
 pub mod render;
 pub mod runtime;
 pub mod state;
@@ -37,6 +39,8 @@ pub mod guides {
     pub mod states {}
     #[doc = include_str!("../docs/plugins.md")]
     pub mod plugins {}
+    #[doc = include_str!("../docs/render_quality.md")]
+    pub mod render_quality {}
     #[doc = include_str!("../docs/responsive.md")]
     pub mod responsive {}
     #[doc = include_str!("../docs/timing_input.md")]

@@ -2,6 +2,8 @@
 
 ## Unreleased (0.0.2)
 
+- Configurable native/2× supersampled world rendering and offscreen FXAA, native
+  UI composition, checked manifest profiles, bounded allocations and visual/performance probes.
 - Owned custom fonts with typed handles, target-aware sharp UI atlases, shared
   measurement/spacing, per-button selection, explicit pixel sampling, named
   manifest/profile integration, and a licensed two-font comparison example.

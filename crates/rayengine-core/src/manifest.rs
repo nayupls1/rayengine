@@ -90,7 +90,7 @@ pub enum ScaleMode {
     /// Render at reference resolution and use integer scaling.
     IntegerFit,
 }
-/// Existing renderer defaults. Quality controls will extend the schema separately.
+/// Renderer defaults and supported offscreen world quality settings.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct RenderSettings {
@@ -98,6 +98,10 @@ pub struct RenderSettings {
     pub reference_size: [f32; 2],
     /// Fit, expand, or integer-fit scaling.
     pub scale_mode: ScaleMode,
+    /// World pixels per native content pixel in each dimension: 1 or 2.
+    pub render_scale: f32,
+    /// Offscreen world edge filter; native UI is composed afterwards.
+    pub anti_aliasing: crate::quality::AntiAliasing,
     /// Framerate cap, `0..=1000`; zero is uncapped.
     pub target_fps: u32,
     /// Request driver display synchronization.
@@ -110,6 +114,8 @@ impl Default for RenderSettings {
         Self {
             reference_size: [960.0, 540.0],
             scale_mode: ScaleMode::Fit,
+            render_scale: 1.0,
+            anti_aliasing: crate::quality::AntiAliasing::None,
             target_fps: 120,
             vsync: true,
             bar_color: [9, 14, 24, 255],
@@ -432,6 +438,26 @@ fn validate(settings: &Settings) -> Result<()> {
             "render.reference_size dimensions must be finite and between 1 and 8192",
         ));
     }
+    let mode = match settings.render.scale_mode {
+        ScaleMode::Fit => crate::viewport::ScaleMode::Fit,
+        ScaleMode::Expand => crate::viewport::ScaleMode::Expand,
+        ScaleMode::IntegerFit => crate::viewport::ScaleMode::IntegerFit,
+    };
+    let view = crate::viewport::Viewport::new(
+        glam::Vec2::new(
+            settings.window.size[0] as f32,
+            settings.window.size[1] as f32,
+        ),
+        glam::Vec2::from_array(settings.render.reference_size),
+        mode,
+    )
+    .expect("validated sizes");
+    crate::quality::RenderQuality {
+        render_scale: settings.render.render_scale,
+        anti_aliasing: settings.render.anti_aliasing,
+    }
+    .plan(&view, glam::Vec2::ONE, mode)
+    .map_err(|e| error(format!("render: {e}")))?;
     if settings.render.target_fps > 1000 {
         return Err(error("render.target_fps must be 0..=1000"));
     }

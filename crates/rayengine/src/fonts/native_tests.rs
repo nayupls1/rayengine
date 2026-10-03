@@ -140,6 +140,7 @@ fn native_font_bounds_scales_quality_cache_and_unload() {
         let before = assets.resource_counts();
         {
             let mut frame = Frame {
+                ui_target: None,
                 counters: None,
                 raylib: &mut raylib,
                 thread: &thread,

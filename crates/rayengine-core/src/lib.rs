@@ -14,6 +14,7 @@ pub mod input;
 pub mod jobs;
 pub mod manifest;
 pub mod mesh;
+pub mod quality;
 pub mod save;
 pub mod scene;
 pub mod spatial;
@@ -35,6 +36,7 @@ pub mod prelude {
     pub use crate::input::{Action, Axis, Input, InputView};
     pub use crate::jobs::{Cancellation, Completion, JobHandle, JobId, JobOutcome, JobPool};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
+    pub use crate::quality::{AntiAliasing, RenderPlan, RenderQuality};
     pub use crate::scene::Scene;
     pub use crate::spatial::{
         Frustum2D, Frustum3D, Ray2, Ray3, RayHit2, RayHit3, SpatialError, SpatialHit2, SpatialHit3,

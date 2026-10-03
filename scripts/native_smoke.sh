@@ -12,6 +12,7 @@ elif [[ "$backend" != x11 ]]; then
     echo 'RAYENGINE_BACKEND must be x11 or wayland' >&2
     exit 2
 fi
+cargo test -p rayengine "${features[@]}" native_quality -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_render_smoke -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_mesh -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_material -- --ignored --test-threads=1

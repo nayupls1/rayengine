@@ -41,6 +41,8 @@ size = [1280, 720]
 [render]
 reference_size = [960.0, 540.0]
 scale_mode = "fit"             # fit | expand | integer_fit
+render_scale = 1.0             # 1 (native) | 2 (twice each world dimension)
+anti_aliasing = "none"         # none | fxaa
 vsync = true
 target_fps = 120               # 0 means no cap
 bar_color = [9, 14, 24, 255]    # RGBA bytes
@@ -90,10 +92,11 @@ existing runtime controls. `fonts.<name>.path`, `raster_size`, `filter`, `raster
 are shared with the runtime font loader. Coverage is capped at 1024 unique
 printable characters including the automatic space and `?` fallbacks.
 Declarations describe resources; `InitContext::fonts(&resolved)` loads them
-explicitly on the owning render thread. See [custom fonts](crate::guides::fonts). The rendering-quality work (#48) can extend `render`
-with supported quality controls; `render_scale` and `anti_aliasing` are currently
-unknown engine settings and fail. A manifest never promises unsupported GPU
-behavior.
+explicitly on the owning render thread. See [custom fonts](crate::guides::fonts).
+`render.render_scale` and `render.anti_aliasing` select
+[offscreen rendering quality](crate::guides::render_quality). IntegerFit requires
+scale 1 and no edge filter. The loader checks initial 1× DPI allocation bounds;
+the runtime additionally validates device limits and actual framebuffer DPI.
 
 ## Profiles and precedence
 
