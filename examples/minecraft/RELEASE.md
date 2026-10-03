@@ -29,10 +29,11 @@ attempts a final checkpoint; forced termination can lose unsaved progress.
 | Jump / sprint | Space / Shift |
 | Mine / place one held block | Hold LMB / click RMB |
 | Hotbar | 1–9 |
-| Inventory/crafting | E or Escape |
+| Inventory/crafting | E |
+| Game menu / debug overlay | Escape / F3 |
 | Swap inventory slots | Click two slots |
 | Navigate/select inventory | Tab/Up/Down; Enter/Space |
-| Save/retry / quit | F5 / F10 or Quit button |
+| Save/retry / quit | F5 / F10 or menu Quit button |
 
 Start with an empty inventory. Gather two logs, craft planks and sticks, then a
 wooden pickaxe. Mine stone to craft stone tools. Move within two blocks of drops

@@ -44,8 +44,55 @@ pub enum Item {
     WoodenAxe,
     /// Second-tier wood tool.
     StoneAxe,
+    /// Handheld light source; lights nearby terrain while selected.
+    Torch,
 }
 impl Item {
+    /// Every item in stable icon/atlas order.
+    pub const ALL: [Self; 13] = [
+        Self::Dirt,
+        Self::Stone,
+        Self::Log,
+        Self::Leaves,
+        Self::Coal,
+        Self::IronOre,
+        Self::Planks,
+        Self::Stick,
+        Self::WoodenPickaxe,
+        Self::StonePickaxe,
+        Self::WoodenAxe,
+        Self::StoneAxe,
+        Self::Torch,
+    ];
+    /// Index into [`Item::ALL`].
+    pub fn index(self) -> usize {
+        self as usize
+    }
+    /// Full display name for tooltips and the crafting list.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Dirt => "Dirt",
+            Self::Stone => "Stone",
+            Self::Log => "Oak Log",
+            Self::Leaves => "Oak Leaves",
+            Self::Coal => "Coal",
+            Self::IronOre => "Iron Ore",
+            Self::Planks => "Oak Planks",
+            Self::Stick => "Stick",
+            Self::WoodenPickaxe => "Wooden Pickaxe",
+            Self::StonePickaxe => "Stone Pickaxe",
+            Self::WoodenAxe => "Wooden Axe",
+            Self::StoneAxe => "Stone Axe",
+            Self::Torch => "Torch",
+        }
+    }
+    /// Radius in blocks of the warm light a held item casts, if any.
+    pub fn light_radius(self) -> Option<f32> {
+        match self {
+            Self::Torch => Some(11.0),
+            _ => None,
+        }
+    }
     /// Short stable label for slots and pickups.
     pub fn label(self) -> &'static str {
         match self {
@@ -61,6 +108,7 @@ impl Item {
             Self::StonePickaxe => "S.Pick",
             Self::WoodenAxe => "W.Axe",
             Self::StoneAxe => "S.Axe",
+            Self::Torch => "Torch",
         }
     }
     /// Ordinary items stack to 64; tools occupy one slot each.
@@ -82,6 +130,7 @@ impl Item {
             Self::Planks => [200, 159, 95],
             Self::Stick => [164, 124, 74],
             Self::StonePickaxe | Self::StoneAxe => [190, 200, 211],
+            Self::Torch => [255, 196, 87],
         }
     }
     /// Placeable subset; crafting ingredients/tools cannot masquerade as blocks.
@@ -227,7 +276,7 @@ impl Inventory {
         next.craft(recipe).is_ok()
     }
 }
-/// Six inventory-wide recipes, without a workbench or extensive crafting grid.
+/// Seven inventory-wide recipes, without a workbench or extensive crafting grid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Recipe {
     /// One log yields four planks.
@@ -242,16 +291,19 @@ pub enum Recipe {
     WoodenAxe,
     /// Three stones and two sticks.
     StoneAxe,
+    /// One coal and one stick yield four torches.
+    Torch,
 }
 impl Recipe {
     /// Stable UI and benchmark order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Planks,
         Self::Sticks,
         Self::WoodenPickaxe,
         Self::StonePickaxe,
         Self::WoodenAxe,
         Self::StoneAxe,
+        Self::Torch,
     ];
     /// Recipe cost, aggregated across slots.
     pub fn ingredients(self) -> &'static [(Item, u16)] {
@@ -260,6 +312,7 @@ impl Recipe {
             Self::Sticks => &[(Item::Planks, 2)],
             Self::WoodenPickaxe | Self::WoodenAxe => &[(Item::Planks, 3), (Item::Stick, 2)],
             Self::StonePickaxe | Self::StoneAxe => &[(Item::Stone, 3), (Item::Stick, 2)],
+            Self::Torch => &[(Item::Coal, 1), (Item::Stick, 1)],
         }
     }
     /// Result item/count.
@@ -271,6 +324,7 @@ impl Recipe {
             Self::StonePickaxe => (Item::StonePickaxe, 1),
             Self::WoodenAxe => (Item::WoodenAxe, 1),
             Self::StoneAxe => (Item::StoneAxe, 1),
+            Self::Torch => (Item::Torch, 4),
         }
     }
     /// Compact cost/result text for a responsive button.
@@ -282,6 +336,7 @@ impl Recipe {
             Self::StonePickaxe => "S.Pick: 3 stone + 2 sticks",
             Self::WoodenAxe => "W.Axe: 3 planks + 2 sticks",
             Self::StoneAxe => "S.Axe: 3 stone + 2 sticks",
+            Self::Torch => "4 torches: 1 coal + 1 stick",
         }
     }
 }

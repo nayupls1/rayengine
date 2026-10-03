@@ -20,6 +20,7 @@ Window and diagnostics:
   -V, --version       Print the demo version without opening a window
 
 Controls: WASD move, mouse look, Space jump, Shift sprint, LMB mine, RMB place,
-1-9 hotbar, E/Escape inventory, F5 save/retry, F10 quit. Gather two logs and use
-inventory recipes to craft a wooden pickaxe. Linux saves default to durable
-replacement. Autosave runs every ten simulation seconds when --save is enabled.
+1-9 hotbar, E inventory, Escape menu, F3 debug, F5 save/retry, F10 quit. Gather
+two logs and use inventory recipes to craft a wooden pickaxe. Linux saves
+default to durable replacement. Autosave runs every ten simulation seconds when
+--save is enabled.
