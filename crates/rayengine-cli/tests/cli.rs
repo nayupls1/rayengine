@@ -354,3 +354,339 @@ fn invalid_manifests_fail_before_cargo_and_missing_optional_manifests_work() {
         }
     }
 }
+
+fn cli(arguments: &[&str], path: Option<&std::path::Path>) -> (bool, Value) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rayengine"));
+    command.arg("--json").args(arguments);
+    if let Some(path) = path {
+        command.arg(path);
+    }
+    let output = command.output().unwrap();
+    assert!(
+        output.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let response: Value = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&output.stdout)));
+    assert_eq!(response["schema_version"], 1);
+    assert_eq!(response["ok"], output.status.success());
+    (output.status.success(), response)
+}
+
+fn cpu_game(path: &std::path::Path, source: &str) {
+    fs::create_dir_all(path.join("src")).unwrap();
+    fs::write(
+        path.join("Cargo.toml"),
+        "[package]\nname = 'lifecycle-game'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(path.join("src/main.rs"), source).unwrap();
+}
+
+#[test]
+fn templates_list_and_generate_every_starter_and_report_bad_arguments() {
+    let scratch = Scratch::new("all-templates");
+    let (ok, response) = cli(&["templates"], None);
+    assert!(ok);
+    let templates = response["data"]["templates"].as_array().unwrap();
+    assert_eq!(templates.len(), 4);
+    let sdk = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("rayengine");
+    for template in templates {
+        let name = template["name"].as_str().unwrap();
+        let project = scratch.0.join(format!("game-{name}"));
+        let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+            .args(["--json", "new"])
+            .arg(&project)
+            .args(["--template", name, "--sdk-path"])
+            .arg(&sdk)
+            .output()
+            .unwrap();
+        let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(output.status.success(), "{response}");
+        assert_eq!(response["data"]["kind"], name);
+        if ["topdown", "platformer"].contains(&name) {
+            assert!(
+                fs::read_to_string(project.join("Cargo.toml"))
+                    .unwrap()
+                    .contains("rayengine-tilemap")
+            );
+            assert!(project.join("assets/level.toml").is_file());
+        }
+    }
+    for args in [
+        vec!["templates", "extra"],
+        vec!["new", "game", "--template", "nope"],
+        vec!["new", "game", "--template", "topdown", "--kind", "3d"],
+    ] {
+        assert_eq!(cli(&args, None).1["error"]["code"], "invalid_arguments");
+    }
+}
+
+#[test]
+fn plugin_edits_preserve_comments_config_and_match_sources() {
+    let scratch = Scratch::new("plugin-edit");
+    let game = scratch.0.join("game");
+    let sdk = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("rayengine");
+    let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "new"])
+        .arg(&game)
+        .arg("--sdk-path")
+        .arg(&sdk)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let config = game.join("rayengine.toml");
+    fs::write(&config, format!("{}\n# keep my settings\n[plugins.tilemap]\nlevel = 'custom.toml'\n[profiles.dev.plugins.tilemap]\nspeed = 12\n[plugins.other]\nvalue = 42\n", fs::read_to_string(&config).unwrap())).unwrap();
+    for name in ["particles", "voxel", "beacons", "tilemap"] {
+        let (ok, result) = cli(&["add", name], Some(&game));
+        assert!(ok, "{result}");
+        assert_eq!(result["data"]["plugin"], name);
+        assert!(result["data"]["plugin_path"].is_string());
+        assert_eq!(
+            cli(&["add", name], Some(&game)).1["error"]["code"],
+            "plugin_already_added"
+        );
+    }
+    let source = fs::read_to_string(&config).unwrap();
+    assert!(source.contains("# keep my settings") && source.contains("custom.toml"));
+    let (ok, result) = cli(&["remove", "rayengine-tilemap"], Some(&game));
+    assert!(ok, "{result}");
+    let loaded = rayengine_core::manifest::ProjectManifest::load(&config).unwrap();
+    assert!(
+        !loaded
+            .resolve(Some("dev"))
+            .unwrap()
+            .settings
+            .plugins
+            .contains_key("tilemap")
+    );
+    assert!(
+        loaded
+            .resolve(None)
+            .unwrap()
+            .settings
+            .plugins
+            .contains_key("other")
+    );
+    assert_eq!(
+        cli(&["remove", "tilemap"], Some(&game)).1["error"]["code"],
+        "plugin_not_added"
+    );
+    assert_eq!(
+        cli(&["add", "unknown"], Some(&game)).1["error"]["code"],
+        "unknown_plugin"
+    );
+    assert_eq!(
+        cli(&["remove", "unknown"], Some(&game)).1["error"]["code"],
+        "unknown_plugin"
+    );
+
+    let registry = scratch.0.join("registry");
+    assert!(cli(&["new"], Some(&registry)).0);
+    assert!(cli(&["add", "voxel"], Some(&registry)).0);
+    assert!(
+        fs::read_to_string(registry.join("Cargo.toml"))
+            .unwrap()
+            .contains(&format!("version = \"={}\"", env!("CARGO_PKG_VERSION")))
+    );
+}
+
+#[test]
+fn bundle_relocates_assets_fonts_profiles_and_clean_preserves_unrelated_files() {
+    let scratch = Scratch::new("bundle");
+    let game = scratch.0.join("game");
+    cpu_game(
+        &game,
+        r#"fn main() {
+        let manifest = std::env::var("RAYENGINE_MANIFEST").unwrap();
+        let root = std::path::Path::new(&manifest).parent().unwrap();
+        assert_eq!(std::fs::read_to_string(root.join("assets/level.txt")).unwrap(), "selected");
+        assert!(std::env::var("RAYENGINE_PROFILE").is_err());
+        println!("{}", std::env::args().nth(1).unwrap());
+    }"#,
+    );
+    fs::create_dir(game.join("assets")).unwrap();
+    fs::create_dir(game.join("release-assets")).unwrap();
+    fs::write(game.join("assets/level.txt"), "base").unwrap();
+    fs::write(game.join("release-assets/level.txt"), "selected").unwrap();
+    fs::write(game.join("release-assets/secret.bak"), "excluded").unwrap();
+    fs::write(game.join("font.ttf"), "font fixture").unwrap();
+    fs::write(game.join("LICENSE"), "game license").unwrap();
+    fs::write(game.join("rayengine.toml"), "schema_version = 1\n[project]\nexecutable = 'lifecycle-game'\n[assets]\nroots = ['assets']\nexclude = ['*.bak']\n[fonts.ui]\npath = 'font.ttf'\n[profiles.ship.assets]\nroots = ['release-assets']\n[profiles.ship.render]\nvsync = false\n").unwrap();
+    let (ok, response) = cli(&["bundle", "--profile", "ship"], Some(&game));
+    assert!(ok, "{response}");
+    assert_eq!(response["command"], "package");
+    let folder = PathBuf::from(response["data"]["folder"].as_str().unwrap());
+    let archive = PathBuf::from(response["data"]["archive"].as_str().unwrap());
+    assert!(!folder.join("assets/secret.bak").exists());
+    assert_eq!(
+        fs::read_to_string(folder.join("LICENSE")).unwrap(),
+        "game license"
+    );
+    let bundle = rayengine_core::manifest::ProjectManifest::load(folder.join("rayengine.toml"))
+        .unwrap()
+        .resolve(None)
+        .unwrap();
+    assert_eq!(
+        bundle.asset("level.txt").unwrap(),
+        folder.join("assets/level.txt")
+    );
+    assert_eq!(
+        fs::read_to_string(&bundle.settings.fonts["ui"].path).unwrap(),
+        "font fixture"
+    );
+    assert!(!bundle.settings.render.vsync);
+    let extract = scratch.0.join("extracted");
+    fs::create_dir(&extract).unwrap();
+    assert!(
+        Command::new("tar")
+            .arg("-xzf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&extract)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let launch = extract.join(folder.file_name().unwrap()).join("launch");
+    let output = Command::new(launch)
+        .arg("argument")
+        .current_dir(&scratch.0)
+        .env("RAYENGINE_PROFILE", "unrelated")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "argument");
+    assert_eq!(
+        cli(&["package", "--profile", "ship"], Some(&game)).1["error"]["code"],
+        "bundle_exists"
+    );
+    fs::write(game.join("bundles/keep.txt"), "user data").unwrap();
+    let (ok, result) = cli(&["clean"], Some(&game));
+    assert!(ok, "{result}");
+    assert!(!archive.exists() && !folder.exists());
+    assert!(!game.join("target").exists());
+    assert_eq!(
+        fs::read_to_string(game.join("bundles/keep.txt")).unwrap(),
+        "user data"
+    );
+    fs::write(game.join("src/main.rs"), "broken rust!").unwrap();
+    let (ok, result) = cli(&["package"], Some(&game));
+    assert!(!ok);
+    assert_eq!(result["error"]["code"], "cargo_failed");
+    assert_eq!(fs::read_dir(game.join("bundles")).unwrap().count(), 1);
+    assert_eq!(
+        cli(&["clean"], Some(&scratch.0.join("missing"))).1["error"]["code"],
+        "missing_manifest"
+    );
+}
+
+#[test]
+fn watch_debounces_restarts_and_emits_one_completion_result() {
+    let scratch = Scratch::new("watch");
+    cpu_game(
+        &scratch.0,
+        r#"fn main() {
+        std::fs::create_dir_all("artifacts").unwrap();
+        std::fs::write("artifacts/started", "running").unwrap();
+        println!("started");
+        loop { std::thread::sleep(std::time::Duration::from_millis(50)); }
+    }"#,
+    );
+    let child = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "watch"])
+        .arg(&scratch.0)
+        .args([
+            "--cycles",
+            "2",
+            "--debounce-ms",
+            "300",
+            "--timeout-ms",
+            "20000",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    while !scratch.0.join("artifacts/started").exists() {
+        assert!(started.elapsed().as_secs() < 15, "watch did not launch");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    // Two writes inside a debounce window must produce one restart.
+    let source = scratch.0.join("src/main.rs");
+    let original = fs::read_to_string(&source).unwrap();
+    fs::write(&source, format!("{original}\n// first edit\n")).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(80));
+    fs::write(&source, format!("{original}\n// latest edit\n")).unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.stderr.is_empty());
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(output.status.success(), "{response}");
+    assert_eq!(response["data"]["cycle_count"], 2);
+    assert_eq!(response["data"]["stopped"], "cycle_limit");
+    assert_eq!(
+        response["data"]["cycles"][0]["game_output"]["stdout"],
+        "started\n"
+    );
+    assert_eq!(response["data"]["cycles"][1]["ok"], true);
+    fs::write(&source, "bad code!").unwrap();
+    let (ok, result) = cli(
+        &["watch", "--cycles", "1", "--timeout-ms", "5000"],
+        Some(&scratch.0),
+    );
+    assert!(!ok);
+    assert_eq!(result["error"]["code"], "watch_failed");
+    assert_eq!(
+        result["error"]["details"]["cycles"][0]["error"]["code"],
+        "cargo_failed"
+    );
+}
+
+#[test]
+fn doctor_hints_are_structured_on_success_and_failure_without_execution() {
+    let scratch = Scratch::new("doctor-hints");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for name in ["rustc", "cargo", "cmake", "clang", "pkg-config"] {
+            let path = scratch.0.join(name);
+            fs::write(&path, "#!/bin/sh\necho fixture\n").unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+            .args(["--json", "doctor", "--fix-hints"])
+            .env("PATH", &scratch.0)
+            .output()
+            .unwrap();
+        let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(output.status.success());
+        assert!(!response["data"]["fix_hints"].as_array().unwrap().is_empty());
+    }
+    let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "doctor", "--fix-hints"])
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(!output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(response["error"]["code"], "missing_prerequisites");
+    assert!(
+        !response["error"]["details"]["fix_hints"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}

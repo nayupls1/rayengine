@@ -35,6 +35,17 @@ jobs:
         run: scripts/check.sh
       - name: Generated projects compile
         run: python3 scripts/template_smoke.py
+      - name: Generic CLI bundle smoke
+        run: xvfb-run -a python3 scripts/cli_package_smoke.py
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+      - name: CLI bundle on a runtime-only Linux machine
+        run: |
+          docker run --rm -v "$PWD:/probe:ro" ubuntu:24.04 sh -ec '
+            apt-get update -qq
+            apt-get install -y --no-install-recommends python3 tar gzip xvfb xauth libgl1-mesa-dri libglx-mesa0 libx11-6 libxrandr2 libxinerama1 libxcursor1 libxi6 libasound2t64 libwayland-client0 libxkbcommon0
+            xvfb-run -a python3 /probe/scripts/cli_package_smoke.py --archive /probe/artifacts/cli-package-smoke/bundle-smoke-0.1.0-linux-x86_64-dev.tar.gz
+          '
       - name: Native Wayland demo build
         run: cargo check --locked -p rayengine-minecraft --features render,rayengine/wayland
       - name: Native renderer, resize and asset probes
