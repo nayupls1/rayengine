@@ -259,7 +259,8 @@ fn record_triggers<const N: usize>(
     }
 }
 
-fn depenetrate<const N: usize>(nodes: &mut [Node<N>], grid: &mut Grid<N>) {
+fn depenetrate<const N: usize>(nodes: &mut [Node<N>], grid: &mut Grid<N>) -> usize {
+    let mut repairs = 0;
     for _ in 0..16 {
         let mut changed = false;
         for (i, j) in candidates(nodes, grid, 0.0, 0.0) {
@@ -268,6 +269,7 @@ fn depenetrate<const N: usize>(nodes: &mut [Node<N>], grid: &mut Grid<N>) {
                 && let Some(contact) = overlap(a.shape, a.position, b.shape, b.position)
             {
                 separate(a, b, contact);
+                repairs += 1;
                 changed = true;
             }
         }
@@ -275,6 +277,7 @@ fn depenetrate<const N: usize>(nodes: &mut [Node<N>], grid: &mut Grid<N>) {
             break;
         }
     }
+    repairs
 }
 
 pub(super) fn step<const N: usize>(
@@ -291,7 +294,7 @@ pub(super) fn step<const N: usize>(
     let mut report = StepReport::default();
     let mut crossed = BTreeSet::new();
     record_triggers(nodes, grid, 0.0, &mut crossed);
-    depenetrate(nodes, grid);
+    report.contacts += depenetrate(nodes, grid);
     // Refresh supports each tick from geometry, so removal, layer changes,
     // horizontal walk-off and jumping never leave a stale platform attachment.
     for (i, j) in candidates(nodes, grid, 0.0, support_padding(nodes)) {
@@ -314,7 +317,8 @@ pub(super) fn step<const N: usize>(
     }
     settle_contacts(nodes, grid);
     let mut remaining = dt;
-    while remaining > 0.0 && report.contacts < 256 {
+    let mut continuous_contacts = 0;
+    while remaining > 0.0 && continuous_contacts < 256 {
         let mut earliest: Option<(f32, usize, usize, [f32; N])> = None;
         let mut repaired = false;
         for (i, j) in candidates(nodes, grid, remaining, 0.0) {
@@ -325,7 +329,8 @@ pub(super) fn step<const N: usize>(
                 separate(a, b, c);
                 repaired = true;
                 report.contacts += 1;
-                if report.contacts == 256 {
+                continuous_contacts += 1;
+                if continuous_contacts == 256 {
                     break;
                 }
                 continue;
@@ -363,14 +368,15 @@ pub(super) fn step<const N: usize>(
             separate(a, b, Contact { normal, depth: 0.0 });
         }
         report.contacts += 1;
+        continuous_contacts += 1;
         settle_contacts(nodes, grid);
     }
-    if report.contacts == 256 {
+    if continuous_contacts == 256 {
         report.dropped_time = remaining;
     }
     // Clean up contact rounding at the final boundary as well as at spawn.
     record_triggers(nodes, grid, 0.0, &mut crossed);
-    depenetrate(nodes, grid);
+    report.contacts += depenetrate(nodes, grid);
     for node in nodes.iter_mut() {
         node.grounded = false;
     }

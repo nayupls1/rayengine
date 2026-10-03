@@ -83,7 +83,8 @@ pub struct TriggerEvent {
 pub struct StepReport {
     /// Number of continuous solid contacts and overlap repairs processed.
     pub contacts: usize,
-    /// Time discarded if the 256-contact budget was exhausted.
+    /// Time discarded if the 256 continuous-contact/repair budget was exhausted.
+    /// Spawn and final overlap repairs have separate bounded passes.
     pub dropped_time: f32,
     /// Whether the bounded depenetration pass left any solid overlaps.
     pub unresolved_overlaps: bool,

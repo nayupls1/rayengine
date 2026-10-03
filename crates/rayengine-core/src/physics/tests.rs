@@ -128,6 +128,7 @@ macro_rules! scenarios {
                 let b = world.insert(body(x(1.0), false));
                 let report = world.step(tick(0.0), &mut Events::default());
                 assert!(!report.unresolved_overlaps);
+                assert_eq!(report.contacts, 1);
                 near(world.body(a).unwrap().position.x, -0.25);
                 near(world.body(b).unwrap().position.x, 1.75);
                 let mut wall = body(world.body(a).unwrap().position, true);
@@ -136,6 +137,25 @@ macro_rules! scenarios {
                 world.step(tick(0.0), &mut Events::default());
                 let (a, b) = (world.body(a).unwrap(), world.body(wall).unwrap());
                 assert!(a.shape.overlap(a.position, b.shape, b.position).is_none());
+            }
+            #[test]
+            fn spawn_repairs_are_reported_without_consuming_continuous_budget() {
+                let mut world = $world::new(4.0);
+                for i in 0..300 {
+                    let position = x(i as f32 * 6.0);
+                    let mut wall = body(position, false);
+                    wall.kind = BodyKind::Static;
+                    world.insert(wall);
+                    world.insert(body(position + x(1.0), false));
+                }
+                let mut mover = body(x(-10.0), false);
+                mover.velocity = x(-1.0);
+                let mover = world.insert(mover);
+                let report = world.step(tick(1.0), &mut Events::default());
+                assert_eq!(report.contacts, 300);
+                assert_eq!(report.dropped_time, 0.0);
+                assert!(!report.unresolved_overlaps);
+                near(world.body(mover).unwrap().position.x, -11.0);
             }
             #[test]
             fn layers_filter_solids_and_triggers_symmetrically() {
