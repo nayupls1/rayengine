@@ -149,6 +149,7 @@ fn native_font_bounds_scales_quality_cache_and_unload() {
                 viewport: view,
                 alpha: 0.0,
                 index: 0,
+                delta: std::time::Duration::ZERO,
             };
             frame.clear(Color::BLACK);
             frame.ui(|ui| {

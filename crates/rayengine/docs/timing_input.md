@@ -220,6 +220,12 @@ tick of visual delay. At 120 Hz that is at most roughly 8.3 ms. A game may choos
 the current state for parts of its presentation when lower visual delay matters.
 On teleport or respawn, set previous and current to the new position together.
 
+`frame.delta` is the wall time since the previous rendered frame. It is meant for
+presentation-only animation such as menu slides advanced in `Game::draw`; it is
+not bounded by catch-up and must not drive simulation state. See
+[tweens, easing and screen shake](crate::guides::tweens) for choosing between
+fixed-tick and per-frame tweens.
+
 Fixed updates make repeatable tests practical within one build. They do not
 guarantee bit-identical floating-point results across different hardware or
 compilers. A game's randomness, ordering and asynchronous work must also be
