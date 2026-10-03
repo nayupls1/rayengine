@@ -1,8 +1,9 @@
-//! Axis-aligned queries and swept character movement, without rigid-body physics.
+//! Shape overlap queries and independent swept character movement.
 //!
 //! Characters slide against static boxes one axis at a time. Sweeps prevent
 //! tunneling along each axis, but this is not a full continuous collision solver.
-//! Spawn bodies outside solid geometry; initial overlaps are not depenetrated.
+//! Initial overlaps are depenetrated in a bounded pass before movement.
+//! For body pairs, layers and triggers, see [`crate::physics`].
 
 use glam::{Vec2, Vec3};
 
@@ -97,6 +98,11 @@ impl Body2D {
         assert!(dt.is_finite() && dt >= 0.0);
         let mut position = self.position.to_array();
         let half = self.half_size.to_array();
+        crate::physics::depenetrate_box(
+            &mut position,
+            half,
+            solids.iter().map(|s| (s.min.to_array(), s.max.to_array())),
+        );
         let mut velocity = self.velocity.to_array();
         self.grounded = false;
         for axis in [0, 1] {
@@ -158,6 +164,11 @@ impl Body3D {
         assert!(dt.is_finite() && dt >= 0.0);
         let mut position = self.position.to_array();
         let half = self.half_size.to_array();
+        crate::physics::depenetrate_box(
+            &mut position,
+            half,
+            solids.iter().map(|s| (s.min.to_array(), s.max.to_array())),
+        );
         let mut velocity = self.velocity.to_array();
         self.grounded = false;
         for axis in [0, 2, 1] {
@@ -348,5 +359,107 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+/// Penetration queries shared with the arcade physics world.
+pub use crate::physics::{Penetration2D, Penetration3D};
+
+/// World-space circle for standalone overlap queries.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Circle {
+    /// Center in world units.
+    pub center: Vec2,
+    /// Positive radius.
+    pub radius: f32,
+}
+impl Circle {
+    /// Creates a circle. Panics for a nonfinite center or invalid radius.
+    pub fn new(center: Vec2, radius: f32) -> Self {
+        assert!(center.is_finite());
+        crate::physics::Shape2D::round(radius);
+        Self { center, radius }
+    }
+    /// Positive overlap; normal moves this circle away from the other.
+    pub fn overlap(&self, other: &Self) -> Option<Penetration2D> {
+        crate::physics::Shape2D::round(self.radius).overlap(
+            self.center,
+            crate::physics::Shape2D::round(other.radius),
+            other.center,
+        )
+    }
+    /// Positive overlap against a box, including a center inside the box.
+    pub fn overlap_box(&self, other: &Aabb2) -> Option<Penetration2D> {
+        crate::physics::Shape2D::round(self.radius).overlap(
+            self.center,
+            crate::physics::Shape2D::box_shape(other.size()),
+            other.center(),
+        )
+    }
+}
+/// World-space sphere for standalone overlap queries.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Sphere {
+    /// Center in world units.
+    pub center: Vec3,
+    /// Positive radius.
+    pub radius: f32,
+}
+impl Sphere {
+    /// Creates a sphere. Panics for a nonfinite center or invalid radius.
+    pub fn new(center: Vec3, radius: f32) -> Self {
+        assert!(center.is_finite());
+        crate::physics::Shape3D::round(radius);
+        Self { center, radius }
+    }
+    /// Positive overlap; normal moves this sphere away from the other.
+    pub fn overlap(&self, other: &Self) -> Option<Penetration3D> {
+        crate::physics::Shape3D::round(self.radius).overlap(
+            self.center,
+            crate::physics::Shape3D::round(other.radius),
+            other.center,
+        )
+    }
+    /// Positive overlap against a box, including a center inside the box.
+    pub fn overlap_box(&self, other: &Aabb3) -> Option<Penetration3D> {
+        crate::physics::Shape3D::round(self.radius).overlap(
+            self.center,
+            crate::physics::Shape3D::box_shape(other.size()),
+            other.center(),
+        )
+    }
+}
+impl Aabb2 {
+    /// Positive overlap; normal moves this box away from the other box.
+    pub fn overlap(&self, other: &Self) -> Option<Penetration2D> {
+        crate::physics::Shape2D::box_shape(self.size()).overlap(
+            self.center(),
+            crate::physics::Shape2D::box_shape(other.size()),
+            other.center(),
+        )
+    }
+    /// Positive overlap; normal moves this box away from the circle.
+    pub fn overlap_circle(&self, other: &Circle) -> Option<Penetration2D> {
+        other.overlap_box(self).map(|c| Penetration2D {
+            normal: -c.normal,
+            depth: c.depth,
+        })
+    }
+}
+impl Aabb3 {
+    /// Positive overlap; normal moves this box away from the other box.
+    pub fn overlap(&self, other: &Self) -> Option<Penetration3D> {
+        crate::physics::Shape3D::box_shape(self.size()).overlap(
+            self.center(),
+            crate::physics::Shape3D::box_shape(other.size()),
+            other.center(),
+        )
+    }
+    /// Positive overlap; normal moves this box away from the sphere.
+    pub fn overlap_sphere(&self, other: &Sphere) -> Option<Penetration3D> {
+        other.overlap_box(self).map(|c| Penetration3D {
+            normal: -c.normal,
+            depth: c.depth,
+        })
     }
 }

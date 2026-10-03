@@ -3,6 +3,7 @@
 pub use rayengine_core as core;
 pub use rayengine_core::first_person;
 pub use rayengine_core::manifest;
+pub use rayengine_core::physics;
 pub use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 pub use rayengine_core::save;
 pub use rayengine_core::sprite;
@@ -48,6 +49,11 @@ pub mod guides {
     #[doc = include_str!("../examples/controls.rs")]
     #[doc = "```"]
     pub mod timing_input {}
+    #[doc = include_str!("../docs/physics.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/physics.rs")]
+    #[doc = "```"]
+    pub mod physics {}
     #[doc = include_str!("../docs/first_person.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/first_person.rs")]

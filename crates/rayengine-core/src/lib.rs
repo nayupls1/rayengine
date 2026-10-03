@@ -14,6 +14,7 @@ pub mod input;
 pub mod jobs;
 pub mod manifest;
 pub mod mesh;
+pub mod physics;
 pub mod quality;
 pub mod save;
 pub mod scene;
@@ -27,7 +28,7 @@ pub mod viewport;
 /// Common imports for display-independent game code.
 pub mod prelude {
     pub use crate::camera::{Camera2D, Camera3D};
-    pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D};
+    pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D, Circle, Sphere};
     pub use crate::events::Events;
     pub use crate::first_person::{
         FirstPersonActions, FirstPersonConfig, FirstPersonController, FirstPersonError,
@@ -36,6 +37,11 @@ pub mod prelude {
     pub use crate::input::{Action, Axis, Input, InputView};
     pub use crate::jobs::{Cancellation, Completion, JobHandle, JobId, JobOutcome, JobPool};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
+    pub use crate::physics::{
+        BodyId, BodyKind, CollisionFilter, Penetration2D, Penetration3D, PhysicsBody2D,
+        PhysicsBody3D, PhysicsWorld2D, PhysicsWorld3D, Shape2D, Shape3D, StepReport, TriggerEvent,
+        TriggerPhase, UniformGrid2D, UniformGrid3D,
+    };
     pub use crate::quality::{AntiAliasing, RenderPlan, RenderQuality};
     pub use crate::scene::Scene;
     pub use crate::spatial::{
