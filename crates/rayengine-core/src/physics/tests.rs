@@ -625,3 +625,35 @@ fn exact_round_box_corner_ccd_does_not_hit_empty_aabb_corner() {
     assert!(world.body(id).unwrap().position.x > 1.8); // curved normal slides outward
     assert!(world.body(id).unwrap().position.y > -2.0);
 }
+
+#[test]
+fn degenerate_aabb_overlap_queries_return_none_in_both_dimensions() {
+    let regular2 = Aabb2::from_center(Vec2::ZERO, Vec2::ONE);
+    let regular3 = Aabb3::from_center(Vec3::ZERO, Vec3::ONE);
+    let circle = Circle::new(Vec2::ZERO, 1.0);
+    let sphere = Sphere::new(Vec3::ZERO, 1.0);
+    for axis in 0..2 {
+        let mut size = Vec2::ONE;
+        size[axis] = 0.0;
+        for size in [size, Vec2::ZERO] {
+            let empty = Aabb2::from_center(Vec2::ZERO, size);
+            assert!(empty.overlap(&regular2).is_none());
+            assert!(regular2.overlap(&empty).is_none());
+            assert!(empty.overlap(&empty).is_none());
+            assert!(empty.overlap_circle(&circle).is_none());
+            assert!(circle.overlap_box(&empty).is_none());
+        }
+    }
+    for axis in 0..3 {
+        let mut size = Vec3::ONE;
+        size[axis] = 0.0;
+        for size in [size, Vec3::ZERO] {
+            let empty = Aabb3::from_center(Vec3::ZERO, size);
+            assert!(empty.overlap(&regular3).is_none());
+            assert!(regular3.overlap(&empty).is_none());
+            assert!(empty.overlap(&empty).is_none());
+            assert!(empty.overlap_sphere(&sphere).is_none());
+            assert!(sphere.overlap_box(&empty).is_none());
+        }
+    }
+}

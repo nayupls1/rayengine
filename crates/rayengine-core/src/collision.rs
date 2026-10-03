@@ -389,10 +389,11 @@ impl Circle {
         )
     }
     /// Positive overlap against a box, including a center inside the box.
+    /// Empty or flat boxes have no positive overlap.
     pub fn overlap_box(&self, other: &Aabb2) -> Option<Penetration2D> {
         crate::physics::Shape2D::round(self.radius).overlap(
             self.center,
-            crate::physics::Shape2D::box_shape(other.size()),
+            other.overlap_shape()?,
             other.center(),
         )
     }
@@ -421,24 +422,32 @@ impl Sphere {
         )
     }
     /// Positive overlap against a box, including a center inside the box.
+    /// Empty or flat boxes have no positive overlap.
     pub fn overlap_box(&self, other: &Aabb3) -> Option<Penetration3D> {
         crate::physics::Shape3D::round(self.radius).overlap(
             self.center,
-            crate::physics::Shape3D::box_shape(other.size()),
+            other.overlap_shape()?,
             other.center(),
         )
     }
 }
 impl Aabb2 {
+    fn overlap_shape(&self) -> Option<crate::physics::Shape2D> {
+        assert!(
+            self.min.is_finite() && self.max.is_finite() && self.min.cmple(self.max).all(),
+            "invalid overlap bounds"
+        );
+        let size = self.size();
+        (size.min_element() > 0.0).then(|| crate::physics::Shape2D::box_shape(size))
+    }
     /// Positive overlap; normal moves this box away from the other box.
+    /// Empty or flat boxes have no positive overlap.
     pub fn overlap(&self, other: &Self) -> Option<Penetration2D> {
-        crate::physics::Shape2D::box_shape(self.size()).overlap(
-            self.center(),
-            crate::physics::Shape2D::box_shape(other.size()),
-            other.center(),
-        )
+        self.overlap_shape()?
+            .overlap(self.center(), other.overlap_shape()?, other.center())
     }
     /// Positive overlap; normal moves this box away from the circle.
+    /// Empty or flat boxes have no positive overlap.
     pub fn overlap_circle(&self, other: &Circle) -> Option<Penetration2D> {
         other.overlap_box(self).map(|c| Penetration2D {
             normal: -c.normal,
@@ -447,15 +456,22 @@ impl Aabb2 {
     }
 }
 impl Aabb3 {
+    fn overlap_shape(&self) -> Option<crate::physics::Shape3D> {
+        assert!(
+            self.min.is_finite() && self.max.is_finite() && self.min.cmple(self.max).all(),
+            "invalid overlap bounds"
+        );
+        let size = self.size();
+        (size.min_element() > 0.0).then(|| crate::physics::Shape3D::box_shape(size))
+    }
     /// Positive overlap; normal moves this box away from the other box.
+    /// Empty or flat boxes have no positive overlap.
     pub fn overlap(&self, other: &Self) -> Option<Penetration3D> {
-        crate::physics::Shape3D::box_shape(self.size()).overlap(
-            self.center(),
-            crate::physics::Shape3D::box_shape(other.size()),
-            other.center(),
-        )
+        self.overlap_shape()?
+            .overlap(self.center(), other.overlap_shape()?, other.center())
     }
     /// Positive overlap; normal moves this box away from the sphere.
+    /// Empty or flat boxes have no positive overlap.
     pub fn overlap_sphere(&self, other: &Sphere) -> Option<Penetration3D> {
         other.overlap_box(self).map(|c| Penetration3D {
             normal: -c.normal,
