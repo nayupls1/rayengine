@@ -154,11 +154,11 @@ assert!(follower.is_finished());
 assert!(body.position.distance(layout.cell_center(UVec2::new(5, 0))) < 0.06);
 ```
 
-A waypoint counts as reached inside the arrival radius. An intermediate one
-also counts once the body has moved beyond it along the segment leading to it,
-within the arrival radius of that segment's line, so a fast body never turns
-back. The final waypoint must be reached, and speed is limited so the body
-stops on it.
+An intermediate waypoint counts as reached within the arrival radius or one
+step of movement, whichever is larger, or once the body has moved beyond it
+along the segment leading to it, within that tolerance of the segment's line,
+so a fast body never turns back. The final waypoint must be reached within the
+arrival radius, and speed is limited so the body stops on it.
 `steer_body_3d` reads waypoints as world `(x, z)` and keeps vertical velocity
 for gravity. `GridLayout::cell_at` converts a world position back to a cell.
 

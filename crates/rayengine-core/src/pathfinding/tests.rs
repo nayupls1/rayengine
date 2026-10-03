@@ -862,6 +862,25 @@ fn followers_finish_only_at_the_goal() {
 }
 
 #[test]
+fn fast_followers_do_not_orbit_corners() {
+    // Steps longer than the arrival radius, approaching a corner at an angle.
+    let (speed, dt) = (8.0, 1.0 / 60.0);
+    for i in 0..200 {
+        let mut follower = PathFollower::new(0.05);
+        follower.set_waypoints([Vec2::ZERO, Vec2::new(5.0, 0.0), Vec2::new(5.0, 5.0)]);
+        let mut position = Vec2::new(
+            4.0 + 0.7 * (i % 20) as f32 / 20.0,
+            0.9 + 0.01 * (i / 20) as f32,
+        );
+        for _ in 0..200 {
+            position += follower.velocity(position, speed, dt) * dt;
+        }
+        assert!(follower.is_finished(), "start {i}");
+        assert!(position.distance(Vec2::new(5.0, 5.0)) <= 0.05);
+    }
+}
+
+#[test]
 fn agents_navigate_around_walls_with_bodies() {
     let grid = parse(&[
         "..........",
