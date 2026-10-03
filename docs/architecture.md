@@ -1,4 +1,4 @@
-# rayengine 0.0.1
+# rayengine 0.0.2
 
 Linux-first Rust SDK and CLI over raylib, with no editor. Windows and macOS
 are optional targets; browser and mobile are outside the current scope.

@@ -31,13 +31,13 @@ Preparation and CI run without this secret. See the
 - [ ] Review the public API, platform support, license and package contents.
 - [ ] Commit and merge the release version into `master`.
 - [ ] Open **Actions → Publish crates → Run workflow**, choose `master`, enter the
-  committed version (for example `0.0.1`), and keep **dry_run** checked.
+  committed version (for example `0.0.2`), and keep **dry_run** checked.
 - [ ] Check all jobs passed. Download the `crate-candidates` artifact to inspect
   the four `.crate` archives and `SHA256SUMS` if desired.
 - [ ] Run the same workflow for the same commit/version with **dry_run** unchecked
   to upload. Actual publication is restricted to `master`.
 - [ ] Verify all four crates.io pages, READMEs and docs.rs build results.
-- [ ] Tag the exact published commit `v0.0.1` (substitute the release version) and
+- [ ] Tag the exact published commit `v0.0.2` (substitute the release version) and
   create release notes. This workflow does not create tags or GitHub Releases.
 
 The input validates a version already committed in the manifests; it does not
@@ -87,7 +87,7 @@ Install the prerequisites from the quickstart, then use Rust 1.98.1:
 scripts/check.sh
 python3 scripts/template_smoke.py
 python3 scripts/test_release_check.py
-python3 scripts/release_check.py --version 0.0.1 --package
+python3 scripts/release_check.py --version 0.0.2 --package
 python3 scripts/release_smoke.py
 xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 scripts/native_smoke.sh
 ```

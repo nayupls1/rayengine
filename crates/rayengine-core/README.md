@@ -7,7 +7,7 @@ and saves. No raylib, native graphics libraries or display are required.
 
 ```toml
 [dependencies]
-rayengine-core = "0.0.1"
+rayengine-core = "0.0.2"
 ```
 
 See the [API reference](https://docs.rs/rayengine-core) and
