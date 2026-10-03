@@ -109,6 +109,7 @@ impl Navigation {
             .expect("the map is inside its own grid");
         // Drop a half-finished search for the old target.
         self.finder.cancel();
+        self.follower.clear();
         self.replan_in = 0.0;
     }
 

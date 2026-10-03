@@ -652,6 +652,15 @@ fn smoothing_removes_redundant_waypoints_without_entering_walls() {
     smooth_path(&open, &mut path, Neighborhood::Four).unwrap();
     assert_eq!(path, vec![cell(0, 0), cell(3, 2)]);
 
+    // A stale path through newly blocked cells gains no blocked shortcut.
+    let mut stale = open.clone();
+    stale.set(cell(1, 1), None);
+    stale.set(cell(2, 1), None);
+    let mut path = vec![cell(0, 0), cell(1, 0), cell(2, 1), cell(3, 1), cell(4, 1)];
+    let original = path.clone();
+    smooth_path(&stale, &mut path, Neighborhood::default()).unwrap();
+    assert_eq!(path, original);
+
     let mut short = vec![cell(0, 0), cell(1, 1)];
     smooth_path(&open, &mut short, Neighborhood::Four).unwrap();
     assert_eq!(short, vec![cell(0, 0), cell(1, 1)]);

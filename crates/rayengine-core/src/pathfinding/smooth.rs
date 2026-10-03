@@ -28,8 +28,10 @@ pub fn line_of_sight<G: NavGrid + ?Sized>(
 /// between its neighbors has [`line_of_sight`] and costs no more than the
 /// cells it replaces, measured as each cell's cost times the length of the
 /// segment inside it. A shortcut may still cross a costlier cell when it saves
-/// more elsewhere, but it never makes the path more expensive. The path should come from [`PathFinder`](super::PathFinder) with
-/// the same `neighborhood`. Errors leave the path unchanged for cells outside
+/// more elsewhere, but it never makes the path more expensive. The path should
+/// come from [`PathFinder`](super::PathFinder) with the same `neighborhood`.
+/// Steps of a stale path that now cross blocked cells are kept unless a clear
+/// shortcut replaces them; smoothing never adds a blocked segment. Errors leave the path unchanged for cells outside
 /// the grid, but may leave it partly simplified for a cost that is not finite
 /// and positive.
 ///
@@ -54,13 +56,9 @@ pub fn smooth_path<G: NavGrid + ?Sized>(
     let mut anchor = path[0];
     let mut original = 0.0;
     for next in 1..path.len() {
-        let step = along(path[next - 1], path[next])?;
-        let Some(step) = step else {
-            // Not a valid grid step: any clear shortcut is an improvement.
-            original = f32::INFINITY;
-            continue;
-        };
-        original += step;
+        // A blocked step (a stale path) makes any clear shortcut an
+        // improvement; without one, its endpoints are kept as they are.
+        original += along(path[next - 1], path[next])?.unwrap_or(f32::INFINITY);
         if next == 1 {
             continue;
         }
