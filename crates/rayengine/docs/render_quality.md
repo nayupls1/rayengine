@@ -57,8 +57,9 @@ Advanced raw shaders/blend modes must preserve that target representation; use
 `UiCanvas::pixel_scale()` exposes target pixels per logical UI unit for raw
 custom-font drawing. Font atlases must still be rasterized at a suitable physical
 size: supersampling does not add detail to a small atlas. The comparison fixture
-loads a 64-pixel iA Writer Mono atlas through raylib; its SIL license is included.
-Typed font assets and named font declarations are tracked in issue #47.
+loads iA Writer Mono through the typed font API with a 64-pixel minimum atlas;
+its SIL license is included. See [custom fonts](crate::guides::fonts) for adaptive
+rasterization, ownership and named manifest declarations.
 The native probe compares both default and custom-font glyph pixels exactly
 across quality modes at the same DPI.
 

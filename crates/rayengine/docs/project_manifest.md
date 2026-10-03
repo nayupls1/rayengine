@@ -56,7 +56,8 @@ audio = false
 path = "assets/fonts/body.ttf" # required in every effective declaration
 raster_size = 32               # default 32, 1..=512
 filter = "linear"              # linear (default) | nearest
-glyphs = [32, 65, 66, 67]       # optional nonempty Unicode scalar list
+rasterization = "adaptive"      # adaptive (default) | fixed
+glyphs = [32, 65, 66, 67]       # optional printable Unicode scalar list
 
 [package]
 # Reserved opaque table. This release neither packages nor validates its keys.
@@ -87,9 +88,12 @@ font, plugin and executable names contain only ASCII letters, digits, `_`, `-`.
 Paths must be nonempty UTF-8 without NUL. Colors must be four byte values.
 
 `render.reference_size`, `scale_mode`, `target_fps`, `vsync`, `bar_color` name
-existing runtime controls. `fonts.<name>.path`, `raster_size`, `filter`, `glyphs`
-are the shared contract for the custom-font work (#47). Declarations do not yet
-create font resources. `render.render_scale` and `render.anti_aliasing` select
+existing runtime controls. `fonts.<name>.path`, `raster_size`, `filter`, `rasterization`, and `glyphs`
+are shared with the runtime font loader. Coverage is capped at 1024 unique
+printable characters including the automatic space and `?` fallbacks.
+Declarations describe resources; `InitContext::fonts(&resolved)` loads them
+explicitly on the owning render thread. See [custom fonts](crate::guides::fonts).
+`render.render_scale` and `render.anti_aliasing` select
 [offscreen rendering quality](crate::guides::render_quality). IntegerFit requires
 scale 1 and no edge filter. The loader checks initial 1× DPI allocation bounds;
 the runtime additionally validates device limits and actual framebuffer DPI.

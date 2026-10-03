@@ -1,5 +1,9 @@
 use super::*;
-use crate::{assets::Assets, render::Frame};
+use crate::{
+    assets::Assets,
+    fonts::{FontOptions, TextStyle},
+    render::Frame,
+};
 use rayengine_core::{
     camera::Camera3D,
     collision::Aabb3,
@@ -37,18 +41,18 @@ fn native_quality_offscreen_edges_text_alpha_dpi_and_cleanup() {
         .hidden()
         .log_level(TraceLogLevel::LOG_WARNING)
         .build();
-    let font = rl
-        .load_font_from_memory(
+    let mut assets = Assets::new(None);
+    let font = assets
+        .load_font(
             &thread,
-            ".ttf",
-            include_bytes!("../../examples/assets/iAWriterMonoS-Regular.ttf"),
-            48,
-            None,
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("examples/assets/iAWriterMonoS-Regular.ttf"),
+            FontOptions {
+                raster_size: 24,
+                ..Default::default()
+            },
         )
         .unwrap();
-    font.texture()
-        .set_texture_filter(&thread, TextureFilter::TEXTURE_FILTER_BILINEAR);
-    let mut assets = Assets::new(None);
     for dpi in [1.0f32, 1.25, 2.0] {
         let mut counts = Vec::new();
         let mut text = None;
@@ -126,14 +130,16 @@ fn native_quality_offscreen_edges_text_alpha_dpi_and_cleanup() {
                         Color::BLACK,
                     );
                     ui.text("Native text", Vec2::new(12.0, 12.0), 16.0, Color::WHITE);
-                    ui.raw.draw_text_ex(
-                        &font,
+                    ui.text_with(
                         "Custom font Aa 012",
-                        Vector2::new(12.0 * dpi, 34.0 * dpi),
-                        24.0 * dpi,
-                        dpi,
+                        Vec2::new(12.0, 34.0),
+                        TextStyle {
+                            spacing: 1.0,
+                            ..TextStyle::new(font, 24.0)
+                        },
                         Color::WHITE,
-                    );
+                    )
+                    .unwrap();
                     ui.rectangle(
                         rayengine_core::collision::Aabb2 {
                             min: Vec2::new(280.0, 10.0),

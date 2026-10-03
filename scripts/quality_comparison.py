@@ -42,7 +42,7 @@ def main():
         for profile in profiles[repeat % 4:] + profiles[:repeat % 4]:
             report = args.output / f'{profile}-{repeat}.json'
             run = [str(binary), profile, '--hidden', '--uncapped', '--frames', str(args.frames),
-                   '--size', args.size, '--diagnostics', str(report), '--workload', 'quality/mixed-static.v1']
+                   '--size', args.size, '--diagnostics', str(report), '--workload', 'quality/mixed-static.v2']
             if repeat == 0:
                 run += ['--screenshot', str(args.output / f'{profile}.png')]
             subprocess.run(run, check=True)
@@ -66,7 +66,7 @@ def main():
                         ['DISPLAY', 'WAYLAND_DISPLAY', 'LIBGL_ALWAYS_SOFTWARE', 'RUSTFLAGS']},
         'frames_per_run': args.frames, 'repeats': args.repeats,
         'measurement': 'Uncapped frame wall time including initial target allocation, resolve, driver stalls and presentation; no GPU timer',
-        'workload': 'quality/mixed-static.v1', 'draws': reference_draws, 'profiles': {},
+        'workload': 'quality/mixed-static.v2', 'draws': reference_draws, 'profiles': {},
     }
     for profile, runs in records.items():
         settings = runs[0]['settings']

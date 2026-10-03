@@ -1,31 +1,13 @@
 //! Identical diagonal/3D/text workload for native quality comparisons.
 use rayengine::prelude::*;
-use rayengine::raylib::prelude::{
-    Font, RaylibDraw, RaylibFont, RaylibTexture2D, TextureFilter, Vector2,
-};
 
-#[derive(Default)]
 struct Comparison {
-    font: Option<Font>,
+    project: rayengine::manifest::ResolvedManifest,
+    font: Option<FontId>,
 }
 impl Game for Comparison {
     fn init(&mut self, ctx: &mut InitContext<'_, '_>) -> Result<(), Error> {
-        self.font = Some(
-            ctx.raylib
-                .load_font_from_memory(
-                    ctx.thread,
-                    ".ttf",
-                    include_bytes!("assets/iAWriterMonoS-Regular.ttf"),
-                    64,
-                    None,
-                )
-                .map_err(|e| Error::Asset(e.to_string()))?,
-        );
-        self.font
-            .as_ref()
-            .unwrap()
-            .texture()
-            .set_texture_filter(ctx.thread, TextureFilter::TEXTURE_FILTER_BILINEAR);
+        self.font = Some(ctx.fonts(&self.project)?["comparison"]);
         Ok(())
     }
     fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
@@ -79,17 +61,16 @@ impl Game for Comparison {
                 18.0,
                 Color::WHITE,
             );
-            // Raw font bridge pending typed custom font support (#47). Coordinates
-            // here are native target pixels, independently of the world render scale.
-            let scale = ui.pixel_scale();
-            ui.raw.draw_text_ex(
-                self.font.as_ref().unwrap(),
+            ui.text_with(
                 "Custom font: Aa Bb 0123",
-                Vector2::new(24.0 * scale.x, 52.0 * scale.y),
-                24.0 * scale.y,
-                scale.y,
+                Vec2::new(24.0, 52.0),
+                TextStyle {
+                    spacing: 1.0,
+                    ..TextStyle::new(self.font.unwrap(), 24.0)
+                },
                 Color::WHITE,
-            );
+            )
+            .unwrap();
         });
     }
 }
@@ -108,7 +89,10 @@ fn main() -> Result<(), Error> {
     config = config.with_project(&resolved)?;
     let report = App::new(config)
         .with_options(RunOptions::parse(args)?)
-        .run(Comparison::default())?;
+        .run(Comparison {
+            project: resolved,
+            font: None,
+        })?;
     println!("{} frames in {:?}", report.frames, report.elapsed);
     Ok(())
 }

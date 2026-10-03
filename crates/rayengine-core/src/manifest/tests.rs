@@ -434,3 +434,45 @@ anti_aliasing = "fxaa"
         assert!(error.contains(expected), "{error}");
     }
 }
+
+#[test]
+fn font_rasterization_and_coverage_follow_profiles_and_loader_limits() {
+    let dir = Scratch::new();
+    let file = dir.0.join("rayengine.toml");
+    fs::write(&file, "schema_version=1\n[fonts.body]\npath='body.ttf'\nraster_size=1\n[profiles.pixel.fonts.body]\nfilter='nearest'\nrasterization='fixed'").unwrap();
+    let manifest = ProjectManifest::load(&file).unwrap();
+    let base = manifest.resolve(None).unwrap();
+    assert_eq!(
+        base.settings.fonts["body"].rasterization,
+        FontRasterization::Adaptive
+    );
+    let pixel = manifest.resolve(Some("pixel")).unwrap();
+    assert_eq!(
+        pixel.settings.fonts["body"].rasterization,
+        FontRasterization::Fixed
+    );
+    assert_eq!(pixel.settings.fonts["body"].filter, FontFilter::Nearest);
+    for glyphs in [
+        "[0]".to_owned(),
+        "[55296]".to_owned(),
+        format!(
+            "[{}]",
+            (0x1000..0x1500)
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+    ] {
+        fs::write(
+            &file,
+            format!("schema_version=1\n[fonts.body]\npath='body.ttf'\nglyphs={glyphs}"),
+        )
+        .unwrap();
+        assert!(
+            ProjectManifest::load(&file)
+                .unwrap_err()
+                .to_string()
+                .contains("fonts.body.glyphs")
+        );
+    }
+}

@@ -152,6 +152,16 @@ pub enum FontFilter {
     /// Intentional pixel-style text.
     Nearest,
 }
+/// Font atlas resolution policy, shared with the runtime font loader.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum FontRasterization {
+    /// Grow cached atlases to match text size in actual render-target pixels.
+    #[default]
+    Adaptive,
+    /// Preserve the declared raster size, including intentional pixel enlargement.
+    Fixed,
+}
 /// Named font declaration. This describes a resource; it does not load an atlas.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -164,6 +174,9 @@ pub struct FontDeclaration {
     /// Atlas filtering; defaults to linear.
     #[serde(default)]
     pub filter: FontFilter,
+    /// Resolution policy; defaults to adaptive. Use fixed with nearest for pixel text.
+    #[serde(default)]
+    pub rasterization: FontRasterization,
     /// Optional Unicode scalar values; omitted means the loader's default coverage.
     pub glyphs: Option<Vec<u32>>,
 }
@@ -467,12 +480,19 @@ fn validate(settings: &Settings) -> Result<()> {
                 "fonts.{name}.raster_size must be between 1 and 512"
             )));
         }
-        if let Some(glyphs) = &font.glyphs
-            && (glyphs.is_empty() || glyphs.iter().any(|&value| char::from_u32(value).is_none()))
-        {
-            return Err(error(format!(
-                "fonts.{name}.glyphs must be a nonempty array of Unicode scalar values"
-            )));
+        if let Some(glyphs) = &font.glyphs {
+            let coverage: std::collections::BTreeSet<_> =
+                glyphs.iter().copied().chain([32, 63]).collect();
+            if glyphs.is_empty()
+                || coverage.len() > 1024
+                || coverage
+                    .iter()
+                    .any(|&value| char::from_u32(value).is_none_or(char::is_control))
+            {
+                return Err(error(format!(
+                    "fonts.{name}.glyphs must be a nonempty array of printable Unicode scalar values, at most 1024 unique including space and '?'"
+                )));
+            }
         }
     }
     for name in settings.plugins.keys() {

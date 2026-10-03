@@ -4,6 +4,12 @@ schema_version = 1
 render_scale = 1.0
 anti_aliasing = "none"
 
+[fonts.comparison]
+path = "assets/iAWriterMonoS-Regular.ttf"
+raster_size = 64
+filter = "bilinear"
+rasterization = "adaptive"
+
 [profiles.native.render]
 render_scale = 1.0
 anti_aliasing = "none"

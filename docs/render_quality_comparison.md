@@ -5,10 +5,10 @@ Backend: x11 (XWayland display), renderer: NVIDIA Corporation / NVIDIA GeForce R
 Toolchain: cargo 1.98.1 (797e8a9bc 2026-08-05); rustc 1.98.1 (48a229cea 2026-09-01).
 
 Command: `RUSTUP_TOOLCHAIN=1.98.1 python3 scripts/quality_comparison.py --frames 2000 --repeats 5`.
-Each profile submitted the same `quality/mixed-static.v1` workload at 1280×720,
+Each profile submitted the same `quality/mixed-static.v2` workload at 1280×720,
 with a 960×540 reference view, VSync off and no FPS cap. Each sample includes
 initial render target allocation and 2000 frames; profile order rotates per repeat.
-Default and 64-pixel custom font atlas, diagonal lines, cube and sphere are identical.
+Default and typed custom font with a 64-pixel minimum atlas, diagonal lines, cube and sphere are identical.
 
 | Mode | World pixels | Estimated targets (MiB) | Frame median (ms) | Per-run range (ms) | Render median (ms) | Present median (ms) | Relative frame wall time |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: |

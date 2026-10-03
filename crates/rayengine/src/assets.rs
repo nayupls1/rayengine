@@ -5,6 +5,7 @@
 //! Render resources are dropped before the window and sounds before audio closes.
 
 use crate::Error;
+pub use crate::fonts::FontId;
 use crate::lighting::Lighting;
 use crate::material::{MaterialDesc, Shading, UniformId, UniformValue};
 use rayengine_core::mesh::MeshData;
@@ -46,7 +47,8 @@ pub struct MeshId {
 
 /// Runtime asset collection. Load during initialization; draw using typed handles.
 pub struct Assets<'audio> {
-    textures: Vec<Option<Texture2D>>,
+    pub(crate) fonts: crate::fonts::FontAssets,
+    pub(crate) textures: Vec<Option<Texture2D>>,
     models: Vec<Option<Model>>,
     model_lit_normals: Vec<bool>,
     sounds: Vec<Option<Sound<'audio>>>,
@@ -67,7 +69,11 @@ impl<'audio> Assets<'audio> {
     pub fn resource_counts(&self) -> crate::diagnostics::ResourceCounts {
         let (meshes, generated_mesh_bytes) = self.meshes.resource_usage();
         let (shaders, materials) = self.surfaces.resource_counts();
+        let (fonts, font_atlases, font_bytes) = self.fonts.usage();
         crate::diagnostics::ResourceCounts {
+            fonts,
+            font_atlases,
+            font_bytes,
             textures: self.textures.iter().flatten().count() as u64,
             models: self.models.iter().flatten().count() as u64,
             sounds: self.sounds.iter().flatten().count() as u64,
@@ -90,6 +96,7 @@ impl<'audio> Assets<'audio> {
     }
     pub(crate) fn new(audio: Option<&'audio RaylibAudio>) -> Self {
         Self {
+            fonts: crate::fonts::FontAssets::new(),
             textures: Vec::new(),
             models: Vec::new(),
             model_lit_normals: Vec::new(),
@@ -102,6 +109,31 @@ impl<'audio> Assets<'audio> {
             sound_paths: HashMap::new(),
             audio,
         }
+    }
+
+    /// Measures the exact logical layout used by custom text drawing, without
+    /// allocating GPU resources. Stale handles and invalid text return errors.
+    pub fn measure_text(
+        &self,
+        text: &str,
+        style: crate::fonts::TextStyle,
+    ) -> Result<crate::fonts::TextMetrics, Error> {
+        self.fonts.measure(text, style)
+    }
+
+    /// Releases every atlas for this font. Returns false for an unloaded handle.
+    /// Call between passes, so queued native drawing has already been flushed.
+    pub fn unload_font(&mut self, id: crate::fonts::FontId) -> bool {
+        self.fonts.unload(id)
+    }
+
+    pub(crate) fn load_font(
+        &mut self,
+        thread: &RaylibThread,
+        path: &Path,
+        options: crate::fonts::FontOptions,
+    ) -> Result<crate::fonts::FontId, Error> {
+        self.fonts.load(thread, path, options)
     }
 
     /// Borrow a loaded texture, or `None` after it has been unloaded.

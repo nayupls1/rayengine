@@ -1,0 +1,21 @@
+schema_version = 1
+
+[fonts.body]
+path = "LiberationSans-Regular.ttf"
+raster_size = 32
+filter = "linear"
+rasterization = "adaptive"
+
+[fonts.pixel]
+path = "PressStart2P-Regular.ttf"
+raster_size = 16
+filter = "nearest"
+rasterization = "fixed"
+
+[profiles.pixel.render]
+scale_mode = "integer_fit"
+
+[profiles.pixel.fonts.body]
+raster_size = 16
+filter = "nearest"
+rasterization = "fixed"

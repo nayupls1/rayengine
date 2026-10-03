@@ -1,7 +1,7 @@
 # Assets and ownership
 
 Load assets in `Game::init`. The runtime caches them by canonical path and returns
-typed `TextureId`, `ModelId`, `SoundId` and `ShaderId` handles. Gameplay stores these handles;
+typed `TextureId`, `ModelId`, `SoundId`, `ShaderId`, and `FontId` handles. Gameplay stores these handles;
 the runtime owns and drops the native resources.
 
 ```no_run
@@ -99,3 +99,8 @@ fn upload(ctx: &mut InitContext<'_, '_>) -> Result<TextureId, Error> {
 cache or write a file. The CPU image may be dropped after uploading; unload the
 texture through `Assets::unload_texture` when it is no longer used. Materials
 borrow texture handles, so unload dependent meshes/materials first.
+
+Custom fonts use canonical paths plus rasterization/sampling/coverage options as
+their cache key. `Assets::unload_font` frees all size variants. Measurement and
+custom drawing return errors for stale handles. See [fonts](crate::guides::fonts)
+for shared layout, DPI-aware atlases, pixel text, and named manifest declarations.

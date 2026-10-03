@@ -4,6 +4,9 @@
 
 - Configurable native/2× supersampled world rendering and offscreen FXAA, native
   UI composition, checked manifest profiles, bounded allocations and visual/performance probes.
+- Owned custom fonts with typed handles, target-aware sharp UI atlases, shared
+  measurement/spacing, per-button selection, explicit pixel sampling, named
+  manifest/profile integration, and a licensed two-font comparison example.
 - Minecraft demo: game menu, F3-only debug overlay, icon-based inventory and
   recipe cards, day/night lighting with a lit voxel shader, held torches, lit
   pickups and particle block debris.
