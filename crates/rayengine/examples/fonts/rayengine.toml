@@ -2,14 +2,20 @@ schema_version = 1
 
 [fonts.body]
 path = "LiberationSans-Regular.ttf"
-[fonts.body.options]
 raster_size = 32
-sampling = "smooth"
+filter = "linear"
 rasterization = "adaptive"
 
 [fonts.pixel]
 path = "PressStart2P-Regular.ttf"
-[fonts.pixel.options]
 raster_size = 16
-sampling = "nearest"
+filter = "nearest"
+rasterization = "fixed"
+
+[profiles.pixel.render]
+scale_mode = "integer_fit"
+
+[profiles.pixel.fonts.body]
+raster_size = 16
+filter = "nearest"
 rasterization = "fixed"

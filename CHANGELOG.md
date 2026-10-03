@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased (0.0.2)
+
+- Owned custom fonts with typed handles, target-aware sharp UI atlases, shared
+  measurement/spacing, per-button selection, explicit pixel sampling, named
+  manifest/profile integration, and a licensed two-font comparison example.
+- Add opt-in Lambert materials with ambient, directional, and up to four point
+  lights, shared generated/imported geometry APIs, checked normal/transform
+  validation, an adjustable demo, native pixel probes, and submission benchmarks.
+- Optional game-owned state stacks with deferred transitions, independent
+  update/draw/input routing, explicit resource cleanup and a title/pause example.
+- Validated sprite-sheet regions with world-space rotation, explicit pivots,
+  flipping and tint through cached texture handles.
+- CPU-only named animation clips with per-frame timing, looping and one-shot
+  playback, pause/resume/reset and single completion events.
+- Original MIT-licensed pixel-art playground, checked documentation, focused
+  playback tests and a native sprite drawing probe across viewport policies.
+
+- Add optional versioned `rayengine.toml` descriptions with profiles, shared
+  CLI/runtime validation, manifest-relative assets/font declarations, extension
+  namespaces, scaffold examples and inspection/check integration.
+
 ## 0.0.1
 
 - Manually dispatched crates.io releases gated by the full CI suite, coordinated
@@ -31,3 +52,13 @@
   exported benchmark samples with machine/toolchain/revision provenance.
 
 Interactive agent pause/input/image/state automation is deferred to issue #1.
+
+## Unreleased particle effects
+
+- Add the independently optional `rayengine-particles` Cargo plugin with bounded,
+  seeded CPU emitters, fixed-tick emission/bursts, lifetime variation, motion and
+  size/color evolution, and explicit stop/reset/removal.
+- Add optional 2D atlas sprites and transparent camera-facing 3D billboards using
+  existing asset/material/viewport APIs, with procedural sparks/smoke/pickup demo.
+- Add scoped 2D alpha blending that preserves target alpha and restores native
+  state, simulation/native coverage and bounded-load Criterion comparisons.

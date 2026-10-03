@@ -2,17 +2,21 @@
 
 pub use rayengine_core as core;
 pub use rayengine_core::first_person;
+pub use rayengine_core::manifest;
 pub use rayengine_core::save;
+pub use rayengine_core::sprite;
 pub use raylib;
 
 pub mod assets;
 pub mod diagnostics;
 pub mod fonts;
 pub mod input;
+pub mod lighting;
 pub mod material;
 pub mod plugin;
 pub mod render;
 pub mod runtime;
+pub mod state;
 pub mod upload;
 
 pub use plugin::Plugin;
@@ -26,11 +30,19 @@ pub mod guides {
     pub mod quickstart {}
     #[doc = include_str!("../docs/game_structure.md")]
     pub mod game_structure {}
+    #[doc = include_str!("../docs/states.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/states.rs")]
+    #[doc = "```"]
+    pub mod states {}
     #[doc = include_str!("../docs/plugins.md")]
     pub mod plugins {}
     #[doc = include_str!("../docs/responsive.md")]
     pub mod responsive {}
     #[doc = include_str!("../docs/timing_input.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/controls.rs")]
+    #[doc = "```"]
     pub mod timing_input {}
     #[doc = include_str!("../docs/first_person.md")]
     #[doc = "\n\n```no_run"]
@@ -41,10 +53,22 @@ pub mod guides {
     pub mod assets {}
     #[doc = include_str!("../docs/fonts.md")]
     pub mod fonts {}
+    #[doc = include_str!("../docs/project_manifest.md")]
+    pub mod project_manifest {}
+    #[doc = include_str!("../docs/sprites.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/sprites.rs")]
+    #[doc = "```"]
+    pub mod sprites {}
     #[doc = include_str!("../docs/generated_meshes.md")]
     pub mod generated_meshes {}
     #[doc = include_str!("../docs/materials.md")]
     pub mod materials {}
+    #[doc = include_str!("../docs/lighting.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/lighting.rs")]
+    #[doc = "```"]
+    pub mod lighting {}
     #[doc = include_str!("../docs/spatial_queries.md")]
     pub mod spatial_queries {}
     #[doc = include_str!("../docs/background_work.md")]
@@ -71,12 +95,19 @@ pub mod guides {
 pub mod prelude {
     pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
     pub use crate::fonts::{
-        FontDeclaration, FontDeclarations, FontId, FontOptions, FontRasterization, FontSampling,
-        TextMetrics, TextStyle,
+        FontId, FontOptions, FontRasterization, FontSampling, TextMetrics, TextStyle,
     };
-    pub use crate::input::{Bindings, Button};
-    pub use crate::material::{AlphaMode, MaterialDesc, MaterialParam, UniformId, UniformValue};
+    pub use crate::input::{
+        ActionBinding, AxisBinding, AxisConfig, AxisSource, BindingConfig, Bindings, Button,
+    };
+    pub use crate::lighting::{DirectionalLight, Lighting, MAX_POINT_LIGHTS, PointLight};
+    pub use crate::material::{
+        AlphaMode, MaterialDesc, MaterialParam, Shading, UniformId, UniformValue,
+    };
     pub use crate::render::{Frame, UiButtonStyle};
+    pub use crate::state::{
+        State, StateCommands, StatePolicy, StateResources, StateStack, Transition,
+    };
     pub use crate::upload::{
         MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
         UploadBudget, UploadReport,

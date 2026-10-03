@@ -10,4 +10,4 @@ Bundled, unmodified fonts:
 Keep these license files with the fonts when redistributing the example.
 The example resolves paths against this directory's rayengine.toml, independent
 of the process's working directory. For distribution, copy this directory and
-point FontDeclarations::load at the installed manifest path.
+point ProjectManifest::load at the installed manifest path.

@@ -1,17 +1,15 @@
 //! Two distributable fonts at multiple sizes; resize to compare display scales.
+use rayengine::manifest::{ProjectManifest, ResolvedManifest};
 use rayengine::prelude::*;
 
-#[derive(Default)]
 struct Fonts {
+    project: ResolvedManifest,
     body: Option<FontId>,
     pixel: Option<FontId>,
 }
 impl Game for Fonts {
     fn init(&mut self, context: &mut InitContext<'_, '_>) -> Result<(), Error> {
-        let manifest =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/fonts/rayengine.toml");
-        let declarations = FontDeclarations::load(manifest)?;
-        let fonts = context.fonts(&declarations)?;
+        let fonts = context.fonts(&self.project)?;
         self.body = Some(fonts["body"]);
         self.pixel = Some(fonts["pixel"]);
         Ok(())
@@ -74,8 +72,19 @@ impl Game for Fonts {
     }
 }
 fn main() -> Result<(), Error> {
-    App::new(Config::new("Custom fonts — resize to compare scales"))
+    let manifest =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/fonts/rayengine.toml");
+    let profile = std::env::var("RAYENGINE_PROFILE").ok();
+    let project = ProjectManifest::load(manifest)
+        .and_then(|manifest| manifest.resolve(profile.as_deref()))
+        .map_err(|e| Error::Config(e.to_string()))?;
+    let config = Config::new("Custom fonts — resize to compare scales").with_project(&project)?;
+    App::new(config)
         .with_options(RunOptions::from_env()?)
-        .run(Fonts::default())?;
+        .run(Fonts {
+            project,
+            body: None,
+            pixel: None,
+        })?;
     Ok(())
 }

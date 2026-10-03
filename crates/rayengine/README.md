@@ -6,6 +6,7 @@ logical UI with optional interaction and explicit asset ownership. Version **0.0
 
 Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/quickstart/index.html), then read
 [game structure](https://docs.rs/rayengine/latest/rayengine/guides/game_structure/index.html) and
+[scene switching and state stacks](https://docs.rs/rayengine/latest/rayengine/guides/states/index.html), and
 [optional plugins](https://docs.rs/rayengine/latest/rayengine/guides/plugins/index.html). The remaining guides explain
 [responsive viewports](https://docs.rs/rayengine/latest/rayengine/guides/responsive/index.html),
 [timing and input](https://docs.rs/rayengine/latest/rayengine/guides/timing_input/index.html), [assets](https://docs.rs/rayengine/latest/rayengine/guides/assets/index.html),
@@ -19,6 +20,10 @@ Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/qu
 [runtime diagnostics](https://docs.rs/rayengine/latest/rayengine/guides/diagnostics/index.html),
 [testing and performance](https://docs.rs/rayengine/latest/rayengine/guides/testing_performance/index.html), and the
 [agent workflow](https://docs.rs/rayengine/latest/rayengine/guides/agent_workflow/index.html).
+
+Optional `rayengine.toml` project descriptions share a CPU-only loader with the
+CLI. See the [project manifest guide](https://docs.rs/rayengine/latest/rayengine/guides/project_manifest/)
+for profiles, asset/font declarations, validation and configuration precedence.
 
 `rayengine-core` contains display-independent components and math; access it
 through [`core`](https://docs.rs/rayengine-core) or depend on it directly for simulations without raylib.
@@ -58,3 +63,8 @@ not rigid-body dynamics or an advanced 3D rendering pipeline. The interactive
 input/image/state testing protocol is deferred. The CLI's JSON project diagnostics
 are available now. Desktop Linux is the supported development target; Windows
 and macOS are optional and not yet verified by this project's CI.
+
+Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
+See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
+and run `cargo run -p rayengine --example lighting` for a generated/imported
+lit/unlit comparison with adjustable lights.

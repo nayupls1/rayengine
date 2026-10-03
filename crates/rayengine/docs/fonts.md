@@ -52,7 +52,8 @@ built-in font; use `text_with` for custom fonts and configurable spacing.
 ## Rasterization and sampling
 
 The engine uses fontdue to parse and rasterize outline coverage and owns RGBA
-atlas textures. `Smooth` uses bilinear filtering; `Nearest` uses point filtering.
+atlas textures. Outline curves are optimized for the largest supported 512px
+atlas when parsed, so larger atlases retain smooth curves. `Smooth` uses bilinear filtering; `Nearest` uses point filtering.
 `Adaptive` starts at `raster_size` and adds power-of-two atlas sizes when text's
 em size in actual target pixels increases. The target-to-UI ratio incorporates
 UI resizing and physical framebuffer DPI, and also any higher internal render
@@ -71,7 +72,7 @@ quality selection itself belongs to issue #48.
 
 Fonts are cached by canonical path plus normalized options (coverage is sorted
 and deduplicated). Changing the file on disk does not replace a live handle;
-unload and reload to read new data. Raster size is 8..=512; adaptive requests
+unload and reload to read new data. Raster size is 1..=512; adaptive requests
 above 512 target pixels fail explicitly. Coverage is limited to 1024 unique
 printable Unicode characters. Font files are limited to 16 MiB, each atlas to
 4 million pixels (16 MiB RGBA), and all atlases of one handle to 64 MiB. Packing
@@ -102,42 +103,56 @@ and driver overhead are excluded from these GPU payload counts.
 
 ## Named declarations in rayengine.toml
 
-The reusable `FontDeclaration` type and `FontDeclarations` reader establish the
-font section for the version-1 project manifest work in issue #44:
+`ProjectManifest` provides the same named font declarations to the CLI and
+runtime, including profile overrides and manifest-relative paths:
 
 ```toml
 schema_version = 1
 [fonts.body]
 path = "assets/body.ttf"
-[fonts.body.options]
 raster_size = 32
-sampling = "smooth"
+filter = "linear"
 rasterization = "adaptive"
-glyphs = " ?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789éö"
+glyphs = [32, 63, 65, 66, 67, 233] # optional Unicode scalar list
+
+[profiles.pixel.fonts.body]
+filter = "nearest"
+rasterization = "fixed"
+raster_size = 16
 ```
 
 ```no_run
-use rayengine::prelude::*;
-# fn load(ctx: &mut InitContext<'_, '_>) -> Result<(), Error> {
-let declarations = FontDeclarations::load("rayengine.toml")?;
-let named = ctx.fonts(&declarations)?;
+use rayengine::{prelude::*, manifest::ProjectManifest};
+# fn load(ctx: &mut InitContext<'_, '_>) -> Result<(), Box<dyn std::error::Error>> {
+let manifest = ProjectManifest::load("rayengine.toml")?;
+let project = manifest.resolve(Some("pixel"))?;
+let named = ctx.fonts(&project)?;
 let body = named["body"];
 # let _ = body;
 # Ok(()) }
 ```
 
-The reader resolves paths relative to the manifest's canonical parent, even
-when invoked from another directory. It validates `schema_version`, names,
-font fields and options without loading native resources. Other top-level
-sections are left to the full project manifest reader; this font-specific
-reader does not perform its project/profile validation. Native loading remains
-explicit through the SDK. If a later named load fails, earlier successful loads
-remain cached, and the error names the failing declaration and file.
+`filter = "linear"` maps to SDK `FontSampling::Smooth`; `nearest` maps to
+`Nearest`. Both manifest and SDK rasterization default to adaptive. Omitted
+`glyphs` uses printable ASCII; explicit lists are deduplicated and always gain
+space and `?`. Declarations reject controls, invalid Unicode, and excessive
+coverage during project validation. `FontOptions::try_from` converts an
+individual resolved `FontDeclaration` for manual loading.
+
+The project reader validates the whole manifest and every profile without
+loading native resources. It resolves paths relative to the manifest's
+canonical parent, even when invoked from another directory. Native loading
+remains explicit through `InitContext::fonts` on the owning render thread.
+If a later named load fails, earlier successful loads remain cached, and the
+error names the failing declaration and file. See the
+[project manifest guide](crate::guides::project_manifest) for merge rules.
+The bundled example uses this schema and accepts `RAYENGINE_PROFILE=pixel`
+to combine nearest fonts with the IntegerFit presentation policy.
 
 ## Validation
 
 CPU tests validate coverage, options, file errors, multiline metrics, spacing,
-fallback, and manifest paths/schema. `scripts/native_smoke.sh` includes
+fallback, manifest profiles, and curved glyph coverage at 256/512px. `scripts/native_smoke.sh` includes
 `native_font` probes with identical workloads at several sizes, fractional/UI
 scales, simulated 2x physical DPI, and a 2x internal target. They compare rendered
 ink with measured bounds, exercise smooth/nearest filtering, atlas caching and

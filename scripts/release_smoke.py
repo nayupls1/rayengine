@@ -41,6 +41,8 @@ def main():
                 with tarfile.open(archive_path, "r:gz") as archive:
                     archive.extractall(directory / "packages", filter="data")
             install += ["--path", str(directory / "packages" / f"rayengine-cli-{version}")]
+            core_candidate = directory / "packages" / f"rayengine-core-{version}"
+            install += ["--config", f"patch.crates-io.rayengine-core.path={json.dumps(str(core_candidate))}"]
             patches = "\n[patch.crates-io]\n" + "".join(
                 f"{name} = {{ path = {json.dumps(str(directory / 'packages' / f'{name}-{version}'))} }}\n"
                 for name in PACKAGES if name not in {"rayengine-cli", "rayengine-voxel"}

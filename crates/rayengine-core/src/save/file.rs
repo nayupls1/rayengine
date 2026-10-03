@@ -185,6 +185,8 @@ struct Temporary {
 impl Temporary {
     fn create(parent: &Path) -> Result<Self, SaveError> {
         for _ in 0..128 {
+            // `try_update` is newer than our Rust 1.89 minimum.
+            #[allow(deprecated)]
             let id = NEXT_TEMP
                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
                 .map_err(|_| {

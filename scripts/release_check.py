@@ -57,9 +57,11 @@ def inspect_archives(version, directory):
             files = {member.name.removeprefix(prefix) for member in archive.getmembers() if member.isfile()}
             required = {"Cargo.toml", "Cargo.lock", "README.md", "LICENSE", ".cargo_vcs_info.json"}
             if name == "rayengine-cli":
-                required |= {"src/templates/2d.rs", "src/templates/3d.rs", "src/templates/plugin.rs"}
+                required |= {"src/templates/2d.rs", "src/templates/3d.rs", "src/templates/plugin.rs", "src/templates/rayengine.toml"}
             if name == "rayengine":
-                required |= {"docs/quickstart.md", "src/assets/materials/default.fs"}
+                required |= {"docs/quickstart.md", "docs/project_manifest.md", "src/assets/materials/default.fs"}
+            if name == "rayengine-core":
+                required.add("src/manifest.rs")
             if name == "rayengine-voxel":
                 required.add("src/render/repeat.fs")
             if not required <= files:

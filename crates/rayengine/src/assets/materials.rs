@@ -3,7 +3,8 @@
 use super::{MaterialId, ShaderId, TextureId};
 use crate::{
     Error,
-    material::{AlphaMode, MaterialDesc, UniformId, UniformValue},
+    lighting::{Lighting, MAX_POINT_LIGHTS},
+    material::{AlphaMode, MaterialDesc, Shading, UniformId, UniformValue},
     render::{matrix, v2, v3},
 };
 use raylib::prelude::*;
@@ -157,16 +158,20 @@ pub(super) struct MaterialAssets {
     pub(super) shaders: Vec<Option<ShaderAsset>>,
     pub(super) materials: Vec<Option<MaterialDesc>>,
     backend: Option<Backend>,
+    lighting: Lighting,
 }
 struct Backend {
     builtin: ShaderAsset,
+    lit: ShaderAsset,
+    lights: LightUniforms,
+    lighting_dirty: bool,
     state: gpu::RenderState,
 }
 
 impl MaterialAssets {
     pub(super) fn resource_counts(&self) -> (u64, u64) {
         (
-            self.shaders.iter().flatten().count() as u64 + u64::from(self.backend.is_some()),
+            self.shaders.iter().flatten().count() as u64 + 2 * u64::from(self.backend.is_some()),
             self.materials.iter().flatten().count() as u64,
         )
     }
@@ -175,6 +180,7 @@ impl MaterialAssets {
             shaders: Vec::new(),
             materials: Vec::new(),
             backend: None,
+            lighting: Lighting::default(),
         }
     }
     pub(super) fn initialize(
@@ -183,7 +189,17 @@ impl MaterialAssets {
         thread: &RaylibThread,
     ) -> Result<(), Error> {
         if self.backend.is_none() {
+            let lit = ShaderAsset::compile(
+                raylib,
+                thread,
+                Some(include_str!("materials/lit.vs")),
+                include_str!("materials/lit.fs"),
+            )?;
+            let lights = LightUniforms::new(&lit.native)?;
             self.backend = Some(Backend {
+                lit,
+                lights,
+                lighting_dirty: true,
                 state: gpu::RenderState::load(thread)?,
                 builtin: ShaderAsset::compile(
                     raylib,
@@ -216,6 +232,9 @@ impl MaterialAssets {
         textures: &[Option<Texture2D>],
     ) -> Result<(), Error> {
         desc.alpha.validate()?;
+        if desc.shading == Shading::Lit && desc.shader.is_some() {
+            return Err(Error::Asset("Shading::Lit uses the built-in lighting shader; remove the custom shader or use Shading::Unlit".into()));
+        }
         if desc
             .texture
             .is_some_and(|id| textures.get(id.0).and_then(Option::as_ref).is_none())
@@ -261,6 +280,17 @@ impl MaterialAssets {
         }
         Ok(())
     }
+    pub(super) fn lighting(&self) -> &Lighting {
+        &self.lighting
+    }
+    pub(super) fn set_lighting(&mut self, lighting: Lighting) -> Result<(), Error> {
+        lighting.validate()?;
+        self.lighting = lighting;
+        if let Some(backend) = &mut self.backend {
+            backend.lighting_dirty = true;
+        }
+        Ok(())
+    }
     pub(super) fn pass(&self) -> Option<SurfaceGuard> {
         self.backend.as_ref().map(|backend| backend.state.begin())
     }
@@ -278,7 +308,20 @@ impl MaterialAssets {
         };
         let shader = match desc.shader {
             Some(ShaderId(id)) => self.shaders.get_mut(id)?.as_mut()?,
-            None => &mut self.backend.as_mut()?.builtin,
+            None => {
+                let backend = self.backend.as_mut()?;
+                if desc.shading == Shading::Lit {
+                    if backend.lighting_dirty {
+                        backend
+                            .lights
+                            .upload(&mut backend.lit.native, &self.lighting);
+                        backend.lighting_dirty = false;
+                    }
+                    &mut backend.lit
+                } else {
+                    &mut backend.builtin
+                }
+            }
         };
         for (index, uniform) in shader.uniforms.iter_mut().enumerate() {
             // Resolve the final value once. The last override wins if the
@@ -357,3 +400,73 @@ fn set_value(shader: &mut Shader, location: i32, value: UniformValue) {
 
 #[cfg(test)]
 mod tests;
+
+/// Load a state-only guard without creating shaders or materials.
+pub(crate) fn alpha_pass(thread: &RaylibThread) -> Result<SurfaceGuard, Error> {
+    Ok(gpu::RenderState::load(thread)?.begin())
+}
+
+// Fixed-size cached bindings; all string lookups happen once during setup.
+struct LightUniforms {
+    ambient: i32,
+    direction: i32,
+    directional_color: i32,
+    count: i32,
+    positions: [i32; MAX_POINT_LIGHTS],
+    colors: [i32; MAX_POINT_LIGHTS],
+    ranges: [i32; MAX_POINT_LIGHTS],
+}
+impl LightUniforms {
+    fn new(shader: &Shader) -> Result<Self, Error> {
+        let result = Self {
+            ambient: shader.get_shader_location("ambient"),
+            direction: shader.get_shader_location("direction"),
+            directional_color: shader.get_shader_location("directionalColor"),
+            count: shader.get_shader_location("pointCount"),
+            positions: std::array::from_fn(|i| {
+                shader.get_shader_location(&format!("pointPosition[{i}]"))
+            }),
+            colors: std::array::from_fn(|i| {
+                shader.get_shader_location(&format!("pointColor[{i}]"))
+            }),
+            ranges: std::array::from_fn(|i| {
+                shader.get_shader_location(&format!("pointRange[{i}]"))
+            }),
+        };
+        if [
+            result.ambient,
+            result.direction,
+            result.directional_color,
+            result.count,
+        ]
+        .into_iter()
+        .chain(result.positions)
+        .chain(result.colors)
+        .chain(result.ranges)
+        .any(|l| l < 0)
+        {
+            return Err(Error::Asset(
+                "built-in lighting shader is missing required uniforms".into(),
+            ));
+        }
+        Ok(result)
+    }
+    fn upload(&self, shader: &mut Shader, lights: &Lighting) {
+        shader.set_shader_value(self.ambient, v3(lights.ambient));
+        let (direction, color) = lights
+            .directional
+            .map(|l| (l.direction.normalize(), l.color))
+            .unwrap_or((
+                rayengine_core::glam::Vec3::Z,
+                rayengine_core::glam::Vec3::ZERO,
+            ));
+        shader.set_shader_value(self.direction, v3(direction));
+        shader.set_shader_value(self.directional_color, v3(color));
+        shader.set_shader_value(self.count, lights.points.len() as i32);
+        for (i, light) in lights.points.iter().enumerate() {
+            shader.set_shader_value(self.positions[i], v3(light.position));
+            shader.set_shader_value(self.colors[i], v3(light.color));
+            shader.set_shader_value(self.ranges[i], light.range);
+        }
+    }
+}

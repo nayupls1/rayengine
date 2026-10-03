@@ -50,6 +50,10 @@ ownership; unloading a material never unloads its shared texture or shader.
 See [materials and shaders](crate::guides::materials) for alpha policies,
 typed uniforms, custom GLSL, replacement, and dependency lifetime rules.
 
+Sprite sheets draw selected `SpriteRegion`s from the same cached texture handles.
+See [sprite sheets and animation](crate::guides::sprites) for explicit pivots,
+rotation, flips, tint, CPU playback and region validation.
+
 Audio is opt-in:
 
 ```no_run

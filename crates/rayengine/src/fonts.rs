@@ -12,8 +12,7 @@ use std::{
 };
 
 mod gpu;
-mod manifest;
-pub use manifest::{FontDeclaration, FontDeclarations};
+pub use rayengine_core::manifest::FontRasterization;
 
 /// Stable font handle in one game run. Unloading permanently invalidates it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -30,22 +29,11 @@ pub enum FontSampling {
     Nearest,
 }
 
-/// Policy for choosing atlas resolution.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum FontRasterization {
-    /// Cache larger atlases when the requested text size in target pixels grows.
-    #[default]
-    Adaptive,
-    /// Always use raster_size, including when pixel text is enlarged.
-    Fixed,
-}
-
 /// Cached font configuration. Coverage always includes space and `?`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FontOptions {
-    /// Minimum atlas em size in pixels, 8..=512; fixed policy uses this exact size.
+    /// Minimum atlas em size in pixels, 1..=512; fixed policy uses this exact size.
     pub raster_size: u32,
     /// Unicode characters to rasterize, at most 1024 unique printable characters.
     /// The default is printable ASCII. Unsupported characters render as `?`.
@@ -71,8 +59,8 @@ impl FontOptions {
         self.normalized().map(|_| ())
     }
     fn normalized(&self) -> Result<Self, Error> {
-        if !(8..=512).contains(&self.raster_size) {
-            return Err(Error::Asset("font raster_size must be 8..=512".into()));
+        if !(1..=512).contains(&self.raster_size) {
+            return Err(Error::Asset("font raster_size must be 1..=512".into()));
         }
         if self.glyphs.chars().any(char::is_control) {
             return Err(Error::Asset(
@@ -110,6 +98,37 @@ impl FontOptions {
             ));
         }
         Ok((physical_size.ceil() as u32).next_power_of_two())
+    }
+}
+impl TryFrom<&rayengine_core::manifest::FontDeclaration> for FontOptions {
+    type Error = Error;
+    fn try_from(declaration: &rayengine_core::manifest::FontDeclaration) -> Result<Self, Error> {
+        let glyphs = match &declaration.glyphs {
+            None => Self::default().glyphs,
+            Some(values) if values.is_empty() => {
+                return Err(Error::Asset(
+                    "font declaration glyphs must be nonempty".into(),
+                ));
+            }
+            Some(values) => values
+                .iter()
+                .map(|value| {
+                    char::from_u32(*value).ok_or_else(|| {
+                        Error::Asset("font glyph must be a Unicode scalar value".into())
+                    })
+                })
+                .collect::<Result<String, _>>()?,
+        };
+        Self {
+            raster_size: declaration.raster_size,
+            glyphs,
+            sampling: match declaration.filter {
+                rayengine_core::manifest::FontFilter::Linear => FontSampling::Smooth,
+                rayengine_core::manifest::FontFilter::Nearest => FontSampling::Nearest,
+            },
+            rasterization: declaration.rasterization,
+        }
+        .normalized()
     }
 }
 
@@ -224,14 +243,8 @@ impl FontAssets {
         if bytes.len() > 16 * 1024 * 1024 {
             return Err(Error::Asset("font file exceeds 16 MiB".into()));
         }
-        let outline = fontdue::Font::from_bytes(
-            bytes,
-            fontdue::FontSettings {
-                load_substitutions: false,
-                ..Default::default()
-            },
-        )
-        .map_err(|e| Error::Asset(format!("font {}: {e}", key.0.display())))?;
+        let outline = parse_outline(bytes)
+            .map_err(|e| Error::Asset(format!("font {}: {e}", key.0.display())))?;
         if !outline.has_glyph('?') || !outline.has_glyph(' ') {
             return Err(Error::Asset(format!(
                 "font {} must provide '?' and space fallback glyphs",
@@ -327,6 +340,19 @@ impl FontAssets {
     pub(crate) fn atlas_sizes(&self, id: FontId) -> Vec<u32> {
         self.entry(id).unwrap().atlases.keys().copied().collect()
     }
+}
+
+fn parse_outline(bytes: impl AsRef<[u8]>) -> Result<fontdue::Font, &'static str> {
+    // fontdue flattens curves while parsing. Optimize geometry for the largest
+    // supported atlas so increased DPI/quality does not enlarge coarse segments.
+    fontdue::Font::from_bytes(
+        bytes.as_ref(),
+        fontdue::FontSettings {
+            scale: 512.0,
+            load_substitutions: false,
+            ..Default::default()
+        },
+    )
 }
 impl FontEntry {
     fn bytes(&self) -> u64 {

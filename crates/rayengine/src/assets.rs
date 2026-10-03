@@ -6,7 +6,8 @@
 
 use crate::Error;
 pub use crate::fonts::FontId;
-use crate::material::{MaterialDesc, UniformId, UniformValue};
+use crate::lighting::Lighting;
+use crate::material::{MaterialDesc, Shading, UniformId, UniformValue};
 use rayengine_core::mesh::MeshData;
 use raylib::prelude::*;
 use std::{
@@ -49,6 +50,7 @@ pub struct Assets<'audio> {
     pub(crate) fonts: crate::fonts::FontAssets,
     pub(crate) textures: Vec<Option<Texture2D>>,
     models: Vec<Option<Model>>,
+    model_lit_normals: Vec<bool>,
     sounds: Vec<Option<Sound<'audio>>>,
     meshes: MeshAssets,
     surfaces: materials::MaterialAssets,
@@ -97,6 +99,7 @@ impl<'audio> Assets<'audio> {
             fonts: crate::fonts::FontAssets::new(),
             textures: Vec::new(),
             models: Vec::new(),
+            model_lit_normals: Vec::new(),
             sounds: Vec::new(),
             meshes: MeshAssets::new(),
             surfaces: materials::MaterialAssets::new(),
@@ -146,6 +149,54 @@ impl<'audio> Assets<'audio> {
     /// Borrows an uploaded generated mesh, or `None` for an unloaded handle.
     pub fn mesh(&self, id: MeshId) -> Option<&Mesh> {
         self.meshes.get(id)
+    }
+
+    /// Borrows shared world-space light settings for this run.
+    pub fn lighting(&self) -> &Lighting {
+        self.surfaces.lighting()
+    }
+
+    /// Atomically validates and replaces lights. Failure preserves previous settings.
+    /// Call in init or before world_3d; changed uniforms upload on the next lit draw.
+    pub fn set_lighting(&mut self, lighting: Lighting) -> Result<(), Error> {
+        self.surfaces.set_lighting(lighting)
+    }
+
+    pub(crate) fn validate_lit_draw(
+        &self,
+        mesh: Option<MeshId>,
+        model: Option<ModelId>,
+        material: MaterialId,
+        transform: rayengine_core::glam::Mat4,
+    ) -> Result<(), Error> {
+        let Some(desc) = self.material(material) else {
+            return Ok(());
+        };
+        if desc.shading == Shading::Lit {
+            // Preserve Ok(false) for stale dependencies, even if transform/normals
+            // are also invalid. prepare() will reject the stale resource handle.
+            if desc.texture.is_some_and(|id| self.texture(id).is_none()) {
+                return Ok(());
+            }
+            let valid = if let Some(id) = mesh {
+                if self.mesh(id).is_none() {
+                    return Ok(());
+                }
+                self.meshes.has_lit_normals(id)
+            } else if let Some(id) = model {
+                if self.model(id).is_none() {
+                    return Ok(());
+                }
+                self.model_lit_normals[id.0]
+            } else {
+                false
+            };
+            crate::lighting::validate_transform(transform)?;
+            if !valid {
+                return Err(Error::Asset("lit geometry requires one finite, nonzero normal per vertex, with representable squared length; supply MeshData::normals or export model normals".into()));
+            }
+        }
+        Ok(())
     }
 
     /// Borrows a material description, or None after unloading.
@@ -404,6 +455,19 @@ impl<'audio> Assets<'audio> {
             .load_model(thread, path_string(&path)?)
             .map_err(|e| Error::Asset(format!("{}: {e}", path.display())))?;
         let id = ModelId(self.models.len());
+        self.model_lit_normals.push(
+            !model.meshes().is_empty()
+                && model.meshes().iter().all(|mesh| {
+                    let normals = mesh.normals();
+                    normals.len() == mesh.vertexCount as usize
+                        && !normals.is_empty()
+                        && normals.iter().all(|n| {
+                            crate::lighting::valid_normal(rayengine_core::glam::Vec3::new(
+                                n.x, n.y, n.z,
+                            ))
+                        })
+                }),
+        );
         self.models.push(Some(model));
         self.model_paths.insert(path, id);
         Ok(id)

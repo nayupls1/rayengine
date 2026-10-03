@@ -57,6 +57,13 @@ layouts. CPU tests cover clicks, keyboard focus, drag transitions, resize mappin
 focus-loss resets through paused frames, and explicit gameplay masks.
 The diagnostic probe verifies mixed 2D/3D/UI submissions, stale handles,
 replacement/unload byte accounting, sampled peaks, phase totals and JSON schema.
+The sprite probe samples asymmetric sheet regions with each flip combination,
+rotation around an explicit pivot, tint, camera rotation/zoom, high-DPI target
+mapping and Fit/Expand/IntegerFit layouts. It verifies rejected regions,
+transforms and stale handles submit nothing. CPU tests exercise variable frame
+durations, exact boundaries, huge time steps, pause/resume/reset, independent
+shared players and one completion per one-shot traversal. The sprite playground
+is rendered at wide and portrait sizes by the native smoke script too.
 The script also runs both demos and the menu example at wide and portrait dimensions and saves PNGs
 under `artifacts/smoke/`. Frozen gameplay fixtures check that Arena's shadow is
 on an upper platform and Meadow's first-person view stays above the first stone;
@@ -154,6 +161,13 @@ scripts/render_benchmark.sh save ui-draw-v1 ui_draw
 scripts/render_benchmark.sh save diagnostics-v1 diagnostics_
 ```
 
+`draw_submission/lit_100` compares basic lighting with `opaque_100` using the
+same normal-bearing quad, opaque alpha, identity matrix, and white tint/texture.
+The lit case evaluates ambient, one directional light, and four points. Light
+setup and uniform lookup happen outside measurement; draws reuse the validated
+configuration. See [basic lighting](crate::guides::lighting) for the runnable
+comparison demo and native pixel probe.
+
 Stable `draw_submission` cases submit 100 indexed quads through the existing
 default path and opaque, textured, cutout, parameterized, and blended materials.
 The target is 64x64 with vsync disabled. These timings include CPU work, OpenGL
@@ -230,3 +244,11 @@ counts and timings rather than assuming merging always improves performance.
 The [plugin guide](https://github.com/nayupls1/rayengine/blob/master/plugins/voxel/README.md)
 records fixtures and timing boundaries. CPU cases initialize no renderer or
 save I/O; native cases include driver work/stalls and are not GPU timers or FPS.
+
+The optional `rayengine-particles` plugin provides CPU-only seeded emission tests
+and `particles_cpu_v1` comparisons for idle, full, saturated sustained and burst
+loads at 128/4,096/32,768 capacity. Run `scripts/benchmark.sh save particles-v1
+particles_` and then `scripts/benchmark.sh compare particles-v1 particles_`.
+The native smoke script checks 2D/3D particle pixels, atlas regions, depth ordering,
+blend/depth state, wide/portrait fitting, stale handles and cleanup. It also checks
+scoped 2D alpha blending without materials and restoration on callback unwind.

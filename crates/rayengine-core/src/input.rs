@@ -6,6 +6,10 @@ use glam::Vec2;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Action(pub u16);
 
+/// Small numeric analog axis key, in a separate namespace from button actions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Axis(pub u16);
+
 #[derive(Clone, Copy, Debug, Default)]
 struct State {
     down: bool,
@@ -31,6 +35,7 @@ struct State {
 #[derive(Debug, Default)]
 pub struct Input {
     states: Vec<State>,
+    axes: Vec<f32>,
     pointer_delta: Vec2,
     reset_pending: bool,
 }
@@ -44,6 +49,7 @@ impl Input {
         InputView {
             input: self,
             blocked,
+            blocked_axes: &[],
             block_motion,
         }
     }
@@ -51,9 +57,37 @@ impl Input {
     pub fn with_capacity(actions: usize) -> Self {
         Self {
             states: vec![State::default(); actions],
+            axes: Vec::new(),
             pointer_delta: Vec2::ZERO,
             reset_pending: false,
         }
+    }
+
+    /// Preallocates independent button and analog slots for frame sampling.
+    pub fn with_capacities(actions: usize, axes: usize) -> Self {
+        Self {
+            axes: vec![0.0; axes],
+            ..Self::with_capacity(actions)
+        }
+    }
+
+    /// Stores the latest analog value, clamped to `[-1, 1]`. Nonfinite values
+    /// become neutral. Unlike pointer displacement, values persist across ticks.
+    pub fn set_axis(&mut self, axis: Axis, value: f32) {
+        let index = usize::from(axis.0);
+        if index >= self.axes.len() {
+            self.axes.resize(index + 1, 0.0);
+        }
+        self.axes[index] = if value.is_finite() {
+            value.clamp(-1.0, 1.0)
+        } else {
+            0.0
+        };
+    }
+
+    /// Latest sampled analog value. Unbound/unknown axes return zero.
+    pub fn value(&self, axis: Axis) -> f32 {
+        self.axes.get(usize::from(axis.0)).copied().unwrap_or(0.0)
     }
 
     /// Samples a combined action state. Automatically grows for new action IDs.
@@ -133,6 +167,7 @@ impl Input {
             state.down = false;
         }
         self.pointer_delta = Vec2::ZERO;
+        self.axes.fill(0.0);
     }
 }
 
@@ -141,10 +176,26 @@ impl Input {
 pub struct InputView<'a> {
     input: &'a Input,
     blocked: &'a [Action],
+    blocked_axes: &'a [Axis],
     block_motion: bool,
 }
 
-impl InputView<'_> {
+impl<'a> InputView<'a> {
+    /// Adds explicit analog masks to this gameplay view. Masked values are
+    /// neutral; raw input stays readable by UI and held values resume unmasked.
+    pub fn with_blocked_axes(mut self, blocked: &'a [Axis]) -> Self {
+        self.blocked_axes = blocked;
+        self
+    }
+
+    /// Latest analog value, or zero when this axis is masked.
+    pub fn value(&self, axis: Axis) -> f32 {
+        if self.blocked_axes.contains(&axis) {
+            0.0
+        } else {
+            self.input.value(axis)
+        }
+    }
     /// Whether an unmasked action is held.
     pub fn down(&self, action: Action) -> bool {
         !self.blocked.contains(&action) && self.input.down(action)
@@ -178,6 +229,53 @@ impl InputView<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn analog_values_persist_across_ticks_route_and_reset_to_neutral() {
+        let movement = Axis(0);
+        let look = Axis(1);
+        let mut input = Input::with_capacities(1, 2);
+        assert_eq!(input.value(Axis(99)), 0.0);
+        input.set_axis(movement, 0.4);
+        input.set_axis(look, -0.8);
+        input.set(Action(0), true);
+        input.add_pointer_delta(Vec2::ONE);
+        let axes = [movement, look];
+        let view = input.routed(&[Action(0)], true).with_blocked_axes(&axes);
+        assert_eq!(view.value(movement), 0.0);
+        assert_eq!(view.value(look), 0.0);
+        assert!(!view.pressed(Action(0)));
+        assert_eq!(input.value(movement), 0.4);
+        input.consume_edges();
+        for _ in 0..3 {
+            assert_eq!(input.value(movement), 0.4);
+            assert_eq!(input.routed(&[], false).value(look), -0.8);
+            assert!(!input.pressed(Action(0)));
+            assert_eq!(input.pointer_delta(), Vec2::ZERO);
+            input.consume_edges();
+        }
+        input.set_axis(movement, -0.2); // A new render frame replaces the old value.
+        assert_eq!(input.value(movement), -0.2);
+        input.release_all();
+        assert_eq!(input.value(movement), 0.0);
+        assert_eq!(input.value(look), 0.0);
+        assert!(input.released(Action(0)));
+    }
+
+    #[test]
+    fn analog_samples_are_bounded_and_nonfinite_values_are_neutral() {
+        let mut input = Input::default();
+        for (raw, expected) in [
+            (5.0, 1.0),
+            (-5.0, -1.0),
+            (f32::NAN, 0.0),
+            (f32::INFINITY, 0.0),
+            (f32::NEG_INFINITY, 0.0),
+        ] {
+            input.set_axis(Axis(2), raw);
+            assert_eq!(input.value(Axis(2)), expected);
+        }
+    }
 
     #[test]
     fn transitions_survive_frames_but_only_fire_on_one_tick() {

@@ -3,7 +3,7 @@ use super::*;
 const FONT: &[u8] = include_bytes!("../../examples/fonts/LiberationSans-Regular.ttf");
 fn entry(options: FontOptions) -> FontEntry {
     let options = options.normalized().unwrap();
-    let outline = fontdue::Font::from_bytes(FONT, fontdue::FontSettings::default()).unwrap();
+    let outline = parse_outline(FONT).unwrap();
     let coverage = options
         .glyphs
         .chars()
@@ -27,7 +27,7 @@ fn coverage_validation_and_adaptive_buckets() {
         ..Default::default()
     };
     assert_eq!(options.normalized().unwrap().glyphs, " ?AB");
-    for size in [0, 7, 513] {
+    for size in [0, 513] {
         assert!(
             FontOptions {
                 raster_size: size,
@@ -118,34 +118,70 @@ fn shared_layout_spacing_multiline_and_fallback() {
     assert!(style.validate("NUL\0").is_err());
 }
 #[test]
-fn manifest_schema_options_and_relative_paths() {
-    let directory = std::env::current_dir().unwrap().join("example");
-    let source = "schema_version = 1\n[window]\ntitle = 'ignored by font reader'\n[fonts.body]\npath = 'assets/body.ttf'\n[fonts.body.options]\nsampling = 'nearest'\nraster_size = 16\n";
-    let declarations = FontDeclarations::parse(source, &directory).unwrap();
-    assert_eq!(
-        declarations.fonts["body"].path,
-        directory.join("assets/body.ttf")
-    );
-    assert_eq!(
-        declarations.fonts["body"].options.sampling,
-        FontSampling::Nearest
-    );
-    for source in [
-        "schema_version = 2",
-        "schema_version = 1\n[fonts.body]\npath = ''",
-        "schema_version = 1\n[fonts.body]\npath='a.ttf'\nunknown=1",
-        "schema_version = 1\n[fonts.body]\npath='a.ttf'\n[fonts.body.options]\nsampler='nearest'",
-        "schema_version = 1\n[fonts.body]\npath='a.ttf'\n[fonts.body.options]\nraster_size=0",
-    ] {
-        assert!(
-            FontDeclarations::parse(source, &directory).is_err(),
-            "{source}"
-        );
-    }
+fn resolved_project_font_profiles_match_sdk_options() {
+    use rayengine_core::manifest::{FontFilter, ProjectManifest};
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/fonts/rayengine.toml");
-    let declarations = FontDeclarations::load(&fixture).unwrap();
-    assert!(declarations.fonts["body"].path.is_absolute());
-    assert!(declarations.fonts["body"].path.is_file());
+    let manifest = ProjectManifest::load(&fixture).unwrap();
+    let base = manifest.resolve(None).unwrap();
+    let pixel = manifest.resolve(Some("pixel")).unwrap();
+    assert!(base.settings.fonts["body"].path.is_absolute());
+    assert!(base.settings.fonts["body"].path.is_file());
+    let body = FontOptions::try_from(&base.settings.fonts["body"]).unwrap();
+    assert_eq!(body.sampling, FontSampling::Smooth);
+    assert_eq!(body.rasterization, FontRasterization::Adaptive);
+    let body = FontOptions::try_from(&pixel.settings.fonts["body"]).unwrap();
+    assert_eq!(body.sampling, FontSampling::Nearest);
+    assert_eq!(body.rasterization, FontRasterization::Fixed);
+    assert_eq!(body.raster_size, 16);
+    assert_eq!(pixel.settings.fonts["body"].filter, FontFilter::Nearest);
+    let mut declared = base.settings.fonts["body"].clone();
+    declared.glyphs = Some(vec![65, 65, 233]);
+    let options = FontOptions::try_from(&declared).unwrap();
+    assert_eq!(options.glyphs, " ?Aé");
+    let font = entry(options);
+    assert_eq!(
+        measure(&font, "é", TextStyle::new(FontId(0), 24.0)).missing_glyphs,
+        0
+    );
+    declared.glyphs = Some(vec![0]);
+    assert!(FontOptions::try_from(&declared).is_err());
+    declared.glyphs = Some(vec![]);
+    assert!(FontOptions::try_from(&declared).is_err());
+    declared.glyphs = Some(vec![0xD800]);
+    assert!(FontOptions::try_from(&declared).is_err());
+}
+
+#[test]
+fn large_curved_glyphs_match_high_resolution_outline_reference() {
+    // A separately configured high-resolution font is the reference. The old
+    // 40px geometry approximation keeps identical metrics but makes these
+    // 512px contours visibly polygonal, so bounds-only tests cannot catch it.
+    let actual = parse_outline(FONT).unwrap();
+    let reference = fontdue::Font::from_bytes(
+        FONT,
+        fontdue::FontSettings {
+            scale: 512.0,
+            load_substitutions: false,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    for c in "OGSQDBPaeos&@089".chars() {
+        for raster in [256.0, 512.0] {
+            let (_, actual) = actual.rasterize(c, raster);
+            let (_, expected) = reference.rasterize(c, raster);
+            assert_eq!(actual.len(), expected.len());
+            let differing_edges = actual
+                .iter()
+                .zip(&expected)
+                .filter(|(a, b)| a.abs_diff(**b) > 20)
+                .count();
+            assert_eq!(
+                differing_edges, 0,
+                "{c} at {raster}px must retain smooth outline curves"
+            );
+        }
+    }
 }
 #[test]
 fn corrupt_fonts_and_stale_measurement_are_errors() {

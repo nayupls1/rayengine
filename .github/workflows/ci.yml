@@ -18,7 +18,7 @@ jobs:
         with:
           toolchain: '1.98.1'
       - name: CPU-only primitives require no raylib toolchain
-        run: cargo test --locked -p rayengine-core -p rayengine-voxel -p rayengine-minecraft
+        run: cargo test --locked -p rayengine-core -p rayengine-voxel -p rayengine-minecraft -p rayengine-particles
       - name: Headless voxel examples
         run: |
           cargo run --locked -p rayengine-voxel --example query
@@ -42,7 +42,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
       - name: Benchmark harnesses compile
-        run: cargo bench --locked --workspace --features rayengine-voxel/render,rayengine-minecraft/render --no-run
+        run: cargo bench --locked --workspace --features rayengine-voxel/render,rayengine-minecraft/render,rayengine-particles/render --no-run
       - name: Build Linux Minecraft candidate and offline reference
         run: python3 scripts/package_minecraft.py
       - name: Validate the extracted candidate outside the checkout
@@ -68,7 +68,7 @@ jobs:
         with:
           toolchain: '1.89.0'
       - name: Minimum Rust version
-        run: cargo check --locked --workspace --all-targets --features rayengine-voxel/render,rayengine-minecraft/render
+        run: cargo check --locked --workspace --all-targets --features rayengine-voxel/render,rayengine-minecraft/render,rayengine-particles/render
 
   packages:
     runs-on: ubuntu-24.04
