@@ -441,6 +441,10 @@ impl InitContext<'_, '_> {
         self.assets
             .load_model(self.raylib, self.thread, path.as_ref())
     }
+    /// Loads/caches a streamed music track. Requires `Config::audio = true`.
+    pub fn music(&mut self, path: impl AsRef<Path>) -> Result<crate::audio::MusicId, Error> {
+        self.assets.load_music(path.as_ref())
+    }
     /// Loads/caches a sound. Requires `Config::audio = true`.
     pub fn sound(&mut self, path: impl AsRef<Path>) -> Result<SoundId, Error> {
         self.assets.load_sound(path.as_ref())
@@ -723,6 +727,9 @@ impl App {
                 let now = Instant::now();
                 let elapsed = now.duration_since(previous_frame);
                 previous_frame = now;
+                // Audio follows wall time, including minimized iterations, independently
+                // of the fixed clock and state-stack update propagation.
+                assets.update_audio(elapsed);
                 let window = Vec2::new(
                     raylib.get_screen_width() as f32,
                     raylib.get_screen_height() as f32,
