@@ -503,6 +503,41 @@ macro_rules! scenarios {
                 }
             }
             #[test]
+            fn repeated_small_rebounds_do_not_accumulate_carry_or_ground_in_air() {
+                for height in [0.0, 10000.0, -10000.0] {
+                    let mut world = $world::new(4.0);
+                    let mut p = $body::new(
+                        y(height),
+                        $shape::box_shape({
+                            let mut v = $v::splat(100.0);
+                            v.y = 2.0;
+                            v
+                        }),
+                    );
+                    p.kind = BodyKind::Kinematic;
+                    p.velocity = x(3.0);
+                    world.insert(p);
+                    let mut b = body(y(height + 2.0 * up()), true);
+                    b.gravity = Some(y(-20.0 * up()));
+                    b.restitution = 1.0;
+                    let b = world.insert(b);
+                    for _ in 0..240 {
+                        let report = world.step(tick(1.0 / 120.0), &mut Events::default());
+                        assert_eq!(report.dropped_time, 0.0);
+                        assert!(!report.unresolved_overlaps);
+                        let ball = world.body(b).unwrap();
+                        near(ball.velocity.x, 3.0);
+                        if ball.velocity.y * up() > 0.001 {
+                            assert!(!ball.grounded);
+                        }
+                        if height == 0.0 && ball.position.y * up() - 2.0 > 0.0001 {
+                            assert!(!ball.grounded);
+                        }
+                    }
+                    near(world.body(b).unwrap().position.x, 6.0);
+                }
+            }
+            #[test]
             fn small_masses_do_not_overflow_separation_weights() {
                 for mass in [f32::MIN_POSITIVE, f32::from_bits(1)] {
                     let mut world = $world::new(4.0);

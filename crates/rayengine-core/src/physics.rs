@@ -331,6 +331,8 @@ macro_rules! dimension {
                         drag: b.drag,
                         max_speed: b.max_speed,
                         grounded: false,
+                        was_grounded: b.grounded,
+                        touched_ground: false,
                         carry: [0.0; $n],
                     })
                     .collect();

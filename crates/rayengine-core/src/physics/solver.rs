@@ -20,6 +20,8 @@ pub(super) struct Node<const N: usize> {
     pub drag: f32,
     pub max_speed: Option<f32>,
     pub grounded: bool,
+    pub was_grounded: bool,
+    pub touched_ground: bool,
     pub carry: [f32; N],
 }
 impl<const N: usize> Node<N> {
@@ -112,8 +114,8 @@ fn up<const N: usize>() -> f32 {
     if N == 2 { -1.0 } else { 1.0 }
 }
 fn ground<const N: usize>(a: &mut Node<N>, b: &mut Node<N>, normal: [f32; N]) {
-    a.grounded |= a.kind == BodyKind::Dynamic && normal[1] * up::<N>() > 0.5;
-    b.grounded |= b.kind == BodyKind::Dynamic && normal[1] * up::<N>() < -0.5;
+    a.touched_ground |= a.kind == BodyKind::Dynamic && normal[1] * up::<N>() > 0.5;
+    b.touched_ground |= b.kind == BodyKind::Dynamic && normal[1] * up::<N>() < -0.5;
 }
 fn respond<const N: usize>(a: &mut Node<N>, b: &mut Node<N>, normal: [f32; N]) {
     ground(a, b, normal);
@@ -292,7 +294,7 @@ pub(super) fn step<const N: usize>(
     depenetrate(nodes, grid);
     // Refresh supports each tick from geometry, so removal, layer changes,
     // horizontal walk-off and jumping never leave a stale platform attachment.
-    for (i, j) in candidates(nodes, grid, 0.0, 0.002) {
+    for (i, j) in candidates(nodes, grid, 0.0, support_padding(nodes)) {
         let (a, b) = both_mut(nodes, i, j);
         if !is_solid(a, b) {
             continue;
@@ -374,7 +376,7 @@ pub(super) fn step<const N: usize>(
     }
     let mut current = BTreeSet::new();
     let mut supported = BTreeSet::new();
-    for (i, j) in candidates(nodes, grid, 0.0, 0.002) {
+    for (i, j) in candidates(nodes, grid, 0.0, support_padding(nodes)) {
         let (a, b) = both_mut(nodes, i, j);
         let contact = overlap(a.shape, a.position, b.shape, b.position);
         if a.trigger || b.trigger {
@@ -433,6 +435,31 @@ pub(super) fn step<const N: usize>(
     report
 }
 
+// Use the actual contact skin, enlarged only to cover coordinate precision.
+// A wide fixed proximity probe can mistake a tiny bounce's apex for resting
+// support and repeatedly add carry that was already inherited on rebound.
+fn coordinate_ulp(value: f32) -> f32 {
+    let value = value.abs();
+    let upper = value.next_up();
+    if upper.is_finite() {
+        upper - value
+    } else {
+        value - value.next_down()
+    }
+}
+fn support_padding<const N: usize>(nodes: &[Node<N>]) -> f32 {
+    nodes
+        .iter()
+        .map(|n| coordinate_ulp(n.position[1]) * 2.0)
+        .fold(0.00003, f32::max)
+}
+fn support_probe<const N: usize>(a: &Node<N>, b: &Node<N>) -> [f32; N] {
+    let margin = 0.00003_f32
+        .max(coordinate_ulp(a.position[1]) * 2.0)
+        .max(coordinate_ulp(b.position[1]) * 2.0);
+    std::array::from_fn(|axis| if axis == 1 { -up::<N>() * margin } else { 0.0 })
+}
+
 fn mark_support<const N: usize>(
     rider: &mut Node<N>,
     other: &Node<N>,
@@ -441,19 +468,18 @@ fn mark_support<const N: usize>(
     if rider.kind != BodyKind::Dynamic {
         return;
     }
-    let probe = std::array::from_fn(|axis| if axis == 1 { -up::<N>() * 0.002 } else { 0.0 });
-    if let Some((_, normal)) = sweep(
+    if let Some((time, normal)) = sweep(
         rider.shape,
         rider.position,
         other.shape,
         other.position,
-        probe,
+        support_probe(rider, other),
     ) && normal[1] * up::<N>() > 0.5
+        && (rider.was_grounded || rider.touched_ground || time == 0.0)
+        && dot(sub(rider.motion(), other.motion()), normal) <= 0.001
     {
         rider.grounded = true;
-        if other.kind == BodyKind::Kinematic
-            && dot(sub(rider.motion(), other.motion()), normal) <= 0.001
-        {
+        if other.kind == BodyKind::Kinematic {
             supported.insert(rider.id);
         }
     }
@@ -463,11 +489,12 @@ fn set_support<const N: usize>(rider: &mut Node<N>, platform: &Node<N>) {
     if rider.kind != BodyKind::Dynamic || platform.kind != BodyKind::Kinematic {
         return;
     }
-    // Intrinsic upward motion is a jump: do not attach even if touching.
-    if rider.velocity[1] * up::<N>() > 0.001 {
+    // Only resting intrinsic normal motion retains preliminary carry. Incoming
+    // airborne bodies land through CCD, and jumps/rebounds remain detached.
+    if rider.velocity[1].abs() > 0.001 {
         return;
     }
-    let probe = std::array::from_fn(|i| if i == 1 { -up::<N>() * 0.002 } else { 0.0 });
+    let probe = support_probe(rider, platform);
     if sweep(
         rider.shape,
         rider.position,
@@ -475,9 +502,9 @@ fn set_support<const N: usize>(rider: &mut Node<N>, platform: &Node<N>) {
         platform.position,
         probe,
     )
-    .is_some_and(|(_, n)| n[1] * up::<N>() > 0.5)
+    .is_some_and(|(time, n)| n[1] * up::<N>() > 0.5 && (rider.was_grounded || time == 0.0))
     {
         rider.carry = platform.motion();
-        rider.grounded = true;
+        rider.touched_ground = true;
     }
 }
