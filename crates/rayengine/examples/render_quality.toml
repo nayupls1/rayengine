@@ -7,7 +7,7 @@ anti_aliasing = "none"
 [fonts.comparison]
 path = "assets/iAWriterMonoS-Regular.ttf"
 raster_size = 64
-filter = "bilinear"
+filter = "linear"
 rasterization = "adaptive"
 
 [profiles.native.render]
@@ -28,3 +28,7 @@ anti_aliasing = "fxaa"
 scale_mode = "integer_fit"
 render_scale = 1.0
 anti_aliasing = "none"
+
+[profiles.pixel.fonts.comparison]
+filter = "nearest"
+rasterization = "fixed"
