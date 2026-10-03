@@ -40,7 +40,9 @@ impl Eq for Open {}
 /// One computation serves any number of agents chasing the same target:
 /// each agent calls [`next_step`](Self::next_step) for its cell. Distances use
 /// the same costs and corner rules as [`PathFinder`](super::PathFinder), so a
-/// chain of next steps follows an optimal path. Buffers are reused; computing
+/// chain of next steps follows an optimal path. Unlike `PathFinder`, which
+/// lets an agent leave a blocked start cell, blocked cells have no distance
+/// and no next step. Buffers are reused; computing
 /// again for a grid no larger than before does not allocate, apart from the
 /// queue growing past its previous peak.
 ///

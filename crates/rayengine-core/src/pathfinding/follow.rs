@@ -6,11 +6,13 @@ use glam::{UVec2, Vec2};
 ///
 /// The follower only chooses velocities; collision stays with
 /// [`Body2D::move_and_slide`] or [`Body3D::move_and_slide`]. A waypoint is
-/// reached inside `arrive_radius`, or once the character has moved beyond it
-/// along the segment leading to it, so overshooting never turns back. The
-/// first waypoint is also skipped when the character is already ahead of it
-/// toward the second, avoiding a step back to its starting cell's center.
-/// Velocity is limited so the character stops on the final waypoint.
+/// reached inside `arrive_radius`. An intermediate waypoint also counts once
+/// the character has moved beyond it along the segment leading to it while
+/// staying within `arrive_radius` of that segment's line, so overshooting
+/// never turns back. The first waypoint is skipped when the character is
+/// already ahead of it toward the second, avoiding a step back to its
+/// starting cell's center. The final waypoint is finished only inside
+/// `arrive_radius`, and velocity is limited so the character stops on it.
 ///
 /// ```
 /// use rayengine_core::collision::Body2D;
@@ -96,17 +98,24 @@ impl PathFollower {
     pub fn velocity(&mut self, position: Vec2, speed: f32, dt: f32) -> Vec2 {
         assert!(position.is_finite() && speed.is_finite() && speed >= 0.0);
         assert!(dt.is_finite() && dt >= 0.0);
+        let last = self.waypoints.len().saturating_sub(1);
         while let Some(&target) = self.waypoints.get(self.next) {
             let reached = position.distance(target) <= self.arrive_radius;
-            // Past the waypoint along the incoming segment, so overshoots do
-            // not turn back. The first waypoint (usually the start cell's
-            // center) is skipped once the character is ahead of it.
+            let offset = position - target;
+            // An intermediate waypoint is passed once the character is beyond
+            // it along the incoming segment and no farther than the arrival
+            // radius from that segment's line, so overshoots do not turn back
+            // but a character pushed aside still rounds the corner. The first
+            // waypoint (usually the start cell's center) is skipped once the
+            // character is ahead of it. The final one must be reached.
             let passed = match self.next.checked_sub(1) {
-                Some(previous) => (target - self.waypoints[previous]).dot(position - target) > 0.0,
-                None => self
-                    .waypoints
-                    .get(1)
-                    .is_some_and(|&after| (after - target).dot(position - target) > 0.0),
+                _ if self.next == last => false,
+                Some(previous) => {
+                    let direction = (target - self.waypoints[previous]).normalize_or_zero();
+                    direction.dot(offset) > 0.0
+                        && direction.perp_dot(offset).abs() <= self.arrive_radius
+                }
+                None => (self.waypoints[1] - target).dot(offset) > 0.0,
             };
             if !(reached || passed) {
                 break;

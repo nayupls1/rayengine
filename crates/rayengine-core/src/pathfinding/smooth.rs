@@ -27,8 +27,8 @@ pub fn line_of_sight<G: NavGrid + ?Sized>(
 /// Keeps the first and last cells. A waypoint is skipped when the segment
 /// between its neighbors has [`line_of_sight`] and costs no more than the
 /// cells it replaces, measured as each cell's cost times the length of the
-/// segment inside it. Shortcuts therefore never cut through more expensive
-/// terrain. The path should come from [`PathFinder`](super::PathFinder) with
+/// segment inside it. A shortcut may still cross a costlier cell when it saves
+/// more elsewhere, but it never makes the path more expensive. The path should come from [`PathFinder`](super::PathFinder) with
 /// the same `neighborhood`. Errors leave the path unchanged for cells outside
 /// the grid, but may leave it partly simplified for a cost that is not finite
 /// and positive.

@@ -107,6 +107,8 @@ impl Navigation {
         self.field
             .compute(&self.grid, [goal], Neighborhood::default())
             .expect("the map is inside its own grid");
+        // Drop a half-finished search for the old target.
+        self.finder.cancel();
         self.replan_in = 0.0;
     }
 

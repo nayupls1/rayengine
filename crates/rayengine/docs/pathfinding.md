@@ -70,7 +70,8 @@ assert!(cost > 7.0);
 ```
 
 The path holds every cell from start to goal inclusive. `Unreachable` leaves
-it empty; a blocked goal is unreachable without searching. Exact ties are
+it empty; a blocked goal is unreachable without searching, unless it is also
+the start, which is always found with cost zero. Exact ties are
 broken deterministically, so the same inputs give the same path.
 
 `Neighborhood::Four` allows orthogonal moves only. `Neighborhood::Eight` adds
@@ -120,7 +121,8 @@ after edits.
 Grid paths turn at cell centers. `smooth_path` removes waypoints a straight
 segment can skip, keeping only corners. A shortcut must cross walkable cells
 only, respect the corner rule where it passes exactly through a cell corner,
-and cost no more than the cells it replaces, so it never cuts through mud.
+and cost no more than the cells it replaces, so cutting across mud must save
+more than the mud costs.
 
 `PathFollower` turns cells into world positions through a `GridLayout` and
 sets a body's velocity; collision stays with `move_and_slide`:
@@ -152,9 +154,11 @@ assert!(follower.is_finished());
 assert!(body.position.distance(layout.cell_center(UVec2::new(5, 0))) < 0.06);
 ```
 
-A waypoint counts as reached inside the arrival radius or once the body has
-moved beyond it along the segment leading to it, so a fast body never turns
-back. Speed is limited so the body stops on the final waypoint.
+A waypoint counts as reached inside the arrival radius. An intermediate one
+also counts once the body has moved beyond it along the segment leading to it,
+within the arrival radius of that segment's line, so a fast body never turns
+back. The final waypoint must be reached, and speed is limited so the body
+stops on it.
 `steer_body_3d` reads waypoints as world `(x, z)` and keeps vertical velocity
 for gravity. `GridLayout::cell_at` converts a world position back to a cell.
 
@@ -189,7 +193,8 @@ assert!(agents.iter().all(|&agent| agent == UVec2::new(8, 0)));
 
 Distances use the same costs and corner rules as `PathFinder`, so following
 `next_step` traces an optimal path. Blocked or unreachable cells have no
-distance. Recompute after the grid changes.
+distance, so unlike `PathFinder`, an agent standing in a blocked cell gets no
+next step. Recompute after the grid changes.
 
 ## Cost and limits
 

@@ -122,7 +122,8 @@ impl PathFinder {
     ///
     /// Any pending search is cancelled. The start cell is never checked for
     /// walkability, so an agent standing in a blocked cell can still leave it.
-    /// A blocked goal is unreachable. With [`PathOptions::budget`] the search
+    /// A blocked goal is unreachable, except that `start == goal` is always
+    /// found with cost zero. With [`PathOptions::budget`] the search
     /// may return [`PathStatus::Pending`]; continue it with
     /// [`resume`](Self::resume).
     ///

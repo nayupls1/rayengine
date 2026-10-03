@@ -835,6 +835,24 @@ fn followers_reach_waypoints_without_turning_back() {
 }
 
 #[test]
+fn followers_finish_only_at_the_goal() {
+    let mut follower = PathFollower::new(0.1);
+    // Beyond the final waypoint but far off the path: not finished.
+    follower.set_waypoints([Vec2::ZERO, Vec2::new(5.0, 0.0)]);
+    let velocity = follower.velocity(Vec2::new(5.1, 10.0), 1.0, 0.1);
+    assert!(!follower.is_finished());
+    assert!(velocity.y < 0.0);
+    // Overshooting the final waypoint along the path turns back too.
+    let velocity = follower.velocity(Vec2::new(5.5, 0.0), 1.0, 0.1);
+    assert!(!follower.is_finished() && velocity.x < 0.0);
+
+    // Pushed aside past a corner, the character goes back to round it.
+    follower.set_waypoints([Vec2::ZERO, Vec2::new(5.0, 0.0), Vec2::new(5.0, 5.0)]);
+    follower.velocity(Vec2::new(5.5, 2.0), 1.0, 0.1);
+    assert_eq!(follower.next_waypoint(), Some(Vec2::new(5.0, 0.0)));
+}
+
+#[test]
 fn agents_navigate_around_walls_with_bodies() {
     let grid = parse(&[
         "..........",
