@@ -199,6 +199,8 @@ fn from_nanos(nanos: u128) -> Duration {
 /// The delay applies once, before the first cycle. Repeating tweens run until
 /// [`Self::with_cycles`] repetitions complete, or forever. Exact cycle boundaries
 /// wrap to the next cycle; a finished tween holds its exact final value.
+/// [`Self::finish`] on an endless tween ends its current cycle, so a ping-pong
+/// leg running backward finishes at the start value.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tween<T> {
     from: T,
@@ -362,10 +364,11 @@ impl<T: Tweenable> Animate for Tween<T> {
         // Repeating modes always have a nonzero period.
         let crossed = next / period;
         if let Some(cycles) = self.cycles {
-            let remaining = u128::from(cycles - self.completed);
+            // A limit set after more cycles already ran finishes on this step.
+            let remaining = u128::from(cycles.saturating_sub(self.completed));
             if crossed >= remaining {
                 self.skip_to_end();
-                return Some(from_nanos(next - remaining * period));
+                return Some(from_nanos((next - remaining * period).min(left.as_nanos())));
             }
         }
         self.completed = (u128::from(self.completed) + crossed).min(u128::from(u32::MAX)) as u32;
@@ -391,8 +394,8 @@ impl<T: Tweenable> Animate for Tween<T> {
             (TweenMode::Once, _) => (1, false),
             // The last ping-pong leg runs backward when it is an even-numbered leg.
             (mode, Some(cycles)) => (cycles, mode == TweenMode::PingPong && cycles % 2 == 0),
-            // Endless repetition finishes its current cycle at the end value.
-            (_, None) => (self.completed.saturating_add(1), false),
+            // Endless repetition finishes its current cycle, keeping its direction.
+            (_, None) => (self.completed.saturating_add(1), self.reversed),
         };
         self.status = Status::Finished;
     }

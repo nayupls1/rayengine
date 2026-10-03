@@ -122,7 +122,9 @@ impl Game for Tweens {
         }
         self.crate_bob.advance(dt);
         self.flash.advance(dt);
-        self.shake.advance(dt);
+        if !self.paused {
+            self.shake.advance(dt);
+        }
         for done in self.completed.drain() {
             self.toast_text = if done.id == DOOR_OPENED {
                 "Door opened"

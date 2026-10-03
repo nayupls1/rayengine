@@ -50,13 +50,13 @@ with `Color::new(r, g, b, a)`. Implement `Tweenable` for your own types.
 - `retarget(to)` restarts from the current value toward a new one, so an
   interrupted door or menu never jumps.
 
-Controls match the timer and sprite API. `pause` discards time until `resume`.
+Controls match `AnimationPlayer`. `pause` discards time until `resume`.
 `reset` rewinds and rearms completion while preserving pause. `cancel` freezes the
 current value without completing. `finish` jumps to the final value and returns
 the completion immediately, even while paused. `advance` returns
 `Some(TweenCompleted)` on the one call that reaches the end, and never again until
-`reset`. Zero-duration one-shots complete on their first advance, even a
-zero-length one.
+`reset`. Zero-duration one-shots without a delay complete on their first
+advance, even a zero-length one.
 
 Timing uses integer nanoseconds. Looping tweens never accumulate rounding drift,
 splitting time into many small steps gives the same state as one large step, and

@@ -210,6 +210,24 @@ fn ping_pong_reverses_each_leg_and_finite_cycles_end_on_the_right_side() {
 }
 
 #[test]
+fn late_cycle_limits_and_endless_finish_are_consistent() {
+    let mut late = Tween::new(0.0_f32, 1.0, ms(10)).with_mode(TweenMode::Loop);
+    late.advance(ms(55));
+    let mut late = late.with_cycles(2);
+    assert_eq!(late.step(ms(1)), Some(ms(1)));
+    assert_eq!(late.value(), 1.0);
+    // An endless ping-pong finishes where its current leg ends.
+    let mut back = Tween::new(0.0_f32, 10.0, ms(100)).with_mode(TweenMode::PingPong);
+    back.advance(ms(190));
+    assert!(back.finish().is_some());
+    assert_eq!(back.value(), 0.0);
+    let mut forward = Tween::new(0.0_f32, 10.0, ms(100)).with_mode(TweenMode::PingPong);
+    forward.advance(ms(290));
+    assert!(forward.finish().is_some());
+    assert_eq!(forward.value(), 10.0);
+}
+
+#[test]
 fn finite_loops_report_leftover_time() {
     let mut tween = Tween::new(0.0_f32, 1.0, ms(10))
         .with_mode(TweenMode::Loop)
