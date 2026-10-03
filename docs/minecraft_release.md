@@ -21,7 +21,7 @@ cargo run --locked -p rayengine-minecraft --features render --bin minecraft -- -
 The clean checkout starts with original fallback textures and an empty inventory.
 Gather two logs, craft planks/sticks and a wooden pickaxe, then harvest stone for
 stone tools. Hold LMB to mine, click RMB to place a held block, use 1–9 for the
-hotbar and E/Escape for inventory. WASD/mouse move/look, Space jumps and Shift
+hotbar, E for inventory, Escape for the game menu and F3 for debug info. WASD/mouse move/look, Space jumps and Shift
 sprints. F5 saves/retries and F10 or Quit exits. Falling causes damage and the
 death screen respawns while retaining inventory. See the
 [full terrain/survival/save guide](../examples/minecraft/README.md) and

@@ -1,5 +1,5 @@
 use super::*;
-use crate::survival::{Item, MAX_HEALTH};
+use crate::survival::{Item, MAX_HEALTH, Recipe};
 fn focused() -> MenuInput {
     MenuInput {
         ui: UiInput {
@@ -51,25 +51,74 @@ fn layout_is_inside_wide_and_portrait_viewports_and_regions_do_not_overlap() {
         Vec2::new(432.0, 540.0),
         Vec2::new(1600.0, 900.0),
         Vec2::new(320.0, 480.0),
+        Vec2::new(720.0, 400.0),
     ] {
         let l = Layout::new(size);
-        assert!(l.panel.min.min_element() >= 0.0 && l.panel.max.cmple(size).all());
-        let boxes: Vec<_> = l
-            .slots
-            .into_iter()
-            .chain(l.recipes)
-            .chain([l.close, l.quit])
-            .collect();
+        let inside =
+            |b: &Aabb2, outer: &Aabb2| b.min.cmpge(outer.min).all() && b.max.cmple(outer.max).all();
+        let screen = Aabb2 {
+            min: Vec2::ZERO,
+            max: size,
+        };
+        assert!(
+            inside(&l.panel, &screen) && inside(&l.dialog, &screen),
+            "{size}"
+        );
+        // Inventory and dialog screens are never shown together.
+        let boxes: Vec<_> = l.slots.into_iter().chain(l.recipes).collect();
         for (i, b) in boxes.iter().enumerate() {
-            assert!(b.min.cmpge(l.panel.min).all() && b.max.cmple(l.panel.max).all());
+            assert!(inside(b, &l.panel), "{size} {i}");
             for other in &boxes[..i] {
                 assert!(!b.intersects(other));
             }
         }
+        assert!(!l.info.intersects(&l.inventory) && inside(&l.info, &l.panel));
+        for b in [l.close, l.quit] {
+            assert!(inside(&b, &l.dialog));
+        }
+        assert!(!l.close.intersects(&l.quit));
+        // The hotbar row is visibly separated from reserve rows.
+        assert!(l.slots[0].min.y - l.slots[27].max.y > 4.0);
         for b in l.hotbar {
-            assert!(b.min.min_element() >= 0.0 && b.max.cmple(size).all());
+            assert!(inside(&b, &screen));
         }
     }
+    assert!(Layout::new(Vec2::new(960.0, 540.0)).wide);
+    assert!(!Layout::new(Vec2::new(432.0, 540.0)).wide);
+}
+#[test]
+fn escape_pauses_resumes_and_closes_the_inventory_while_e_never_leaves_pause() {
+    let mut menu = Menu::default();
+    let mut s = Survival::default();
+    let size = Vec2::new(960.0, 540.0);
+    let pause = MenuInput {
+        pause: true,
+        ..focused()
+    };
+    let toggle = MenuInput {
+        toggle: true,
+        ..focused()
+    };
+    let r = menu.update(size, pause, &mut s);
+    assert!(r.modal && r.paused && menu.screen() == Screen::Paused);
+    assert_eq!(menu.state().responses().len(), 2);
+    menu.update(size, toggle, &mut s);
+    assert_eq!(menu.screen(), Screen::Paused);
+    menu.update(size, pause, &mut s);
+    assert_eq!(menu.screen(), Screen::Playing);
+    menu.update(size, toggle, &mut s);
+    assert_eq!(menu.screen(), Screen::Inventory);
+    assert_eq!(menu.state().responses().len(), INVENTORY_REGIONS);
+    assert!(!menu.update(size, focused(), &mut s).paused);
+    menu.update(size, pause, &mut s);
+    assert_eq!(menu.screen(), Screen::Playing);
+    // The resume button works from the pause screen and cannot quit.
+    menu.update(size, pause, &mut s);
+    let l = Layout::new(size);
+    let r = tap(&mut menu, &mut s, l.close.center());
+    assert!(r.modal && !r.quit && menu.screen() == Screen::Playing);
+    menu.update(size, pause, &mut s);
+    assert!(tap(&mut menu, &mut s, l.quit.center()).quit);
 }
 #[test]
 fn opening_closing_death_and_held_buttons_never_leak_into_gameplay() {
@@ -117,7 +166,10 @@ fn two_click_exchange_crafting_and_focus_loss_use_same_hit_regions() {
     assert_eq!(s.inventory.slots()[10].unwrap().item(), Item::Log);
     assert!(s.inventory.slots()[0].is_none());
     assert!(menu.source().is_none());
-    tap(&mut menu, &mut s, l.recipes[0].center());
+    assert_eq!(
+        tap(&mut menu, &mut s, l.recipes[0].center()).crafted,
+        Some(Recipe::Planks)
+    );
     assert_eq!(s.inventory.count(Item::Planks), 4);
     tap(&mut menu, &mut s, l.recipes[3].center());
     assert_eq!(s.inventory.count(Item::StonePickaxe), 0);
@@ -125,7 +177,14 @@ fn two_click_exchange_crafting_and_focus_loss_use_same_hit_regions() {
     assert_eq!(menu.source(), Some(0));
     menu.update(size, MenuInput::default(), &mut s);
     assert!(menu.source().is_none());
-    let r = tap(&mut menu, &mut s, l.close.center());
+    let r = menu.update(
+        size,
+        MenuInput {
+            toggle: true,
+            ..focused()
+        },
+        &mut s,
+    );
     assert!(r.modal);
     assert!(!menu.open());
     assert_eq!(s.inventory.count(Item::Planks), 4);

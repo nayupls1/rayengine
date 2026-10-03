@@ -230,13 +230,7 @@ impl Game for SurvivalProbe {
                 .gpu
                 .unload(&mut self.base.game.cpu, frame.assets);
             self.base.game.cpu.shutdown();
-            for mesh in self.base.game.cracks.drain(..) {
-                frame.assets.unload_mesh(mesh);
-            }
-            self.base.game.materials.unload(frame.assets);
-            frame
-                .assets
-                .unload_texture(self.base.game.texture.take().unwrap());
+            self.base.game.release(frame.assets);
             let counts = frame.assets.resource_counts();
             assert_eq!(counts.meshes, 0);
             assert_eq!(counts.textures, 0);

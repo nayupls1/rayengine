@@ -44,8 +44,8 @@ cargo run --locked --release -p rayengine-minecraft --features render --bin mine
 
 The demo streams hills, caves, trees and ores with original fallback textures.
 WASD/mouse moves and looks; Space jumps, held LMB mines, RMB places one owned
-block, and 1–9 select hotbar slots. E/Escape opens inventory and crafting; F10
-quits. Start with an empty inventory and gather logs to craft your first tools.
+block, and 1–9 select hotbar slots. E opens inventory and crafting, Escape the
+game menu and F3 the debug overlay; F10 quits. Start with an empty inventory and gather logs to craft your first tools.
 Collision and reach queries use the resident edited world. Extract local textures once with
 `python3 scripts/import_minecraft_textures.py /path/to/client.jar`, then add
 `--textures examples/minecraft/local-assets/minecraft` to load the ordinary PNGs.
