@@ -110,6 +110,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Generated meshes](crates/rayengine/docs/generated_meshes.md)
 - [Materials and shaders](crates/rayengine/docs/materials.md)
 - [Basic lighting](crates/rayengine/docs/lighting.md)
+- [Layered tilemaps, level format and collision](plugins/tilemap/README.md)
 - [Particle effects plugin](plugins/particles/README.md)
 - [Versioned project manifests](crates/rayengine/docs/project_manifest.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)

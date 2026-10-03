@@ -1,0 +1,34 @@
+[package]
+name = "rayengine-tilemap"
+publish = false
+description = "Layered CPU tilemaps, level loading, collision and optional sprite rendering"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[dependencies]
+rayengine-core.workspace = true
+rayengine = { workspace = true, optional = true }
+serde.workspace = true
+toml.workspace = true
+
+[features]
+default = []
+render = ["dep:rayengine"]
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[example]]
+name = "level"
+required-features = ["render"]
+
+[[bench]]
+name = "tilemap"
+harness = false
+
+[lints]
+workspace = true
