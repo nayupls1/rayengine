@@ -18,3 +18,7 @@ CPU/backend subcrates for a plugin should stay beneath that plugin's directory.
 
 - `particles/` (`rayengine-particles`): seeded, bounded CPU emission and optional
   `render` adapters for 2D sprites and transparent 3D billboards.
+
+- `tilemap/` (`rayengine-tilemap`): layered chunked CPU grids, TOML levels,
+  solid/one-way character collision, region and ray queries, and optional
+  viewport-culled sprite-sheet drawing.
