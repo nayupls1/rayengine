@@ -1,9 +1,9 @@
-//! Opt-in cached crack submissions and 44-region inventory drawing. Setup untimed.
+//! Opt-in cached crack submissions and 43-region inventory drawing. Setup untimed.
 use criterion::Criterion;
 use rayengine::prelude::*;
 use rayengine_minecraft::{
     breaking,
-    hud::{CLOSE, Layout, Menu, MenuInput, QUIT, recipe_id, slot_id},
+    hud::{INVENTORY_REGIONS, Layout, Menu, MenuInput, recipe_id, slot_id},
     survival::{Item, Recipe, Survival},
 };
 use rayengine_voxel::glam::Mat4;
@@ -22,7 +22,7 @@ impl Game for Bench {
         assert_eq!(ctx.assets.resource_counts().meshes, 5);
         assert_eq!(ctx.assets.resource_counts().generated_mesh_bytes, 79_488);
         eprintln!(
-            "minecraft_survival_render_v1: stages=5 crack_bytes=79488 slots=36 regions=44 logical_view=960x960 target=64x64"
+            "minecraft_survival_render_v1: stages=5 crack_bytes=79488 slots=36 regions=43 logical_view=960x960 target=64x64"
         );
         Ok(())
     }
@@ -53,7 +53,7 @@ impl Game for Bench {
         );
         let layout = Layout::new(Vec2::splat(960.0));
         frame.ui(|ui| {
-            g.bench_function("draw_inventory_44", |b| {
+            g.bench_function("draw_inventory_43", |b| {
                 b.iter(|| {
                     ui.rectangle(layout.panel, Color::new(19, 25, 33, 255));
                     for (i, &bounds) in layout.slots.iter().enumerate() {
@@ -82,19 +82,6 @@ impl Game for Bench {
                             self.menu.state().response(recipe_id(i)).unwrap(),
                             UiButtonStyle {
                                 font_size: 13.0,
-                                ..Default::default()
-                            },
-                        );
-                    }
-                    for (id, bounds, label) in
-                        [(CLOSE, layout.close, "Resume"), (QUIT, layout.quit, "Quit")]
-                    {
-                        ui.button(
-                            bounds,
-                            label,
-                            self.menu.state().response(id).unwrap(),
-                            UiButtonStyle {
-                                font_size: 16.0,
                                 ..Default::default()
                             },
                         );
@@ -130,7 +117,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         &mut survival,
     );
-    assert_eq!(menu.state().responses().len(), 44);
+    assert_eq!(menu.state().responses().len(), INVENTORY_REGIONS);
     let mut config = Config::new("Survival render benchmark");
     config.audio = false;
     config.vsync = false;

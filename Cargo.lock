@@ -656,6 +656,7 @@ dependencies = [
  "png",
  "rayengine",
  "rayengine-core",
+ "rayengine-particles",
  "rayengine-voxel",
  "serde",
  "serde_json",

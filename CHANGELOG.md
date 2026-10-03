@@ -2,6 +2,9 @@
 
 ## Unreleased (0.0.2)
 
+- Minecraft demo: game menu, F3-only debug overlay, icon-based inventory and
+  recipe cards, day/night lighting with a lit voxel shader, held torches, lit
+  pickups and particle block debris.
 - Add opt-in Lambert materials with ambient, directional, and up to four point
   lights, shared generated/imported geometry APIs, checked normal/transform
   validation, an adjustable demo, native pixel probes, and submission benchmarks.

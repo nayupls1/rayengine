@@ -264,17 +264,11 @@ impl Game for ReleaseProbe {
             );
             assert_eq!(
                 frame.assets.resource_counts().meshes as usize,
-                resources.meshes + breaking::STAGES
+                resources.meshes + base.game.local_meshes()
             );
             base.game.gpu.unload(&mut base.game.cpu, frame.assets);
             base.game.cpu.shutdown();
-            for mesh in base.game.cracks.drain(..) {
-                frame.assets.unload_mesh(mesh);
-            }
-            base.game.materials.unload(frame.assets);
-            frame
-                .assets
-                .unload_texture(base.game.texture.take().unwrap());
+            base.game.release(frame.assets);
             // The SDK owns its built-in material shader until run shutdown;
             // every scene-owned resource and payload must already be gone.
             assert_eq!(
