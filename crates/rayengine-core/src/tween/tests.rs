@@ -228,6 +228,41 @@ fn late_cycle_limits_and_endless_finish_are_consistent() {
 }
 
 #[test]
+fn builders_on_running_tweens_continue_from_the_current_position() {
+    let mut once = Tween::new(0.0_f32, 10.0, ms(100)).with_mode(TweenMode::PingPong);
+    once.advance(ms(150));
+    let mut once = once.with_mode(TweenMode::Once);
+    assert_eq!(once.value(), 5.0);
+    once.advance(ms(40));
+    assert!((once.value() - 9.0).abs() < 1e-4);
+    assert!(once.advance(ms(10)).is_some());
+    assert_eq!(once.value(), 10.0);
+
+    let mut delayed = Tween::new(0.0_f32, 10.0, ms(100));
+    delayed.advance(ms(50));
+    let mut delayed = delayed.with_delay(ms(30));
+    delayed.advance(ms(20));
+    assert!((delayed.value() - 7.0).abs() < 1e-4);
+    delayed.reset();
+    delayed.advance(ms(30));
+    assert_eq!(delayed.value(), 0.0);
+    // A fresh tween still honours a delay added by builders.
+    let mut fresh = Tween::new(0.0_f32, 10.0, ms(100)).with_delay(ms(30));
+    fresh.advance(ms(20));
+    assert_eq!(fresh.value(), 0.0);
+
+    let mut slide = Tween::new(0.0_f32, 100.0, ms(100)).with_delay(ms(100));
+    slide.advance(ms(150));
+    slide.retarget(0.0);
+    slide.advance(ms(50));
+    assert!((slide.value() - 25.0).abs() < 1e-4);
+    assert_eq!(slide.delay(), ms(100));
+    slide.reset();
+    slide.advance(ms(50));
+    assert_eq!(slide.value(), 50.0);
+}
+
+#[test]
 fn finite_loops_report_leftover_time() {
     let mut tween = Tween::new(0.0_f32, 1.0, ms(10))
         .with_mode(TweenMode::Loop)

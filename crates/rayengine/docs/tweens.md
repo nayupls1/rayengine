@@ -47,8 +47,11 @@ with `Color::new(r, g, b, a)`. Implement `Tweenable` for your own types.
   goes there and back.
 - `with_id` sets the `TweenId` carried by `TweenCompleted`.
 - `value()` reads the current value without advancing; the endpoints are exact.
-- `retarget(to)` restarts from the current value toward a new one, so an
-  interrupted door or menu never jumps.
+- `retarget(to)` restarts from the current value toward a new one, skipping the
+  delay, so an interrupted door or menu never jumps or stalls.
+- Builders are meant for construction. Applied to a running tween they continue
+  from its current position; changing the cycle limit below the completed cycles
+  finishes it on the next advance.
 
 Controls match `AnimationPlayer`. `pause` discards time until `resume`.
 `reset` rewinds and rearms completion while preserving pause. `cancel` freezes the
@@ -89,7 +92,8 @@ so tick or frame partitioning never shifts later members. `Sequence::value` read
 the running member of a same-typed sequence and `current` reports its index.
 Cancelled members are skipped and paused members hold their group. An endlessly
 repeating member never yields to later sequence members. Control members through
-their group.
+their group; changes to members a group has already finished with apply after
+resetting the group.
 
 ## Fixed ticks or render frames
 
@@ -102,8 +106,9 @@ Advance a tween where its value is used:
   motion at any refresh rate.
 - **Presentation-only motion** (menus, toasts, HUD flashes) can advance once per
   rendered frame in `draw` with `frame.delta`, the wall time since the previous
-  rendered frame. It keeps running in frames without a simulation tick and is
-  not limited by catch-up, so do not use it for simulation state.
+  frame (time spent minimized is excluded). It keeps running in frames without
+  a simulation tick and is not limited by catch-up, so do not use it for
+  simulation state.
 
 Do not advance the same tween in both places.
 

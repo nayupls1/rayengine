@@ -241,8 +241,14 @@ impl<T: Tweenable> Tween<T> {
         }
     }
     /// Waits this long, holding the start value, before the first cycle.
+    /// A tween already past its delay keeps running; the new delay applies after reset.
     pub fn with_delay(mut self, delay: Duration) -> Self {
+        let started = self.waited >= self.delay
+            && (!self.position.is_zero() || self.completed > 0 || self.status != Status::Active);
         self.delay = delay;
+        if started {
+            self.waited = delay;
+        }
         self
     }
     /// Selects the easing curve applied to each cycle.
@@ -258,6 +264,8 @@ impl<T: Tweenable> Tween<T> {
             "repeating tween duration must be nonzero"
         );
         self.mode = mode;
+        // Only ping-pong legs run backward; other modes continue forward.
+        self.reversed &= mode == TweenMode::PingPong;
         self
     }
     /// Completes a repeating tween after this many cycles; a ping-pong cycle is
@@ -325,11 +333,13 @@ impl<T: Tweenable> Tween<T> {
     }
 
     /// Restarts toward a new end value from the current value, preserving
-    /// timing, easing, identity and pause state. Useful for interrupted UI slides.
+    /// duration, easing, mode, identity and pause state. The delay is skipped, so
+    /// an interrupted UI slide turns around immediately instead of stalling.
     pub fn retarget(&mut self, to: T) {
         self.from = self.value();
         self.to = to;
         self.rewind();
+        self.waited = self.delay;
     }
 
     controls!();
@@ -521,7 +531,8 @@ impl<S: Tracks> Sequence<S> {
     pub fn tracks(&self) -> &S {
         &self.tracks
     }
-    /// Members, for adjusting them in place (for example retargeting).
+    /// Members, for adjusting them in place. Changes to a member the group has
+    /// already finished with take effect only after resetting the group.
     pub fn tracks_mut(&mut self) -> &mut S {
         &mut self.tracks
     }
@@ -626,7 +637,8 @@ impl<S: Tracks> Parallel<S> {
     pub fn tracks(&self) -> &S {
         &self.tracks
     }
-    /// Members, for adjusting them in place (for example retargeting).
+    /// Members, for adjusting them in place. Changes to a member the group has
+    /// already finished with take effect only after resetting the group.
     pub fn tracks_mut(&mut self) -> &mut S {
         &mut self.tracks
     }

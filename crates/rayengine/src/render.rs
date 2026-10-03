@@ -48,7 +48,8 @@ pub struct Frame<'frame, 'audio> {
     pub alpha: f32,
     /// Zero-based render frame index.
     pub index: u64,
-    /// Wall time since the previous rendered frame, unbounded by catch-up.
+    /// Wall time since the previous main-loop iteration (time spent minimized is
+    /// excluded), unbounded by catch-up.
     /// Use it for purely presentational per-frame animation such as UI tweens.
     pub delta: std::time::Duration,
 }
