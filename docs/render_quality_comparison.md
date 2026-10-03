@@ -1,6 +1,6 @@
 # Render quality comparison
 
-Recorded 2026-10-03T08:10:33.695285+00:00; release build on 12th Gen Intel(R) Core(TM) i7-12700K, Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44.
+Recorded 2026-10-03T08:16:41.305169+00:00; release build on 12th Gen Intel(R) Core(TM) i7-12700K, Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44.
 Backend: x11 (XWayland display), renderer: NVIDIA Corporation / NVIDIA GeForce RTX 4070/PCIe/SSE2 / 3.3.0 NVIDIA 610.57.04.
 Toolchain: cargo 1.98.1 (797e8a9bc 2026-08-05); rustc 1.98.1 (48a229cea 2026-09-01).
 
@@ -12,10 +12,10 @@ Default and typed custom font with a 64-pixel minimum atlas, diagonal lines, cub
 
 | Mode | World pixels | Estimated targets (MiB) | Frame median (ms) | Per-run range (ms) | Render median (ms) | Present median (ms) | Relative frame wall time |
 | --- | --- | ---: | ---: | --- | ---: | ---: | ---: |
-| native | 1280×720 | 7.031 | 0.0936 | 0.0928–0.0946 | 0.0569 | 0.0363 | 1.00× |
-| fxaa | 1280×720 | 21.094 | 0.1228 | 0.1210–0.1240 | 0.0779 | 0.0429 | 1.31× |
-| 2x | 2560×1440 | 42.188 | 0.1384 | 0.1375–0.1391 | 0.0811 | 0.0578 | 1.48× |
-| 2x-fxaa | 2560×1440 | 42.188 | 0.1427 | 0.1405–0.1449 | 0.0821 | 0.0609 | 1.52× |
+| native | 1280×720 | 7.031 | 0.0952 | 0.0935–0.0995 | 0.0584 | 0.0372 | 1.00× |
+| fxaa | 1280×720 | 21.094 | 0.1239 | 0.1219–0.1318 | 0.0797 | 0.0449 | 1.30× |
+| 2x | 2560×1440 | 42.188 | 0.1416 | 0.1390–0.1452 | 0.0825 | 0.0584 | 1.49× |
+| 2x-fxaa | 2560×1440 | 42.188 | 0.1444 | 0.1423–0.1495 | 0.0852 | 0.0612 | 1.52× |
 
 These are uncapped CPU frame wall times, including driver stalls and window
 presentation, **not GPU execution timings or expected FPS for a game**. Hidden
@@ -35,7 +35,7 @@ samples, effective settings, actual GL vendor/renderer/version, toolchain, OS, C
 environment and the exact clean implementation revision under measurement.
 The measured commit includes the reviewed alpha fix, explicit RGBA8 target
 allocation and current manifest, input, lighting, state, particle and Minecraft
-demo APIs. The subsequent evidence update does not change the implementation.
+demo APIs, including the typed font integration. The subsequent evidence update does not change the implementation.
 Re-run the script to measure the final checkout.
 
 Screenshots from the identical release workload:
