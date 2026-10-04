@@ -9,7 +9,7 @@ graphics libraries or display are required.
 
 ```toml
 [dependencies]
-rayengine-core = "0.0.2"
+rayengine-core = "0.0.3"
 ```
 
 See the [API reference](https://docs.rs/rayengine-core) and

@@ -1,4 +1,4 @@
-# rayengine 0.0.2
+# rayengine 0.0.3
 
 Linux-first Rust SDK and CLI over raylib, with no editor. Windows and macOS
 are optional targets; browser and mobile are outside the current scope.
@@ -7,15 +7,17 @@ are optional targets; browser and mobile are outside the current scope.
 
 - `rayengine-core`: CPU-only entities/components, transforms and hierarchy,
   fixed simulation timing, tweens/easing/screen shake, action input, viewport
-  math, cameras, collision, UI layout, validated CPU mesh data, and versioned save containers. No window, audio device, C toolchain,
+  math, cameras, collision/physics, grid pathfinding, UI layout, validated CPU mesh data, and versioned save containers. No window, audio device, C toolchain,
   or GPU required.
 - `rayengine`: raylib runtime, rendering and asset ownership. One shared
   lifecycle for 2D and 3D. Rendering stays on raylib's owning thread.
-- `rayengine-cli`: create, inspect and check ordinary Cargo game projects.
+- `rayengine-cli`: scaffold, inspect, check, build, run, watch and package Cargo
+  games; manage optional plugin dependencies and generated bundles.
 - `plugins/<name>`: optional Cargo libraries selected by games; engine crates
   never depend on these. `plugins/beacons` demonstrates typed lifecycle hooks,
   generated meshes, and independently configured instances.
-- `rayengine-demos`: a 2D arena fighter and a 3D exploration platformer.
+- `rayengine-demos`: a 2D arena fighter, a 3D exploration platformer and the
+  Embervault six-room dungeon showcase.
 - `examples/minecraft`: game-owned integer terrain recipe, concrete blocks,
   safe spawn, CPU-tested movement/interaction rules and an optional native
   first-person scene; CPU-only by default. Local collision adapters live in the

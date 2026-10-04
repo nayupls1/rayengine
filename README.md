@@ -1,6 +1,6 @@
 # rayengine
 
-A Linux-first Rust game SDK and CLI built on raylib. **Version 0.0.2.**
+A Linux-first Rust game SDK and CLI built on raylib. **Version 0.0.3.**
 Games are ordinary Cargo projects, with a shared lifecycle and conventions for
 2D and 3D. No GUI editor or website toolchain is required.
 
@@ -73,13 +73,17 @@ cargo run -p rayengine-cli -- new ../my-game --kind 2d --sdk-path "$PWD/crates/r
 cargo run --manifest-path ../my-game/Cargo.toml
 ```
 
-The CLI supports `new`, `new-plugin`, `info`, `check`, `build`, `run`, and `doctor`. Add
+The CLI supports `new`, `new-plugin`, `templates`, `info`, `check`, `build`, `run`,
+`package`, `add`/`remove`, `watch`, `clean`, and `doctor`. Add
 `--json` for a versioned result, structured errors and preserved Cargo diagnostics.
 Scaffolds use the matching crates.io SDK version by default. Install the
-published CLI with `cargo install rayengine-cli --version 0.0.2 --locked`
+published CLI with `cargo install rayengine-cli --version 0.0.3 --locked`
 and create a project with `rayengine new my-game --kind 2d`. Pass
 `--sdk-path /path/to/rayengine/crates/rayengine` for local engine development.
 See the [release workflow and checklist](docs/crates_io_release.md).
+The `topdown` and `platformer` templates use the repository-only tilemap plugin;
+create them with `--template NAME --sdk-path /path/to/rayengine/crates/rayengine`.
+Beacons, particles and tilemap remain repository-only in this release.
 
 Optional extensions live under `plugins/`; games select them through Cargo.
 Try `cargo run -p rayengine-beacons --example composition`, or create a library
@@ -152,7 +156,12 @@ cargo run -p rayengine --example states
 cargo run -p rayengine --example audio
 ```
 
-Enter starts a session. Escape pauses with the world visible; Enter/Escape
+Play Embervault, the original six-room dungeon showcase:
+`cargo run -p rayengine-demos --bin dungeon`. It combines tilemaps, physics,
+pathfinding, sprites, particles, tweens, menus, shaders, music and durable saves.
+See [controls, save behavior and Linux packaging](examples/games/README.md).
+
+In the state stack example, Enter starts a session. Escape pauses with the world visible; Enter/Escape
 resumes, and T while paused returns to title and releases session resources.
 
 Try the draggable menu, keyboard focus, and dynamic cursor capture example:
@@ -205,7 +214,7 @@ Linux is the tested target; Windows/macOS are
 optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)
-is tracked separately and deferred beyond 0.0.2.
+is tracked separately and deferred beyond 0.0.3.
 
 Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
 See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)

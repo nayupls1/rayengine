@@ -689,7 +689,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rayengine"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "criterion",
  "fontdue",
@@ -701,14 +701,14 @@ dependencies = [
 
 [[package]]
 name = "rayengine-beacons"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "rayengine",
 ]
 
 [[package]]
 name = "rayengine-cli"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "clap",
  "ctrlc",
@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "rayengine-core"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "crc32fast",
  "criterion",
@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "rayengine-demos"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "criterion",
  "rayengine",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "rayengine-minecraft"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "clap",
  "criterion",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "rayengine-particles"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "criterion",
  "rayengine",
@@ -771,7 +771,7 @@ dependencies = [
 
 [[package]]
 name = "rayengine-tilemap"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "criterion",
  "rayengine",
@@ -782,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "rayengine-voxel"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "criterion",
  "rayengine",

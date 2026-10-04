@@ -2,7 +2,7 @@
 
 A small Linux-first Rust game SDK over raylib. Games are ordinary Cargo projects
 with a shared lifecycle for 2D and 3D, action input, fixed updates, fitted cameras,
-logical UI with optional interaction and explicit asset ownership. Version **0.0.2**.
+logical UI with optional interaction and explicit asset ownership. Version **0.0.3**.
 
 Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/quickstart/index.html), then read
 [game structure](https://docs.rs/rayengine/latest/rayengine/guides/game_structure/index.html) and
