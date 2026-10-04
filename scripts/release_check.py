@@ -57,7 +57,10 @@ def inspect_archives(version, directory):
             files = {member.name.removeprefix(prefix) for member in archive.getmembers() if member.isfile()}
             required = {"Cargo.toml", "Cargo.lock", "README.md", "LICENSE", ".cargo_vcs_info.json"}
             if name == "rayengine-cli":
-                required |= {"src/templates/2d.rs", "src/templates/3d.rs", "src/templates/plugin.rs", "src/templates/rayengine.toml"}
+                required |= {"src/templates/2d.rs", "src/templates/3d.rs", "src/templates/plugin.rs", "src/templates/rayengine.toml",
+                             "src/templates/topdown.rs", "src/templates/topdown.toml",
+                             "src/templates/platformer.rs", "src/templates/platformer.toml",
+                             "src/lifecycle.rs", "src/package.rs", "src/plugins.rs", "src/watch.rs"}
             if name == "rayengine":
                 required |= {"docs/quickstart.md", "docs/project_manifest.md", "src/assets/materials/default.fs"}
             if name == "rayengine-core":

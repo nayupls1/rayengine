@@ -42,3 +42,28 @@ manifest/profile passed by CLI run, or load their source project's manifest
 when run directly with Cargo. Existing games opt in through the shared loader.
 See the SDK's [project manifest guide](https://docs.rs/rayengine/latest/rayengine/guides/project_manifest/)
 for schema, merge rules, Rust/CLI precedence, asset selection and extension tables.
+
+The rest of a game's lifecycle is available through `templates`, `package`
+(`bundle` alias), `add`/`remove`, `watch`, and `clean`:
+
+```sh
+rayengine templates
+rayengine new my-platformer --template platformer --sdk-path /path/to/crates/rayengine
+rayengine add particles my-platformer --features render
+rayengine watch my-platformer --profile dev
+rayengine package my-platformer --profile pixel
+rayengine clean my-platformer
+rayengine doctor --fix-hints
+```
+
+`topdown` and `platformer` starters use tilemaps and core collision physics.
+Use a repository SDK until those matching first-party plugins are published.
+Plugin dependencies match the SDK version or infer local repository paths;
+`add --plugin-path` selects a compatible local crate. Hooks remain game-owned.
+`watch --json` emits one completion result after Ctrl-C or a `--cycles` /
+`--timeout-ms` bound. `package` builds a release binary, relocates assets/fonts,
+preserves license notices and produces a Linux folder plus tarball under
+`bundles/`. Extract and run `./launch`; runtime libraries are documented in the
+bundle's README and `runtime-libraries.txt`. Build on your oldest supported Linux
+baseline. Clean preserves unrelated output files; repeat `--output` for custom
+bundle locations. Doctor hints only print commands and never run them.
