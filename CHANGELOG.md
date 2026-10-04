@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.3
+
 - Opt-in cached music streams with looping, frame-clock fades/crossfades and
   explicit pause/resume; named master/music/sfx and custom buses with volume,
   mute, transient ducking and serializable settings for versioned saves.
@@ -34,6 +36,23 @@
   `grid_layout()`; `GridLayout` supports rectangular cells.
 - Checked pathfinding guide, an agents-around-walls example, unit tests against
   a reference search, and `pathfinding_*` Criterion workloads.
+
+- Deterministic 2D/3D arcade physics worlds with swept contacts, collision
+  layers, triggers, mass-weighted separation, restitution and moving platforms;
+  checked physics and first-person controller guides and playable examples.
+- Optional repository-only `rayengine-tilemap` plugin with validated layered
+  TOML levels, collision/trigger queries, conservative chunk culling and sprite
+  rendering; navigation integration uses the core grid API.
+- CLI lifecycle commands: template discovery, topdown/platformer starters,
+  plugin add/remove, bounded file watching and restart, Linux packaging with
+  relocated assets/fonts and license notices, clean and prerequisite hints.
+  Tilemap starters and unpublished plugins require a repository SDK or explicit
+  compatible local plugin paths.
+- Embervault: an original six-room dungeon showcase combining tilemaps,
+  physics, navigation, sprites, particles, tweens, state stacks, UI, shaders,
+  streamed music and durable saves, with gameplay/native/bundle probes.
+- Coordinated 0.0.3 versions for the four published crates; beacons, particles,
+  tilemap and game examples remain repository-only.
 
 ## 0.0.2
 

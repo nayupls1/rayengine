@@ -50,6 +50,17 @@ def main():
         run(install, cwd=directory, env=environment)
         binary = install_root / "bin/rayengine"
         run([str(binary), "--version"], cwd=directory, env=environment)
+        templates = run(
+            [str(binary), "--json", "templates"], cwd=directory, env=environment,
+            capture_output=True, text=True,
+        )
+        response = json.loads(templates.stdout)
+        if not response["ok"] or {template["name"] for template in response["data"]["templates"]} != {
+            "2d", "3d", "topdown", "platformer",
+        }:
+            raise ValueError("Installed CLI must advertise all four shipped game templates")
+        # Tilemap remains repository-only; template_smoke.py compiles its two
+        # starters against the repository SDK instead of nonexistent registry crates.
         for kind in ("2d", "3d", "plugin"):
             project = directory / f"starter-{kind}"
             command = [str(binary), "new-plugin" if kind == "plugin" else "new", str(project)]
