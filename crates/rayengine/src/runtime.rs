@@ -634,9 +634,19 @@ impl App {
             builder.vsync();
         }
         if options.hidden {
-            builder.hidden().always_run();
+            builder.hidden();
+        }
+        if options.hidden || config.audio {
+            // GLFW otherwise waits for events while minimized, starving streamed
+            // audio. The loop below still pauses simulation and throttles polling.
+            builder.always_run();
         }
         let (mut raylib, thread) = builder.build();
+        if !options.hidden && !config.audio {
+            // raylib retains flags across windows. Do not carry audio's polling
+            // policy into a subsequent audio-disabled run in the same process.
+            raylib.clear_window_state(WindowState::default().set_window_always_run(true));
+        }
         raylib.set_exit_key(config.exit_key);
         raylib.set_target_fps(if options.uncapped {
             0

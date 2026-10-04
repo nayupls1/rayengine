@@ -62,7 +62,9 @@ voice still counts toward caps when admitting new legacy/managed playback.
 
 The runtime updates streamed buffers and envelopes once per main-loop iteration,
 using unbounded wall time independently of `FixedClock` catch-up and simulation
-ticks. It continues doing so while minimized (simulation and drawing pause).
+ticks. Audio-enabled games keep native event polling nonblocking while minimized, so
+stream buffers and fades continue updating (simulation and drawing pause).
+Minimized polling is throttled to avoid a busy loop.
 Games should not advance the mixer again in fixed updates or draw callbacks.
 Fades interpolate amplitude linearly. Zero duration switches immediately and
 interrupted fades start from the current envelope gain. `crossfade` fades all
