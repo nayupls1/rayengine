@@ -21,6 +21,7 @@ Try the games:
 ```sh
 cargo run --release -p rayengine-demos --bin arena
 cargo run --release -p rayengine-demos --bin meadow
+cargo run --release -p rayengine-demos --bin dungeon
 ```
 
 **Arena** is a compact platform fighter: A/D or arrows to move, Space/W to
@@ -32,8 +33,15 @@ blast zone awards a knockout.
 **Meadow** is a first-person 3D exploration platformer: mouse to look around,
 WASD to move, Space to jump, Shift to sprint, and R to return to your checkpoint.
 Q/E also turn left/right. Escape exits; switching away releases the captured cursor.
-Explore the trails, climb the stone course, and collect golden orbs. Both games
-use geometric art and need no downloaded assets.
+Explore the trails, climb the stone course, and collect golden orbs. All three games
+use original geometric/pixel art and need no downloaded assets.
+
+**Embervault** is a six-room top-down action dungeon: WASD to move, mouse/J to
+strike, Space to dash, E to use healing shrines, Tab for the field journal, and
+Escape to pause. Defeat watchers, push a block onto a switch, and recover the
+ember from the final Warden. Supports gamepads, checkpoints, rebindable control
+presets, audio sliders, and an optional CRT filter. See the
+[game guide](examples/games/README.md) for controls, tests, and CLI packaging.
 
 Play the seeded first-person Minecraft voxel demo:
 
