@@ -739,6 +739,10 @@ version = "0.0.2"
 dependencies = [
  "criterion",
  "rayengine",
+ "rayengine-particles",
+ "rayengine-tilemap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,0 +1,55 @@
+version = 1
+atlas = "dungeon/tiles.png"
+tile_size = [32.0, 32.0]
+[tiles.W]
+region = [0, 0, 16, 16]
+solid = true
+custom = 1
+[tiles.O]
+region = [0, 0, 16, 16]
+solid = true
+trigger = 2
+custom = 2
+[tiles.D]
+region = [0, 0, 16, 16]
+solid = true
+trigger = 1
+custom = 3
+[tiles.T]
+region = [0, 0, 16, 16]
+solid = true
+custom = 4
+[tiles.E]
+region = [0, 0, 16, 16]
+custom = 5
+[tiles.G]
+region = [0, 0, 16, 16]
+custom = 6
+[tiles.B]
+region = [0, 0, 16, 16]
+custom = 7
+[tiles.P]
+region = [0, 0, 16, 16]
+trigger = 4
+custom = 8
+[tiles.S]
+region = [0, 0, 16, 16]
+trigger = 8
+custom = 9
+[[layers]]
+name = "room"
+rows = [
+"WWWWWWWWWWWWWWWWWWWWW",
+"W...................W",
+"W..T.............T..W",
+"W......W...E..W.....W",
+"W...................W",
+"W...................W",
+"W.............G....DW",
+"W...................W",
+"W...................W",
+"W..S...W...E..W.....W",
+"W..T.............T..W",
+"W...................W",
+"WWWWWWWWWWWWWWWWWWWWW",
+]

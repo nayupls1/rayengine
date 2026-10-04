@@ -43,3 +43,8 @@ export PULSE_SERVER="unix:$audio_directory/pulse.sock"
 export RAYENGINE_AUDIO_REALTIME=1
 cargo test --locked -p rayengine native_audio -- --ignored --test-threads=1
 cargo run --locked -p rayengine --example audio -- --hidden --frames 120 --screenshot artifacts/smoke/audio.png
+
+# Embervault loads original streamed tracks as part of its native render probe.
+cargo test --locked -p rayengine-demos native_dungeon -- --ignored --test-threads=1
+RAYENGINE_DUNGEON_SAVE="$audio_directory/dungeon.save" cargo run --locked -p rayengine-demos --bin dungeon -- --hidden --frames 30 --screenshot artifacts/smoke/dungeon-title.png
+python3 scripts/dungeon_package_smoke.py

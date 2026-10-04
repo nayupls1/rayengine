@@ -1,0 +1,23 @@
+schema_version = 1
+[project]
+name = "Embervault"
+executable = "dungeon"
+[assets]
+roots = ["assets"]
+[window]
+title = "Embervault / rayengine"
+size = [1200, 800]
+[render]
+reference_size = [960.0, 640.0]
+scale_mode = "fit"
+bar_color = [10, 14, 24, 255]
+[runtime]
+audio = true
+fixed_hz = 120
+[fonts.ember]
+path = "assets/dungeon/ember-mono.ttf"
+raster_size = 20
+filter = "nearest"
+rasterization = "adaptive"
+[game]
+levels = ["dungeon/levels/0.toml", "dungeon/levels/1.toml", "dungeon/levels/2.toml", "dungeon/levels/3.toml", "dungeon/levels/4.toml", "dungeon/levels/5.toml"]
