@@ -60,6 +60,45 @@ fn one_shot_controls_reject_invalid_numbers() {
     }
 }
 
+#[test]
+fn managed_controls_dispatch_volume_pitch_and_pan() {
+    #[derive(Default)]
+    struct Observed(std::cell::RefCell<Vec<(&'static str, f32)>>);
+    impl SoundControls for Observed {
+        fn set_volume(&self, value: f32) {
+            self.0.borrow_mut().push(("volume", value));
+        }
+        fn set_pitch(&self, value: f32) {
+            self.0.borrow_mut().push(("pitch", value));
+        }
+        fn set_pan(&self, value: f32) {
+            self.0.borrow_mut().push(("pan", value));
+        }
+    }
+    let observed = Observed::default();
+    let mut buses = AudioBuses::default();
+    buses.set_volume(BusId::MASTER, 0.5).unwrap();
+    buses.set_volume(BusId::SFX, 0.4).unwrap();
+    let options = SoundOptions {
+        volume: 0.5,
+        pitch: 1.5,
+        pan: -0.75,
+        ..SoundOptions::default()
+    };
+    options.apply(&observed, &buses);
+    assert_eq!(
+        *observed.0.borrow(),
+        [("volume", 0.1), ("pitch", 1.5), ("pan", -0.75)]
+    );
+    observed.0.borrow_mut().clear();
+    buses.set_muted(BusId::MASTER, true).unwrap();
+    SoundOptions::default().apply(&observed, &buses);
+    assert_eq!(
+        *observed.0.borrow(),
+        [("volume", 0.0), ("pitch", 1.0), ("pan", 0.0)]
+    );
+}
+
 #[path = "../../examples/support/audio_wave.rs"]
 mod audio_wave;
 
@@ -301,11 +340,12 @@ fn native_audio_streams_voices_caching_limits_and_cleanup() {
 
 #[test]
 #[ignore = "requires an audio output device and display; run with --ignored --test-threads=1"]
-fn native_audio_frame_clock_without_simulation_ticks() {
+fn native_audio_frame_clock_independent_of_simulation_ticks() {
     use crate::{App, Config, Game, InitContext, RunOptions, Update, render::Frame};
     struct Probe {
         directory: PathBuf,
         track: Option<MusicId>,
+        elapsed: Duration,
     }
     impl Game for Probe {
         fn init(&mut self, ctx: &mut InitContext<'_, '_>) -> Result<(), Error> {
@@ -321,21 +361,24 @@ fn native_audio_frame_clock_without_simulation_ticks() {
             Ok(())
         }
         fn fixed_update(&mut self, _: &mut Update<'_, '_>) {
-            panic!("no fixed ticks expected");
+            // A slow scheduler/GPU may eventually produce ticks. They do not
+            // advance the audio clock; this game intentionally does nothing here.
         }
         fn draw(&mut self, frame: &mut Frame<'_, '_>) {
             frame.clear(raylib::prelude::Color::BLACK);
-            if frame.index >= 5 {
-                assert_eq!(
-                    frame
-                        .assets
-                        .audio()
-                        .music_status(self.track.unwrap())
-                        .unwrap()
-                        .gain,
-                    1.0
-                );
-            }
+            self.elapsed = self.elapsed.saturating_add(frame.delta);
+            let expected = (self.elapsed.as_secs_f64() / 0.02).min(1.0) as f32;
+            let actual = frame
+                .assets
+                .audio()
+                .music_status(self.track.unwrap())
+                .unwrap()
+                .gain;
+            assert!(
+                (actual - expected).abs() < 1e-6,
+                "frame {}: gain {actual}, expected {expected}",
+                frame.index
+            );
         }
         fn shutdown(&mut self, ctx: &mut InitContext<'_, '_>) {
             assert!(
@@ -363,8 +406,8 @@ fn native_audio_frame_clock_without_simulation_ticks() {
         .run(Probe {
             directory: files.directory.clone(),
             track: None,
+            elapsed: Duration::ZERO,
         })
         .unwrap();
-    assert_eq!(report.ticks, 0);
     assert_eq!(report.frames, 10);
 }

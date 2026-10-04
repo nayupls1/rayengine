@@ -63,10 +63,29 @@ impl SoundOptions {
         }
         Ok(())
     }
-    fn apply(&self, sound: &Sound<'_>, buses: &AudioBuses) {
+    fn apply(&self, sound: &impl SoundControls, buses: &AudioBuses) {
         sound.set_volume(self.volume * buses.gain(self.bus).expect("validated bus"));
         sound.set_pitch(self.pitch);
         sound.set_pan(self.pan);
+    }
+}
+
+// Keep the native bridge mechanical; tests exercise the same dispatch of all
+// three controls, including the volume product, through an observing adapter.
+trait SoundControls {
+    fn set_volume(&self, value: f32);
+    fn set_pitch(&self, value: f32);
+    fn set_pan(&self, value: f32);
+}
+impl SoundControls for Sound<'_> {
+    fn set_volume(&self, value: f32) {
+        Sound::set_volume(self, value);
+    }
+    fn set_pitch(&self, value: f32) {
+        Sound::set_pitch(self, value);
+    }
+    fn set_pan(&self, value: f32) {
+        Sound::set_pan(self, value);
     }
 }
 
