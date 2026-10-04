@@ -277,7 +277,7 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
                         None,
                     ));
                 }
-                let executable = diagnostics
+                let _executable = diagnostics
                     .iter()
                     .find(|d| {
                         d["reason"] == "compiler-artifact"
@@ -292,8 +292,20 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
                             "Cargo did not report the selected executable",
                         )
                     })?;
-                let mut command = Command::new(executable);
+                // Cargo applies configured target runners and their wrappers, as run does.
+                let mut command = Command::new("cargo");
                 command
+                    .args(["run", "--quiet", "--manifest-path"])
+                    .arg(&manifest)
+                    .args(["--bin", &selected]);
+                if options.release {
+                    command.arg("--release");
+                }
+                if !options.features.is_empty() {
+                    command.arg("--features").arg(options.features.join(","));
+                }
+                command
+                    .arg("--")
                     .args(&options.args)
                     .current_dir(root)
                     .env_remove("RAYENGINE_MANIFEST")

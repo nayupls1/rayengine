@@ -76,6 +76,26 @@ pub(crate) fn package(
             "bundle already exists; clean it or choose a different --output",
         ));
     }
+    if let Some(project) = &project {
+        for root in &project.settings.assets.roots {
+            let root = canonical_future_path(root);
+            if output.starts_with(&root) || root.starts_with(&folder) || root == archive {
+                return Err(Failure::new(
+                    "invalid_package",
+                    "bundle output must be outside declared asset roots; choose another --output",
+                ));
+            }
+        }
+        if project.settings.fonts.values().any(|font| {
+            let path = canonical_future_path(&font.path);
+            path.starts_with(&folder) || path == archive
+        }) {
+            return Err(Failure::new(
+                "invalid_assets",
+                "fonts cannot refer to generated bundle outputs",
+            ));
+        }
+    }
     fs::create_dir(&folder).map_err(io_error)?;
     let mut outputs = Outputs {
         folder: folder.clone(),
@@ -420,4 +440,27 @@ fn dependency_notices(
     )
     .map_err(io_error)?;
     Ok(notices)
+}
+
+// Resolve existing symlinked parents as well as declarations that precede creation.
+fn canonical_future_path(path: &Path) -> PathBuf {
+    for ancestor in path.ancestors() {
+        if let Ok(mut canonical) = ancestor.canonicalize() {
+            for component in path
+                .strip_prefix(ancestor)
+                .expect("path ancestor")
+                .components()
+            {
+                match component {
+                    std::path::Component::ParentDir => {
+                        canonical.pop();
+                    }
+                    std::path::Component::Normal(name) => canonical.push(name),
+                    _ => (),
+                }
+            }
+            return canonical;
+        }
+    }
+    path.to_path_buf()
 }

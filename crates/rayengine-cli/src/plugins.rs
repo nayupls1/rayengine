@@ -221,22 +221,31 @@ pub(crate) fn edit(
         remove_feature_references(&mut cargo, &key);
         remove_namespace(&mut config, name);
     }
-    // Validation and rendering finish before either file is modified.
-    let cargo_source = cargo.to_string();
-    let config_source = config.to_string();
-    let previous = fs::read(&manifest).map_err(io_error)?;
-    fs::write(&manifest, cargo_source).map_err(io_error)?;
+    // Stage both files completely before replacing either authored manifest.
+    let write_config = add || project.is_some();
+    let mut cargo_file = Replacement::stage(&manifest, cargo.to_string().as_bytes())?;
+    let mut project_file = if write_config {
+        Some(Replacement::stage(
+            &project_path,
+            config.to_string().as_bytes(),
+        )?)
+    } else {
+        None
+    };
+    cargo_file.install()?;
     // Cargo checks feature references and inherited workspace declarations.
-    // Restore the original before returning any validation failure.
     if let Err(error) = lifecycle::metadata(&manifest, false) {
-        fs::write(&manifest, previous).map_err(io_error)?;
+        cargo_file.rollback()?;
         return Err(error);
     }
-    let write_config = add || project.is_some();
-    if write_config && let Err(e) = fs::write(&project_path, config_source) {
-        fs::write(&manifest, previous).map_err(io_error)?;
-        return Err(io_error(e));
+    if let Some(project_file) = &mut project_file {
+        if let Err(error) = project_file.install() {
+            cargo_file.rollback()?;
+            return Err(error);
+        }
+        project_file.finished = true;
     }
+    cargo_file.finished = true;
     Ok(
         json!({"manifest": manifest, "project_manifest": write_config.then_some(project_path), "plugin": name, "dependency": dependency, "plugin_path": selected_path, "features": features}),
     )
@@ -279,6 +288,89 @@ fn remove_feature_references(doc: &mut DocumentMut, dependency: &str) {
                         && (name != dependency || explicit_feature)
                 })
             });
+        }
+    }
+}
+
+/// An adjacent staged replacement and an inode backup for rollback without writes.
+struct Replacement {
+    path: PathBuf,
+    temporary: PathBuf,
+    backup: Option<PathBuf>,
+    installed: bool,
+    finished: bool,
+}
+impl Replacement {
+    fn stage(path: &Path, contents: &[u8]) -> Result<Self> {
+        use std::{
+            io::Write,
+            sync::atomic::{AtomicU64, Ordering},
+        };
+        static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+        let id = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let parent = path.parent().expect("manifest parent");
+        let temporary = parent.join(format!(".rayengine-edit-{}-{id}.tmp", std::process::id()));
+        // Exclusive creation never removes another writer's temporary file.
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(io_error)?;
+        let mut replacement = Self {
+            path: path.to_path_buf(),
+            temporary,
+            backup: None,
+            installed: false,
+            finished: false,
+        };
+        if path.exists() {
+            let backup = parent.join(format!(".rayengine-edit-{}-{id}.bak", std::process::id()));
+            fs::hard_link(path, &backup).map_err(io_error)?;
+            replacement.backup = Some(backup);
+            file.set_permissions(fs::metadata(path).map_err(io_error)?.permissions())
+                .map_err(io_error)?;
+        }
+        file.write_all(contents).map_err(io_error)?;
+        file.sync_all().map_err(io_error)?;
+        Ok(replacement)
+    }
+    fn install(&mut self) -> Result<()> {
+        fs::rename(&self.temporary, &self.path).map_err(io_error)?;
+        self.installed = true;
+        Ok(())
+    }
+    fn rollback(&mut self) -> Result<()> {
+        if !self.installed {
+            return Ok(());
+        }
+        let result = if let Some(backup) = &self.backup {
+            fs::rename(backup, &self.path)
+        } else {
+            fs::remove_file(&self.path)
+        };
+        result.map_err(|error| {
+            Failure::new(
+                "io_failed",
+                format!(
+                    "could not restore {}: {error}; original remains at {}",
+                    self.path.display(),
+                    self.backup.as_deref().unwrap_or(&self.path).display()
+                ),
+            )
+        })?;
+        self.installed = false;
+        Ok(())
+    }
+}
+impl Drop for Replacement {
+    fn drop(&mut self) {
+        // Keep the backup if rollback itself failed, so original bytes survive.
+        if self.installed && !self.finished && self.rollback().is_err() {
+            return;
+        }
+        let _ = fs::remove_file(&self.temporary);
+        if let Some(backup) = &self.backup {
+            let _ = fs::remove_file(backup);
         }
     }
 }

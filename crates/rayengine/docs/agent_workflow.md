@@ -105,7 +105,9 @@ Repeated add/remove return explicit errors. Remove deletes that plugin namespace
 from both base and profiles, leaving other plugins alone. It also removes Cargo
 feature references to the removed dependency (including aliases and forwarding),
 while retaining authored feature names. Cargo validates the result; failure
-restores the original manifest. Commands edit manifests;
+restores the original manifest. Both manifests are fully staged before either is
+replaced; atomic replacements retain original permissions and rollback backups,
+so failed writes preserve authored data. Commands edit manifests;
 they do not register hooks, invoke plugin code or fetch/build the new dependency.
 Generated libraries remain explicit game-owned compositions.
 
@@ -115,7 +117,10 @@ Cargo defaults); `--profile` selects a **project** profile to bake into the bund
 manifest. `--bin` overrides its executable; otherwise Cargo's `default-run` or the
 only binary is selected. `--features a,b` enables Cargo features. Choose a package
 manifest rather than a virtual workspace root. Outputs default to the package's
-`bundles/` directory. Existing folders/archives are refused; failures remove only
+`bundles/` directory. The output must be outside declared asset roots (including
+symlink aliases); manifests with the project root as an asset root must select
+an external `--output`. Fonts cannot reference generated bundle outputs.
+Existing folders/archives are refused; failures remove only
 this invocation's reserved outputs. The archive contains `bin/game`, executable
 `launch`, a relocatable `rayengine.toml`, discovered assets (with exclusions/root
 precedence in separate `assets/<index>/` directories), declared fonts, project license/notice files, dependency notices,
@@ -146,7 +151,8 @@ workspace Cargo configuration and toolchain declarations are also watched,
 including virtual workspaces. It skips symlinks, `.git`, `target`,
 `artifacts`, and `bundles` to avoid feedback loops. Custom Cargo target directories
 are refreshed after configuration changes; previous build directories stay excluded. Each cycle stops the old game,
-builds, and starts the selected binary with the same manifest/profile environment
+builds, and starts the selected binary through Cargo with the same configured
+target runner and manifest/profile environment
 as `run`. Failed builds keep watching so the next edit can recover. A game exit
 waits for another edit. Ctrl-C stops owned children; on Unix this includes their
 process groups. `--cycles N` counts the initial build and stops immediately after

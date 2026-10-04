@@ -533,6 +533,40 @@ fn bundle_relocates_assets_fonts_profiles_and_clean_preserves_unrelated_files() 
         "[build]\ntarget = 'x86_64-pc-windows-gnu'\n",
     )
     .unwrap();
+    let unsafe_output = game.join("release-assets/releases");
+    let (ok, result) = cli(
+        &[
+            "package",
+            "--profile",
+            "ship",
+            "--output",
+            unsafe_output.to_str().unwrap(),
+        ],
+        Some(&game),
+    );
+    assert!(!ok);
+    assert_eq!(result["error"]["code"], "invalid_package");
+    assert!(fs::read_dir(&unsafe_output).unwrap().next().is_none());
+    #[cfg(unix)]
+    {
+        let alias = scratch.0.join("asset-alias");
+        std::os::unix::fs::symlink(game.join("release-assets"), &alias).unwrap();
+        let alias_output = alias.join("releases");
+        assert_eq!(
+            cli(
+                &[
+                    "package",
+                    "--profile",
+                    "ship",
+                    "--output",
+                    alias_output.to_str().unwrap()
+                ],
+                Some(&game)
+            )
+            .1["error"]["code"],
+            "invalid_package"
+        );
+    }
     let (ok, response) = cli(&["bundle", "--profile", "ship"], Some(&game));
     assert!(ok, "{response}");
     assert_eq!(response["command"], "package");
@@ -951,5 +985,106 @@ fn watch_excludes_old_and_new_target_directories_after_config_edits() {
                 .iter()
                 .any(|p| p.as_str().unwrap().contains("/cache-"))
         );
+    }
+}
+
+#[test]
+fn watch_honors_the_same_native_target_runner_as_run() {
+    let scratch = Scratch::new("watch-runner");
+    cpu_game(
+        &scratch.0,
+        "fn main() { println!(\"{}\", std::env::var(\"REQUIRED_RUNNER_ENV\").unwrap()); }\n",
+    );
+    let output = Command::new("rustc").arg("-vV").output().unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    let host = text
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .unwrap();
+    fs::create_dir(scratch.0.join(".cargo")).unwrap();
+    fs::write(
+        scratch.0.join(".cargo/config.toml"),
+        format!("[target.{host}]\nrunner = ['env', 'REQUIRED_RUNNER_ENV=present']\n"),
+    )
+    .unwrap();
+    let (ok, run) = cli(&["run"], Some(&scratch.0));
+    assert!(ok, "{run}");
+    assert_eq!(run["data"]["stdout"], "present");
+    let (ok, watch) = cli(&["watch", "--timeout-ms", "1500"], Some(&scratch.0));
+    assert!(ok, "{watch}");
+    assert_eq!(
+        watch["data"]["cycles"][0]["game_output"]["stdout"],
+        "present\n"
+    );
+    assert_eq!(watch["data"]["cycles"][0]["game_exit_code"], 0);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn failed_manifest_writes_leave_both_originals_byte_identical() {
+    let scratch = Scratch::new("atomic-plugin-edits");
+    for large_cargo in [true, false] {
+        let game = scratch.0.join(if large_cargo {
+            "large-cargo"
+        } else {
+            "large-project"
+        });
+        cpu_game(&game, "fn main() {}\n");
+        let cargo = game.join("Cargo.toml");
+        fs::write(
+            &cargo,
+            format!(
+                "{}\n[dependencies]\nrayengine = '0.0.2'\n{}",
+                fs::read_to_string(&cargo).unwrap(),
+                if large_cargo {
+                    "# preserved Cargo comment\n".repeat(500)
+                } else {
+                    String::new()
+                }
+            ),
+        )
+        .unwrap();
+        let config = game.join("rayengine.toml");
+        fs::write(
+            &config,
+            format!(
+                "schema_version = 1\n[plugins.keep]\nvalue = 42\n{}",
+                if large_cargo {
+                    String::new()
+                } else {
+                    "# preserved project comment\n".repeat(500)
+                }
+            ),
+        )
+        .unwrap();
+        let original_cargo = fs::read(&cargo).unwrap();
+        let original_config = fs::read(&config).unwrap();
+        // Linux fault injection: ignored SIGXFSZ makes a short write return EFBIG.
+        let output = Command::new("python3")
+            .args([
+                "-c",
+                r#"import os, resource, signal, sys
+resource.setrlimit(resource.RLIMIT_FSIZE, (2048, 2048))
+signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+os.execv(sys.argv[1], sys.argv[1:])"#,
+            ])
+            .arg(env!("CARGO_BIN_EXE_rayengine"))
+            .args(["--json", "add", "voxel"])
+            .arg(&game)
+            .output()
+            .unwrap();
+        let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(!output.status.success());
+        assert!(output.stderr.is_empty());
+        assert_eq!(response["error"]["code"], "io_failed");
+        assert_eq!(fs::read(&cargo).unwrap(), original_cargo);
+        assert_eq!(fs::read(&config).unwrap(), original_config);
+        assert!(!fs::read_dir(&game).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".rayengine-edit-")
+        }));
     }
 }
