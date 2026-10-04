@@ -71,3 +71,6 @@ Basic ambient, directional, and point lighting is opt-in with `Shading::Lit`.
 See the [lighting guide](https://docs.rs/rayengine/latest/rayengine/guides/lighting/)
 and run `cargo run -p rayengine --example lighting` for a generated/imported
 lit/unlit comparison with adjustable lights.
+
+See the [render targets and post-processing guide](crate::guides::post_processing)
+for offscreen 2D/3D rendering, reusable shader effects, and UI composition.

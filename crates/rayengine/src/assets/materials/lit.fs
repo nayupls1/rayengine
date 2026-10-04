@@ -6,6 +6,7 @@ in vec3 worldNormal;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 uniform int rayengineAlphaMode;
+uniform int rayenginePremultipliedTexture;
 uniform float rayengineAlphaCutoff;
 uniform vec3 ambient;
 uniform vec3 direction;
@@ -16,7 +17,9 @@ uniform vec3 pointColor[4];
 uniform float pointRange[4];
 out vec4 finalColor;
 void main() {
-    vec4 color = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+    vec4 sampled = texture(texture0, fragTexCoord);
+    if (rayenginePremultipliedTexture != 0) sampled.rgb = sampled.a > 0.0 ? sampled.rgb / sampled.a : vec3(0.0);
+    vec4 color = sampled * colDiffuse * fragColor;
     if (rayengineAlphaMode == 1 && color.a < rayengineAlphaCutoff) discard;
     if (rayengineAlphaMode != 2) color.a = 1.0;
     vec3 normal = normalize(worldNormal);

@@ -103,6 +103,10 @@ pub struct ResourceCounts {
     pub font_atlases: u64,
     /// RGBA font atlas payload bytes, excluding CPU outline storage.
     pub font_bytes: u64,
+    /// Allocated custom offscreen targets.
+    pub render_targets: u64,
+    /// Custom target RGBA plus depth allocation estimate.
+    pub render_target_bytes: u64,
     /// Standalone cached textures.
     pub textures: u64,
     /// Imported models.
@@ -133,6 +137,8 @@ impl ResourceCounts {
             fonts,
             font_atlases,
             font_bytes,
+            render_targets,
+            render_target_bytes,
             textures,
             models,
             sounds,

@@ -675,6 +675,7 @@ impl App {
             let mut cursor = CursorState::default();
             let mut fxaa = crate::quality::shader(&mut raylib, &thread, config.render_quality)?;
             let mut targets: Option<crate::quality::QualityTargets> = None;
+            let mut post_targets: Option<crate::post_processing::PostTargets> = None;
             let mut clock = FixedClock::new(config.fixed_hz, config.max_catch_up);
             let start = Instant::now();
             let mut previous_frame = start;
@@ -730,6 +731,7 @@ impl App {
                 ..RunReport::default()
             };
             let mut quit = false;
+            let mut last_view = None;
             while !quit
                 && !raylib.window_should_close()
                 && options.frames.is_none_or(|limit| report.frames < limit)
@@ -813,10 +815,40 @@ impl App {
                     raylib.get_render_width() as f32,
                     raylib.get_render_height() as f32,
                 ) / window;
-                let target_plan = config
+                let mut target_plan = config
                     .render_quality
                     .plan(&view, dpi, config.scale_mode)
                     .map_err(|e| Error::Config(e.to_string()))?;
+                let chain = assets.post_processing().clone();
+                assets.validate_post_processing(&chain)?;
+                let effects = !chain.materials.is_empty();
+                if effects && !target_plan.separate_ui {
+                    target_plan.separate_ui = true;
+                    target_plan.target_bytes +=
+                        16 * u64::from(target_plan.output.0) * u64::from(target_plan.output.1);
+                }
+                let post_bytes = if effects {
+                    crate::post_processing::PostTargets::bytes(target_plan.output)
+                } else {
+                    0
+                };
+                assets.target_reservation = target_plan.target_bytes + post_bytes;
+                let all_bytes =
+                    assets.targets.planned_bytes(&view, dpi)? + assets.target_reservation;
+                if all_bytes > RenderQuality::MAX_TARGET_BYTES {
+                    return Err(Error::Config(format!(
+                        "render targets need {all_bytes} bytes; limit is {}",
+                        RenderQuality::MAX_TARGET_BYTES
+                    )));
+                }
+                if !effects
+                    || post_targets
+                        .as_ref()
+                        .is_some_and(|t| t.size != target_plan.output)
+                {
+                    drop(post_targets.take());
+                }
+                assets.targets.release_resized(&view, dpi)?;
                 if targets
                     .as_ref()
                     .is_none_or(|targets| targets.plan != target_plan)
@@ -828,6 +860,17 @@ impl App {
                         &mut raylib,
                         &thread,
                         target_plan,
+                        config.scale_mode == ScaleMode::IntegerFit,
+                    )?);
+                }
+                assets
+                    .targets
+                    .sync(&mut raylib, &thread, &view, dpi, assets.target_reservation)?;
+                if effects && post_targets.is_none() {
+                    post_targets = Some(crate::post_processing::PostTargets::new(
+                        &mut raylib,
+                        &thread,
+                        target_plan.output,
                         config.scale_mode == ScaleMode::IntegerFit,
                     )?);
                 }
@@ -850,54 +893,75 @@ impl App {
                     game.draw(&mut frame);
                     frame.draw_counters()
                 };
+                assets.validate_post_processing(&chain)?;
+                if effects {
+                    targets.resolve_with_ui(
+                        &mut raylib,
+                        &thread,
+                        fxaa.as_mut(),
+                        chain.ui == crate::post_processing::UiPlacement::BeforeEffects,
+                    );
+                    post_targets.as_mut().expect("effect targets").apply(
+                        &mut raylib,
+                        &thread,
+                        targets.presented(),
+                        targets.ui.as_ref(),
+                        &chain,
+                        &mut assets,
+                    )?;
+                } else {
+                    targets.resolve(&mut raylib, &thread, fxaa.as_mut());
+                }
                 game.boundary(&mut InitContext {
                     raylib: &mut raylib,
                     thread: &thread,
                     assets: &mut assets,
                 })?;
-                targets.resolve(&mut raylib, &thread, fxaa.as_mut());
+                let presented = post_targets
+                    .as_ref()
+                    .map(|t| t.presented())
+                    .unwrap_or_else(|| targets.presented());
                 if let Some(metrics) = &mut report.diagnostics {
                     metrics
                         .render
                         .record(render_start.expect("diagnostics enabled").elapsed());
                 }
                 let present_start = report.diagnostics.as_ref().map(|_| Instant::now());
-                {
-                    let mut draw = raylib.begin_drawing(&thread);
-                    draw.clear_background(config.bar_color);
-                    // SDK world/UI targets consistently store premultiplied RGBA.
-                    let mut draw = draw.begin_blend_mode(BlendMode::BLEND_ALPHA_PREMULTIPLY);
-                    draw.draw_texture_pro(
-                        targets.presented().texture(),
-                        Rectangle::new(
-                            0.0,
-                            0.0,
-                            target_plan.output.0 as f32,
-                            -(target_plan.output.1 as f32),
-                        ),
-                        rect(rayengine_core::collision::Aabb2 {
-                            min: view.origin,
-                            max: view.origin + view.size,
-                        }),
-                        Vector2::zero(),
-                        0.0,
-                        Color::WHITE,
-                    );
-                }
+                present_frame(
+                    &mut raylib,
+                    &thread,
+                    presented,
+                    view,
+                    config.bar_color,
+                    false,
+                );
+                last_view = Some(view);
                 if let Some(metrics) = &mut report.diagnostics {
                     metrics
                         .present
                         .record(present_start.expect("diagnostics enabled").elapsed());
                     metrics.settings.render_size = size;
                     metrics.settings.output_size = target_plan.output;
-                    metrics.settings.render_target_bytes = target_plan.target_bytes;
+                    metrics.settings.render_target_bytes =
+                        assets.target_reservation + assets.render_target_usage().1;
                     metrics.record_frame(draws.unwrap_or_default(), assets.resource_counts());
                     metrics.frame.record(now.elapsed());
                 }
                 report.frames += 1;
             }
             if let Some(path) = &options.screenshot {
-                let image = raylib.load_image_from_screen(&thread);
+                // Re-submit the last resolved image after final event polling. This
+                // avoids reading a stale back buffer or a pending-resize drawable.
+                let image = if let Some((targets, view)) = targets.as_ref().zip(last_view) {
+                    let source = post_targets
+                        .as_ref()
+                        .map(|t| t.presented())
+                        .unwrap_or_else(|| targets.presented());
+                    present_frame(&mut raylib, &thread, source, view, config.bar_color, true)
+                        .expect("requested capture")
+                } else {
+                    raylib.load_image_from_screen(&thread)
+                };
                 let png = image
                     .export_image_to_memory(".png")
                     .map_err(|e| Error::Backend(e.to_string()))?;
@@ -929,6 +993,38 @@ impl App {
         });
         result
     }
+}
+
+fn present_frame(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    source: &RenderTexture2D,
+    view: Viewport,
+    bars: Color,
+    capture: bool,
+) -> Option<Image> {
+    let mut draw = rl.begin_drawing(thread);
+    draw.clear_background(bars);
+    let mut presented = draw.begin_blend_mode(BlendMode::BLEND_ALPHA_PREMULTIPLY);
+    presented.draw_texture_pro(
+        source.texture(),
+        Rectangle::new(
+            0.0,
+            0.0,
+            source.texture().width as f32,
+            -(source.texture().height as f32),
+        ),
+        rect(rayengine_core::collision::Aabb2 {
+            min: view.origin,
+            max: view.origin + view.size,
+        }),
+        Vector2::zero(),
+        0.0,
+        Color::WHITE,
+    );
+    // EndBlendMode flushes the blit before readback and EndDrawing swaps buffers.
+    drop(presented);
+    capture.then(|| draw.load_image_from_screen(thread))
 }
 
 fn validate_size(size: (u32, u32)) -> Result<(), Error> {

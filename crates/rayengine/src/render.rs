@@ -55,6 +55,63 @@ pub struct Frame<'frame, 'audio> {
 }
 
 impl Frame<'_, '_> {
+    /// Creates and allocates a target before a drawing pass.
+    pub fn render_target(
+        &mut self,
+        desc: crate::targets::RenderTargetDesc,
+    ) -> Result<crate::targets::RenderTargetId, Error> {
+        let id = self.assets.create_render_target(desc)?;
+        if let Err(e) = self.sync_render_targets() {
+            self.assets.unload_render_target(id);
+            return Err(e);
+        }
+        Ok(id)
+    }
+    fn sync_render_targets(&mut self) -> Result<(), Error> {
+        let dpi = Vec2::new(
+            self.raylib.get_render_width() as f32 / self.raylib.get_screen_width() as f32,
+            self.raylib.get_render_height() as f32 / self.raylib.get_screen_height() as f32,
+        );
+        self.assets.targets.sync(
+            self.raylib,
+            self.thread,
+            &self.viewport,
+            dpi,
+            self.assets.target_reservation,
+        )
+    }
+    /// Runs ordinary world_2d, world_3d, ui or raw passes into a custom target.
+    /// Camera coverage and logical UI units remain unchanged. Contents persist
+    /// until clear or resize. Active attachments cannot be sampled or unloaded;
+    /// recursive use of the same target returns an error instead of GPU feedback.
+    /// Ownership and counters are restored if the callback unwinds.
+    pub fn with_target<R>(
+        &mut self,
+        id: crate::targets::RenderTargetId,
+        draw: impl FnOnce(&mut Frame<'_, '_>) -> R,
+    ) -> Result<R, Error> {
+        self.sync_render_targets()?;
+        let mut target = self.assets.targets.take(id)?;
+        let mut nested = Frame {
+            counters: self.counters.take(),
+            raylib: self.raylib,
+            thread: self.thread,
+            target: &mut target,
+            ui_target: None,
+            assets: self.assets,
+            viewport: self.viewport,
+            alpha: self.alpha,
+            index: self.index,
+            delta: self.delta,
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| draw(&mut nested)));
+        self.counters = nested.counters.take();
+        self.assets.targets.restore(id, target);
+        match result {
+            Ok(value) => Ok(value),
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
     /// Loads/caches a font on the render thread, including after initialization.
     pub fn font(
         &mut self,
@@ -237,7 +294,10 @@ impl Frame<'_, '_> {
             font,
             fonts: &mut self.assets.fonts,
             thread: self.thread,
-            textures: &self.assets.textures,
+            textures: &UiTextures {
+                textures: &self.assets.textures,
+                targets: &self.assets.targets,
+            },
             counters: &mut self.counters,
         });
     }
@@ -265,9 +325,27 @@ pub struct Canvas2D<'draw, D: RaylibDraw> {
 }
 
 trait TextureSource {
+    fn target(&self, _id: crate::targets::RenderTargetId) -> Option<&WeakTexture2D> {
+        None
+    }
     fn texture(&self, id: TextureId) -> Option<&Texture2D>;
 }
+struct UiTextures<'a> {
+    textures: &'a Vec<Option<Texture2D>>,
+    targets: &'a crate::targets::TargetAssets,
+}
+impl TextureSource for UiTextures<'_> {
+    fn texture(&self, id: TextureId) -> Option<&Texture2D> {
+        self.textures.texture(id)
+    }
+    fn target(&self, id: crate::targets::RenderTargetId) -> Option<&WeakTexture2D> {
+        self.targets.texture(id)
+    }
+}
 impl TextureSource for Assets<'_> {
+    fn target(&self, id: crate::targets::RenderTargetId) -> Option<&WeakTexture2D> {
+        self.targets.texture(id)
+    }
     fn texture(&self, id: TextureId) -> Option<&Texture2D> {
         self.texture(id)
     }
@@ -339,6 +417,31 @@ impl<D: RaylibDraw> Canvas2D<'_, D> {
             v2(transform.origin),
             transform.rotation.to_degrees(),
             tint,
+        );
+        count!(self.counters, textures, 1);
+        true
+    }
+    /// Samples an offscreen image upright in world bounds. False for a stale or active target.
+    pub fn render_target(
+        &mut self,
+        id: crate::targets::RenderTargetId,
+        bounds: Aabb2,
+        tint: Color,
+    ) -> bool {
+        let Some(texture) = self.textures.target(id) else {
+            return false;
+        };
+        let Ok(mut blend) = crate::assets::materials::alpha_pass(self.thread) else {
+            return false;
+        };
+        blend.premultiplied();
+        self.raw.draw_texture_pro(
+            texture,
+            Rectangle::new(0.0, 0.0, texture.width as f32, -(texture.height as f32)),
+            rect(bounds),
+            Vector2::zero(),
+            0.0,
+            premultiply(tint),
         );
         count!(self.counters, textures, 1);
         true
@@ -767,6 +870,34 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
         Ok(())
     }
 
+    /// Samples an offscreen image upright in UI-unit bounds. False for a stale or active target.
+    pub fn render_target(
+        &mut self,
+        id: crate::targets::RenderTargetId,
+        bounds: Aabb2,
+        tint: Color,
+    ) -> bool {
+        let Some(texture) = self.textures.target(id) else {
+            return false;
+        };
+        let Ok(mut blend) = crate::assets::materials::alpha_pass(self.thread) else {
+            return false;
+        };
+        blend.premultiplied();
+        self.raw.draw_texture_pro(
+            texture,
+            Rectangle::new(0.0, 0.0, texture.width as f32, -(texture.height as f32)),
+            rect(Aabb2 {
+                min: bounds.min * self.scale,
+                max: bounds.max * self.scale,
+            }),
+            Vector2::zero(),
+            0.0,
+            premultiply(tint),
+        );
+        count!(self.counters, textures, 1);
+        true
+    }
     /// Draws a loaded texture icon into UI-unit bounds. Returns false for a
     /// stale/unloaded texture. Icons can share an independent interactive region.
     pub fn icon(&mut self, id: TextureId, bounds: Aabb2, tint: Color) -> bool {
@@ -881,7 +1012,7 @@ pub(crate) fn rect(bounds: Aabb2) -> Rectangle {
     Rectangle::new(bounds.min.x, bounds.min.y, bounds.size().x, bounds.size().y)
 }
 
-fn premultiply(color: Color) -> Color {
+pub(crate) fn premultiply(color: Color) -> Color {
     let channel = |value: u8| ((u16::from(value) * u16::from(color.a) + 127) / 255) as u8;
     Color::new(
         channel(color.r),
