@@ -111,7 +111,7 @@ pub struct ResourceCounts {
     pub sounds: u64,
     /// Loaded streamed music resources.
     pub music_streams: u64,
-    /// Extra pooled one-shot voices (original voices are counted by `sounds`).
+    /// Pooled mixer-managed one-shot voices (legacy voices are counted by `sounds`).
     pub sound_instances: u64,
     /// Generated meshes.
     pub meshes: u64,

@@ -123,9 +123,7 @@ struct Track<'audio> {
 impl Track<'_> {
     fn sync_volume(&self, buses: &AudioBuses) {
         self.stream.set_volume(
-            self.options.volume
-                * self.fade.gain()
-                * buses.gain(self.options.bus).expect("validated bus"),
+            self.options.volume * self.fade.gain() * buses.gain(self.options.bus).unwrap_or(0.0),
         );
     }
     fn stop(&mut self) {
@@ -158,7 +156,6 @@ struct Voice<'audio> {
 pub(crate) struct SoundPool<'audio> {
     wave: Wave<'audio>,
     voices: Vec<Voice<'audio>>,
-    original: SoundOptions,
     limit: Option<usize>,
 }
 impl<'audio> SoundPool<'audio> {
@@ -166,7 +163,6 @@ impl<'audio> SoundPool<'audio> {
         Self {
             wave,
             voices: Vec::new(),
-            original: SoundOptions::default(),
             limit: None,
         }
     }
@@ -332,12 +328,31 @@ impl<'audio> AudioMixer<'audio> {
             .limit = limit;
         Ok(())
     }
+    pub(crate) fn play_legacy(&self, id: SoundId, source: &Sound<'audio>) -> bool {
+        let Some(pool) = self.sounds.get(id.0).and_then(Option::as_ref) else {
+            return false;
+        };
+        let playing = usize::from(source.is_playing())
+            + pool
+                .voices
+                .iter()
+                .filter(|voice| voice.sound.is_playing())
+                .count();
+        if pool.limit == Some(0)
+            || (pool.limit.is_some_and(|limit| playing >= limit) && !source.is_playing())
+        {
+            return false;
+        }
+        // The original voice is the pre-mixer raw API. Preserve all its controls;
+        // managed playback uses separate buffers so the frame mixer cannot reset it.
+        source.play();
+        true
+    }
     pub(crate) fn play_sound(
         &mut self,
         id: SoundId,
         source: &Sound<'audio>,
         options: SoundOptions,
-        restart: bool,
     ) -> Result<bool, Error> {
         options.validate(&self.buses)?;
         let pool = self
@@ -346,36 +361,35 @@ impl<'audio> AudioMixer<'audio> {
             .and_then(Option::as_mut)
             .ok_or_else(|| Error::Asset("sound handle is unloaded".into()))?;
         let playing = usize::from(source.is_playing())
-            + pool.voices.iter().filter(|v| v.sound.is_playing()).count();
-        if pool.limit.is_some_and(|limit| playing >= limit)
-            && !(restart && source.is_playing() && pool.limit != Some(0))
-        {
+            + pool
+                .voices
+                .iter()
+                .filter(|voice| voice.sound.is_playing())
+                .count();
+        if pool.limit.is_some_and(|limit| playing >= limit) {
             return Ok(false);
         }
-        if restart || !source.is_playing() {
-            options.apply(source, &self.buses);
-            pool.original = options;
-            source.play();
+        let slot = pool
+            .voices
+            .iter()
+            .position(|voice| !voice.sound.is_playing());
+        let voice = if let Some(slot) = slot {
+            &mut pool.voices[slot]
         } else {
-            let slot = pool.voices.iter().position(|v| !v.sound.is_playing());
-            let voice = if let Some(slot) = slot {
-                &mut pool.voices[slot]
-            } else {
-                let sound = self
-                    .device
-                    .expect("loaded sound requires audio")
-                    .new_sound_from_wave(&pool.wave)
-                    .map_err(|error| Error::Asset(error.to_string()))?;
-                pool.voices.push(Voice { sound, options });
-                pool.voices.last_mut().expect("pushed voice")
-            };
-            voice.options = options;
-            options.apply(&voice.sound, &self.buses);
-            voice.sound.play();
-        }
+            let sound = self
+                .device
+                .expect("loaded sound requires audio")
+                .new_sound_from_wave(&pool.wave)
+                .map_err(|error| Error::Asset(error.to_string()))?;
+            pool.voices.push(Voice { sound, options });
+            pool.voices.last_mut().expect("pushed voice")
+        };
+        voice.options = options;
+        options.apply(&voice.sound, &self.buses);
+        voice.sound.play();
         Ok(true)
     }
-    pub(crate) fn update(&mut self, delta: Duration, sources: &[Option<Sound<'audio>>]) {
+    pub(crate) fn update(&mut self, delta: Duration) {
         self.buses.advance(delta);
         for track in self.tracks.iter_mut().flatten() {
             if !track.active {
@@ -394,18 +408,11 @@ impl<'audio> AudioMixer<'audio> {
                 }
             }
         }
-        for (source, pool) in sources.iter().zip(&self.sounds) {
-            if let (Some(source), Some(pool)) = (source, pool) {
-                source.set_volume(
-                    pool.original.volume
-                        * self.buses.gain(pool.original.bus).expect("validated bus"),
+        for pool in self.sounds.iter().flatten() {
+            for voice in &pool.voices {
+                voice.sound.set_volume(
+                    voice.options.volume * self.buses.gain(voice.options.bus).unwrap_or(0.0),
                 );
-                for voice in &pool.voices {
-                    voice.sound.set_volume(
-                        voice.options.volume
-                            * self.buses.gain(voice.options.bus).expect("validated bus"),
-                    );
-                }
             }
         }
     }
@@ -430,15 +437,13 @@ impl<'audio> Assets<'audio> {
     }
     /// Plays an independent one-shot with volume/pitch/pan and bus routing.
     /// Returns Ok(false) for stale handles or when the configured limit is reached.
-    /// The first overlapping play allocates a native buffer from cached PCM;
+    /// Each new simultaneous managed voice allocates a buffer from cached PCM;
     /// later plays reuse completed buffers. No files are read during playback.
     pub fn play_sound(&self, id: SoundId, options: SoundOptions) -> Result<bool, Error> {
         let Some(source) = self.sound(id) else {
             return Ok(false);
         };
-        self.mixer
-            .borrow_mut()
-            .play_sound(id, source, options, false)
+        self.mixer.borrow_mut().play_sound(id, source, options)
     }
     /// Unloads a streamed track. It remains invalid for the rest of this run.
     pub fn unload_music(&mut self, id: MusicId) -> bool {
@@ -448,7 +453,7 @@ impl<'audio> Assets<'audio> {
         self.mixer.get_mut().load_music(path)
     }
     pub(crate) fn update_audio(&mut self, delta: Duration) {
-        self.mixer.get_mut().update(delta, &self.sounds);
+        self.mixer.get_mut().update(delta);
     }
 }
 

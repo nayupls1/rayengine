@@ -185,13 +185,20 @@ fn native_audio_streams_voices_caching_limits_and_cleanup() {
                 .unwrap()
         );
         assert!(!assets.play_sound(click, options).unwrap());
-        assert_eq!(assets.resource_counts().sound_instances, 1);
-        assert!(assets.play(click)); // legacy restart remains at two concurrent voices
+        assert_eq!(assets.resource_counts().sound_instances, 2);
+        assert!(!assets.play(click)); // no room for an additional legacy voice
+        assets.audio().sounds[click.0].as_ref().unwrap().voices[0]
+            .sound
+            .stop();
+        assert!(assets.play(click));
+        assert!(assets.play(click)); // restart does not add a concurrent voice
         assets.audio().set_sound_limit(click, Some(0)).unwrap();
         assert!(!assets.play(click));
         assets.audio().set_sound_limit(click, None).unwrap();
-        assets.sound(click).unwrap().stop();
+        // Reuse a finished/stopped buffer, preserving independent voice options.
+        let count = assets.resource_counts().sound_instances;
         assert!(assets.play_sound(click, options).unwrap());
+        assert_eq!(assets.resource_counts().sound_instances, count);
         assets
             .audio()
             .buses_mut()
@@ -199,14 +206,74 @@ fn native_audio_streams_voices_caching_limits_and_cleanup() {
             .unwrap();
         assets.update_audio(Duration::ZERO);
         let audio = assets.audio();
-        let original = audio.sounds[click.0].as_ref().unwrap().original;
-        assert_eq!(original.pan, -0.7);
-        assert_eq!(original.pitch, 0.25);
-        assert_eq!(
-            original.volume * audio.buses.gain(original.bus).unwrap(),
-            0.0
-        );
+        let managed = &audio.sounds[click.0].as_ref().unwrap().voices[0].options;
+        assert_eq!(managed.pan, -0.7);
+        assert_eq!(managed.pitch, 0.25);
+        assert_eq!(managed.volume * audio.buses.gain(managed.bus).unwrap(), 0.0);
         drop(audio);
+        // Original raw controls survive both legacy play and mixer frame updates.
+        // Mixer-managed buffers remain separate from the public original voice.
+        let source = assets.sound(click).unwrap();
+        source.set_volume(0.2);
+        source.set_pitch(0.25);
+        source.set_pan(-0.5);
+        let count = assets.resource_counts().sound_instances;
+        assert!(assets.play(click));
+        assets.update_audio(Duration::from_millis(350));
+        assert_eq!(assets.resource_counts().sound_instances, count);
+        // Enable this duration regression when the output has a real-time sample
+        // clock (hardware or the clocked silent sink used by the CI smoke script).
+        if std::env::var_os("RAYENGINE_AUDIO_REALTIME").is_some() {
+            std::thread::sleep(Duration::from_millis(350));
+            assert!(assets.sound(click).unwrap().is_playing());
+        }
+        assets.sound(click).unwrap().play();
+        assets.update_audio(Duration::from_millis(350));
+        assert_eq!(assets.resource_counts().sound_instances, count);
+        if std::env::var_os("RAYENGINE_AUDIO_REALTIME").is_some() {
+            std::thread::sleep(Duration::from_millis(350));
+            assert!(assets.sound(click).unwrap().is_playing());
+        }
+        // A naturally completed managed instance can be reused too.
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while assets.audio().sounds[click.0]
+            .as_ref()
+            .unwrap()
+            .voices
+            .iter()
+            .any(|voice| voice.sound.is_playing())
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "managed voices did not finish"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let count = assets.resource_counts().sound_instances;
+        assert!(assets.play_sound(click, options).unwrap());
+        assert_eq!(assets.resource_counts().sound_instances, count);
+        let short = assets
+            .load_music(&files.directory.join("click.wav"))
+            .unwrap();
+        assets
+            .audio()
+            .play_music(
+                short,
+                MusicOptions {
+                    looping: false,
+                    ..MusicOptions::default()
+                },
+            )
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while assets.audio().music_status(short).unwrap().active {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "nonlooping stream did not finish"
+            );
+            assets.update_audio(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(10));
+        }
         assert!(assets.unload_music(calm));
         assert!(!assets.unload_music(calm));
         assert!(assets.audio().music_status(calm).is_none());

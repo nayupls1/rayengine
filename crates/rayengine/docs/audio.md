@@ -50,12 +50,15 @@ uses the latest bus controls immediately.
 finite playback-rate multiplier in `0.25..=4.0` and changes duration too. Pan is
 `-1` left, `0` center, `1` right. The original sound voice and overlapping voices
 all count toward `set_sound_limit`; `None` allows unlimited instances and `Some(0)`
-rejects new plays. Lowering a cap lets existing instances finish. Extra native
+rejects new plays. Lowering a cap lets existing instances finish. Mixer-managed native
 voice buffers are created lazily from cached PCM and reused until sound unload;
 no files are read during playback. `Assets::play` retains its restart-the-original
-voice behavior and uses default sfx controls. Borrowing `Assets::sound` provides
-the original raylib voice for advanced use; raw playback bypasses the cap and
-mixer frame updates still apply that voice's managed volume.
+voice behavior and preserves native volume/pitch/pan set through `Assets::sound`.
+That original legacy voice bypasses bus mixing; use `play_sound` to adopt mixer
+controls. Direct `Assets::sound(...).play()` also bypasses concurrency admission.
+Raw and legacy playback never have their controls overwritten by frame updates,
+even when managed instances of the same sound are playing. Their active original
+voice still counts toward caps when admitting new legacy/managed playback.
 
 The runtime updates streamed buffers and envelopes once per main-loop iteration,
 using unbounded wall time independently of `FixedClock` catch-up and simulation
@@ -123,3 +126,9 @@ working directory; a subsequent run loads it. Corrupt/future saves are preserved
 and reported as errors. No external assets are downloaded. An audio output
 device and desktop display are required. The full example below is checked by
 rustdoc.
+
+The CI probe `scripts/native_audio_smoke.sh` requires PulseAudio and uses a private,
+clocked silent sink under an existing display (or `xvfb-run -a`). It does not
+require speakers or modify the desktop audio server, and includes the legacy
+pitch/duration regression. To run that regression against your normal audio device,
+run `RAYENGINE_AUDIO_REALTIME=1 cargo test -p rayengine native_audio -- --ignored --test-threads=1`.

@@ -375,23 +375,19 @@ impl<'audio> Assets<'audio> {
     }
 
     /// Borrow the original native voice, or `None` after unloading.
-    /// Raw playback bypasses concurrency controls; mixer updates still apply its volume.
+    /// Raw playback bypasses bus mixing and concurrency controls. Its native
+    /// volume/pitch/pan are never changed by the mixer.
     pub fn sound(&self, id: SoundId) -> Option<&Sound<'audio>> {
         self.sounds.get(id.0).and_then(Option::as_ref)
     }
 
-    /// Plays/restarts the original sound voice on the sfx bus.
-    /// Returns false for an unloaded handle or a reached concurrency cap.
-    /// Use `play_sound` for independent overlapping instances and custom controls.
+    /// Plays/restarts the original voice, preserving its native volume/pitch/pan.
+    /// This legacy voice bypasses bus mixing. The optional concurrency cap applies.
+    /// Returns false for an unloaded handle or a reached cap (restarts are allowed).
+    /// Use `play_sound` for independent mixer-managed instances and bus routing.
     pub fn play(&self, id: SoundId) -> bool {
-        if let Some(sound) = self.sound(id) {
-            self.mixer
-                .borrow_mut()
-                .play_sound(id, sound, crate::audio::SoundOptions::default(), true)
-                .unwrap_or(false)
-        } else {
-            false
-        }
+        self.sound(id)
+            .is_some_and(|sound| self.mixer.borrow().play_legacy(id, sound))
     }
 
     /// Unloads a texture immediately. Its handle remains invalid forever in this run.
