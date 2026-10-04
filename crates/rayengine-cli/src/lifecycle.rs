@@ -22,14 +22,9 @@ pub(crate) fn metadata_with_features(
         command.arg("--features").arg(features.join(","));
     }
     if dependencies {
-        let rustc = Command::new("rustc")
-            .arg("-vV")
-            .output()
-            .map_err(process_error)?;
-        let text = String::from_utf8_lossy(&rustc.stdout);
-        if let Some(host) = text.lines().find_map(|l| l.strip_prefix("host: ")) {
-            command.arg("--filter-platform").arg(host);
-        }
+        command
+            .arg("--filter-platform")
+            .arg(host_target(manifest.parent().expect("manifest parent"))?);
     }
     let output = command.output().map_err(process_error)?;
     if !output.status.success() {
@@ -165,4 +160,23 @@ pub(crate) fn fix_hints() -> Vec<String> {
         command.into(),
         "Rust toolchain: https://rustup.rs/ (rustc and cargo 1.89 or newer)".into(),
     ]
+}
+
+pub(crate) fn host_target(root: &Path) -> Result<String> {
+    let rustc = Command::new("rustc")
+        .arg("-vV")
+        .current_dir(root)
+        .output()
+        .map_err(process_error)?;
+    if !rustc.status.success() {
+        return Err(Failure::new(
+            "process_failed",
+            String::from_utf8_lossy(&rustc.stderr),
+        ));
+    }
+    String::from_utf8_lossy(&rustc.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .map(str::to_owned)
+        .ok_or_else(|| Failure::new("process_failed", "rustc did not report a host target"))
 }

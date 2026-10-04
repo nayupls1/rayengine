@@ -124,7 +124,10 @@ pub(crate) fn edit(
                 });
                 let compatible = match (expected_path, dep["path"].as_str()) {
                     (Some(expected), Some(actual)) => {
-                        expected.canonicalize().ok() == Path::new(actual).canonicalize().ok()
+                        match (expected.canonicalize(), Path::new(actual).canonicalize()) {
+                            (Ok(expected), Ok(actual)) => expected == actual,
+                            _ => false,
+                        }
                     }
                     (None, None) => sdk["req"] == dep["req"] && sdk["source"] == dep["source"],
                     _ => false,
@@ -143,6 +146,15 @@ pub(crate) fn edit(
             );
             selected_path = Some(local);
         } else {
+            if !sdk["source"]
+                .as_str()
+                .is_some_and(|source| source.starts_with("registry+"))
+            {
+                return Err(Failure::new(
+                    "invalid_sdk",
+                    "non-registry SDK sources require a compatible --plugin-path; version numbers alone do not identify the SDK source",
+                ));
+            }
             let req = sdk["req"]
                 .as_str()
                 .unwrap_or("")

@@ -1,7 +1,7 @@
 //! Polling watcher with debounced builds and owned child-process cleanup.
 use super::*;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     hash::{Hash, Hasher},
     process::{Child, Stdio},
     sync::{
@@ -105,9 +105,9 @@ impl Drop for Logs {
 }
 
 type Snapshot = BTreeMap<PathBuf, u64>;
-fn snapshot(roots: &[PathBuf], target: &Path) -> Result<Snapshot> {
-    fn visit(path: &Path, target: &Path, files: &mut Snapshot) -> Result<()> {
-        if path == target {
+fn snapshot(roots: &[PathBuf], targets: &BTreeSet<PathBuf>) -> Result<Snapshot> {
+    fn visit(path: &Path, targets: &BTreeSet<PathBuf>, files: &mut Snapshot) -> Result<()> {
+        if targets.iter().any(|target| path.starts_with(target)) {
             return Ok(());
         }
         let metadata = match fs::symlink_metadata(path) {
@@ -127,7 +127,7 @@ fn snapshot(roots: &[PathBuf], target: &Path) -> Result<Snapshot> {
                 return Ok(());
             }
             for entry in fs::read_dir(path).map_err(io_error)? {
-                visit(&entry.map_err(io_error)?.path(), target, files)?;
+                visit(&entry.map_err(io_error)?.path(), targets, files)?;
             }
         } else if metadata.is_file() {
             let contents = match fs::read(path) {
@@ -143,7 +143,7 @@ fn snapshot(roots: &[PathBuf], target: &Path) -> Result<Snapshot> {
     }
     let mut files = BTreeMap::new();
     for root in roots {
-        visit(root, target, &mut files)?;
+        visit(root, targets, &mut files)?;
     }
     Ok(files)
 }
@@ -156,8 +156,10 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
     let package = lifecycle::project_package(&meta, &manifest)?;
     let bin = lifecycle::binary(package, project.as_ref(), options.bin.as_deref())?;
     let mut roots = watch_roots(&meta, project.as_ref());
-    let target = Path::new(meta["target_directory"].as_str().expect("target directory"));
-    let mut seen = snapshot(&roots, target)?;
+    let mut targets = BTreeSet::from([PathBuf::from(
+        meta["target_directory"].as_str().expect("target directory"),
+    )]);
+    let mut seen = snapshot(&roots, &targets)?;
     let started = Instant::now();
     let stop = Arc::new(AtomicBool::new(false));
     let signal = stop.clone();
@@ -220,7 +222,25 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
                 }
                 let meta: Value = serde_json::from_str(output["stdout"].as_str().unwrap_or(""))
                     .map_err(|e| Failure::new("invalid_metadata", e.to_string()))?;
-                roots = watch_roots(&meta, project.as_ref());
+                let previous_roots =
+                    std::mem::replace(&mut roots, watch_roots(&meta, project.as_ref()));
+                targets.insert(PathBuf::from(
+                    meta["target_directory"].as_str().ok_or_else(|| {
+                        Failure::new("invalid_metadata", "missing target directory")
+                    })?,
+                ));
+                // Keep prior build directories excluded and avoid treating added/removed
+                // watch roots as edits. Existing watched content keeps its old hash so
+                // edits during metadata/build still cause another cycle.
+                seen.retain(|path, _| {
+                    roots.iter().any(|root| path.starts_with(root))
+                        && !targets.iter().any(|target| path.starts_with(target))
+                });
+                for (path, hash) in snapshot(&roots, &targets)? {
+                    if !previous_roots.iter().any(|root| path.starts_with(root)) {
+                        seen.insert(path, hash);
+                    }
+                }
                 let package = lifecycle::project_package(&meta, &manifest)?;
                 let selected =
                     lifecycle::binary(package, project.as_ref(), options.bin.as_deref())?;
@@ -335,7 +355,7 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
             }
             game = None;
         }
-        let current = snapshot(&roots, target)?;
+        let current = snapshot(&roots, &targets)?;
         if current != seen {
             changed.extend(
                 current

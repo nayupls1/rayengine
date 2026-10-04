@@ -97,7 +97,9 @@ matching plugin versions are published.
 `add <plugin> [path]` and `remove <plugin> [path]` accept particles, voxel, beacons,
 and tilemap (also `rayengine-` prefixed names). Registry dependencies pin the SDK's
 concrete version; a local SDK infers `../../plugins/<name>`. `--plugin-path` selects
-another local plugin with the same SDK source/version; `--features a,b` enables
+another local plugin with the same SDK source/version. Non-registry SDK sources
+such as Git require a compatible `--plugin-path`; an unsupported source never
+silently falls back to registry plugins. `--features a,b` enables
 optional Cargo features. Edits preserve TOML comments and existing namespaces.
 Repeated add/remove return explicit errors. Remove deletes that plugin namespace
 from both base and profiles, leaving other plugins alone. It also removes Cargo
@@ -108,14 +110,15 @@ they do not register hooks, invoke plugin code or fetch/build the new dependency
 Generated libraries remain explicit game-owned compositions.
 
 `package` (`bundle` alias, JSON command always `package`) builds with Cargo
-`--release`; `--profile` selects a **project** profile to bake into the bundled
+`--release` and the Rust toolchain's native Linux host target (overriding cross-target
+Cargo defaults); `--profile` selects a **project** profile to bake into the bundled
 manifest. `--bin` overrides its executable; otherwise Cargo's `default-run` or the
 only binary is selected. `--features a,b` enables Cargo features. Choose a package
 manifest rather than a virtual workspace root. Outputs default to the package's
 `bundles/` directory. Existing folders/archives are refused; failures remove only
 this invocation's reserved outputs. The archive contains `bin/game`, executable
 `launch`, a relocatable `rayengine.toml`, discovered assets (with exclusions/root
-precedence), declared fonts, project license/notice files, dependency notices,
+precedence in separate `assets/<index>/` directories), declared fonts, project license/notice files, dependency notices,
 `runtime-libraries.txt`, `README.txt`, and `.rayengine-bundle.json` provenance.
 Run `./launch [args]` after extraction. Selected profiles are already merged;
 launcher clears inherited profile overrides and sets the bundled manifest path.
@@ -141,7 +144,8 @@ libraries, Python, Xvfb and archive tools.
 asset roots/fonts and project manifest. Workspace Cargo manifests/lockfiles,
 workspace Cargo configuration and toolchain declarations are also watched,
 including virtual workspaces. It skips symlinks, `.git`, `target`,
-`artifacts`, and `bundles` to avoid feedback loops. Each cycle stops the old game,
+`artifacts`, and `bundles` to avoid feedback loops. Custom Cargo target directories
+are refreshed after configuration changes; previous build directories stay excluded. Each cycle stops the old game,
 builds, and starts the selected binary with the same manifest/profile environment
 as `run`. Failed builds keep watching so the next edit can recover. A game exit
 waits for another edit. Ctrl-C stops owned children; on Unix this includes their
@@ -171,7 +175,7 @@ paths serialize as strings, absent options as null, lists as arrays.
 | `templates` | `templates: [{name, description, plugins: [string]}]` | Only argument errors (exit 2) |
 | `new --template` | Existing `new` fields; `kind` is the template name; `files` includes generated level | Existing creation/SDK errors; plugin errors below for tilemap starters |
 | `add`, `remove` | `manifest`, `project_manifest` (file path, or null for remove without a project manifest), `plugin`, `dependency`, `plugin_path` (path or null), `features: [string]` | `unknown_plugin`, `plugin_already_added`, `plugin_not_added`, `invalid_plugin`, `plugin_sdk_mismatch`, `missing_sdk`, `invalid_sdk`, `invalid_cargo_manifest`; details null |
-| `package`, `bundle` | `manifest`, `folder`, `archive`, `binary`, `profile`, `release: true`, `assets: [relative path]`, `runtime_libraries: string`, `notices: [{name, version, license, repository, files}]`, `diagnostics: [Cargo object]`, `stderr: string` | `unsupported_platform`, `invalid_package`, `invalid_binary`, `bundle_exists`, `missing_executable`, `invalid_assets`, `runtime_libraries_failed`, `archive_failed`; details null. `cargo_failed` retains Cargo diagnostics/stdout/stderr/exit_code |
+| `package`, `bundle` | `manifest`, `folder`, `archive`, `binary`, `profile`, `target`, `features`, `release: true`, `assets: [relative path]`, `runtime_libraries: string`, `notices: [{name, version, license, repository, files}]`, `diagnostics: [Cargo object]`, `stderr: string` | `unsupported_platform`, `invalid_package`, `invalid_binary`, `bundle_exists`, `missing_executable`, `invalid_assets`, `runtime_libraries_failed`, `archive_failed`; details null. `cargo_failed` retains Cargo diagnostics/stdout/stderr/exit_code |
 | `watch` | `manifest`, `binary`, `profile`, `release`, `features`, `cycle_count: integer`, `cycles: [cycle]`, `stopped: signal/cycle_limit/timeout` | `watch_failed`: details is the completion data for a failed final cycle; setup failures have null details. `invalid_binary` and Cargo setup failures use their usual schemas |
 | `clean` | `manifest`, `removed_bundles: [absolute path]`, `stdout`, `stderr` | `cargo_failed` with Cargo details |
 | `doctor --fix-hints` | Existing `engine_version`, `platform`, `checks`; `fix_hints: [string]` (empty without flag) | `missing_prerequisites`: details has all doctor data, including hints |

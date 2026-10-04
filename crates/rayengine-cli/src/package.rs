@@ -32,6 +32,14 @@ pub(crate) fn package(
     let manifest = manifest(path)?;
     let root = manifest.parent().expect("manifest parent");
     let (project, _) = project_manifest(path, profile)?;
+    let target = lifecycle::host_target(root)?;
+    if !target.contains("-linux-") {
+        return Err(Failure::new(
+            "unsupported_platform",
+            "package requires a native Linux Rust toolchain",
+        ));
+    }
+    let architecture = target.split('-').next().expect("target architecture");
     let meta = lifecycle::metadata(&manifest, false)?;
     let pkg = lifecycle::project_package(&meta, &manifest)?;
     let bin = lifecycle::binary(pkg, project.as_ref(), requested)?;
@@ -43,7 +51,7 @@ pub(crate) fn package(
         .ok_or_else(|| Failure::new("invalid_metadata", "missing package version"))?;
     let bundle_name = format!(
         "{name}-{version}-linux-{}{}",
-        std::env::consts::ARCH,
+        architecture,
         profile.map(|s| format!("-{s}")).unwrap_or_default()
     );
     if !bundle_name
@@ -95,7 +103,7 @@ pub(crate) fn package(
             "--manifest-path",
         ])
         .arg(&manifest)
-        .args(["--bin", &bin])
+        .args(["--bin", &bin, "--target", &target])
         .current_dir(root);
     if !features.is_empty() {
         build_command.arg("--features").arg(features.join(","));
@@ -126,6 +134,7 @@ pub(crate) fn package(
     fs::create_dir(folder.join("bin")).map_err(io_error)?;
     fs::copy(executable, folder.join("bin/game")).map_err(io_error)?;
     let mut assets = vec![];
+    let mut bundled_roots = vec![];
     let mut config = if let Some(project) = &project {
         let mut table: toml::Table = fs::read_to_string(&project.path)
             .map_err(io_error)?
@@ -144,7 +153,11 @@ pub(crate) fn package(
         let mut logical_names = BTreeSet::new();
         // Discovery yields physical paths; overlapping roots can give one file
         // multiple logical names. Keep the declaring root while discovering.
-        for root in &project.settings.assets.roots {
+        for (index, root) in project.settings.assets.roots.iter().enumerate() {
+            // Separate directories preserve valid file/directory overlaps across roots.
+            let bundled_root = format!("assets/{index}");
+            fs::create_dir_all(folder.join(&bundled_root)).map_err(io_error)?;
+            bundled_roots.push(toml::Value::String(bundled_root.clone()));
             let mut discovery = project.clone();
             discovery.settings.assets.roots = vec![root.clone()];
             for source in discovery
@@ -157,7 +170,7 @@ pub(crate) fn package(
                 if !logical_names.insert(relative.to_path_buf()) {
                     continue;
                 }
-                let destination = Path::new("assets").join(relative);
+                let destination = Path::new(&bundled_root).join(relative);
                 copy_file(&source, &folder.join(&destination))?;
                 assets.push(destination);
             }
@@ -181,10 +194,7 @@ pub(crate) fn package(
     };
     config.insert("schema_version".into(), toml::Value::Integer(1));
     let mut asset_table = toml::Table::new();
-    asset_table.insert(
-        "roots".into(),
-        toml::Value::Array(vec![toml::Value::String("assets".into())]),
-    );
+    asset_table.insert("roots".into(), toml::Value::Array(bundled_roots));
     config.insert("assets".into(), toml::Value::Table(asset_table));
     fs::create_dir_all(folder.join("assets")).map_err(io_error)?;
     fs::write(
@@ -237,7 +247,7 @@ pub(crate) fn package(
         copy_file(&source, &folder.join("PROJECT_LICENSE"))?;
     }
     fs::write(folder.join("README.txt"), format!("{name} {version}\n\nRun ./launch [game arguments] from any working directory.\nLinux {} release; dynamic libraries and build-host paths are listed in runtime-libraries.txt.\nInstall the corresponding runtime packages on the destination machine. For raylib/X11 games these normally include glibc, libgcc, libX11, libXrandr, libXinerama, libXcursor, libXi, OpenGL/Mesa and ALSA; Wayland builds also need Wayland and xkbcommon. A display and working OpenGL driver are required.\nBuild on the oldest supported Linux/glibc baseline; this bundle does not include system libraries or promise compatibility with older glibc.\nUse rayengine manifest asset lookup (and declared fonts) for relocatable assets. Compile-time embedded assets stay in the binary. Game-owned absolute paths in extension tables are not rewritten.\nThe selected project profile is baked into rayengine.toml.\n", std::env::consts::ARCH)).map_err(io_error)?;
-    let provenance = json!({"schema_version":1, "source_manifest":manifest, "name":name, "version":version, "binary":bin, "profile":profile, "assets":assets, "runtime_libraries":libraries_text, "notices":notices});
+    let provenance = json!({"schema_version":1, "source_manifest":manifest, "target":target, "features":features, "name":name, "version":version, "binary":bin, "profile":profile, "assets":assets, "runtime_libraries":libraries_text, "notices":notices});
     fs::write(
         folder.join(".rayengine-bundle.json"),
         serde_json::to_vec_pretty(&provenance).expect("JSON"),
@@ -259,7 +269,7 @@ pub(crate) fn package(
     }
     outputs.committed = true;
     Ok(
-        json!({"manifest":manifest, "folder":folder, "archive":archive, "binary":bin, "profile":profile, "release":true, "assets":assets, "runtime_libraries":libraries_text, "notices":notices, "diagnostics":diagnostics, "stderr":String::from_utf8_lossy(&build.stderr)}),
+        json!({"manifest":manifest, "folder":folder, "archive":archive, "binary":bin, "profile":profile, "target":target, "features":features, "release":true, "assets":assets, "runtime_libraries":libraries_text, "notices":notices, "diagnostics":diagnostics, "stderr":String::from_utf8_lossy(&build.stderr)}),
     )
 }
 
@@ -348,14 +358,26 @@ fn dependency_notices(
             sources.insert(root.join(file));
         }
         // Workspace crates often share the root license rather than copying it.
-        if pkg["source"].is_null()
-            && Path::new(meta["workspace_root"].as_str().expect("workspace"))
-                .join("LICENSE")
-                .is_file()
+        if pkg["source"]
+            .as_str()
+            .is_none_or(|source| !source.starts_with("registry+"))
+            && sources.is_empty()
         {
-            sources.insert(
-                Path::new(meta["workspace_root"].as_str().expect("workspace")).join("LICENSE"),
-            );
+            // An external path dependency may belong to another workspace.
+            // Resolve its own shared license, never the consuming game's license.
+            let own_meta = lifecycle::metadata(&root.join("Cargo.toml"), false)?;
+            if let Some(workspace) = own_meta["workspace_root"].as_str() {
+                for entry in fs::read_dir(workspace).map_err(io_error)? {
+                    let entry = entry.map_err(io_error)?;
+                    if entry.file_type().map_err(io_error)?.is_file()
+                        && ["LICENSE", "COPYING", "NOTICE"]
+                            .iter()
+                            .any(|prefix| entry.file_name().to_string_lossy().starts_with(prefix))
+                    {
+                        sources.insert(entry.path());
+                    }
+                }
+            }
         }
         if pkg["name"] == "raylib-sys" {
             sources.insert(root.join("raylib/LICENSE"));

@@ -507,7 +507,7 @@ fn bundle_relocates_assets_fonts_profiles_and_clean_preserves_unrelated_files() 
         r#"fn main() {
         let manifest = std::env::var("RAYENGINE_MANIFEST").unwrap();
         let root = std::path::Path::new(&manifest).parent().unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("assets/level.txt")).unwrap(), "selected");
+        assert_eq!(std::fs::read_to_string(root.join("assets/0/level.txt")).unwrap(), "selected");
         assert!(std::env::var("RAYENGINE_PROFILE").is_err());
         println!("{}", std::env::args().nth(1).unwrap());
     }"#,
@@ -521,25 +521,34 @@ fn bundle_relocates_assets_fonts_profiles_and_clean_preserves_unrelated_files() 
     fs::write(game.join("release-assets/nested/nested-only.txt"), "nested").unwrap();
     fs::create_dir(game.join("fallback-assets")).unwrap();
     fs::write(game.join("fallback-assets/level.txt"), "shadowed").unwrap();
+    fs::write(game.join("release-assets/ui"), "ui file").unwrap();
+    fs::create_dir(game.join("fallback-assets/ui")).unwrap();
+    fs::write(game.join("fallback-assets/ui/icon.png"), "ui icon").unwrap();
     fs::write(game.join("font.ttf"), "font fixture").unwrap();
     fs::write(game.join("LICENSE"), "game license").unwrap();
     fs::write(game.join("rayengine.toml"), "schema_version = 1\n[project]\nexecutable = 'lifecycle-game'\n[assets]\nroots = ['assets']\nexclude = ['*.bak']\n[fonts.ui]\npath = 'font.ttf'\n[profiles.ship.assets]\nroots = ['release-assets', 'release-assets/nested', 'fallback-assets']\n[profiles.ship.render]\nvsync = false\n").unwrap();
+    fs::create_dir(game.join(".cargo")).unwrap();
+    fs::write(
+        game.join(".cargo/config.toml"),
+        "[build]\ntarget = 'x86_64-pc-windows-gnu'\n",
+    )
+    .unwrap();
     let (ok, response) = cli(&["bundle", "--profile", "ship"], Some(&game));
     assert!(ok, "{response}");
     assert_eq!(response["command"], "package");
     let folder = PathBuf::from(response["data"]["folder"].as_str().unwrap());
     let archive = PathBuf::from(response["data"]["archive"].as_str().unwrap());
-    assert!(!folder.join("assets/secret.bak").exists());
+    assert!(!folder.join("assets/0/secret.bak").exists());
     assert_eq!(
-        fs::read_to_string(folder.join("assets/nested/nested-only.txt")).unwrap(),
+        fs::read_to_string(folder.join("assets/0/nested/nested-only.txt")).unwrap(),
         "nested"
     );
     assert_eq!(
-        fs::read_to_string(folder.join("assets/nested-only.txt")).unwrap(),
+        fs::read_to_string(folder.join("assets/1/nested-only.txt")).unwrap(),
         "nested"
     );
     assert_eq!(
-        fs::read_to_string(folder.join("assets/level.txt")).unwrap(),
+        fs::read_to_string(folder.join("assets/0/level.txt")).unwrap(),
         "selected"
     );
     let assets = response["data"]["assets"].as_array().unwrap();
@@ -556,13 +565,21 @@ fn bundle_relocates_assets_fonts_profiles_and_clean_preserves_unrelated_files() 
         .unwrap();
     assert_eq!(
         bundle.asset("level.txt").unwrap(),
-        folder.join("assets/level.txt")
+        folder.join("assets/0/level.txt")
     );
     assert_eq!(
         fs::read_to_string(&bundle.settings.fonts["ui"].path).unwrap(),
         "font fixture"
     );
     assert!(!bundle.settings.render.vsync);
+    assert_eq!(
+        fs::read_to_string(bundle.asset("ui").unwrap()).unwrap(),
+        "ui file"
+    );
+    assert_eq!(
+        fs::read_to_string(bundle.asset("ui/icon.png").unwrap()).unwrap(),
+        "ui icon"
+    );
     let extract = scratch.0.join("extracted");
     fs::create_dir(&extract).unwrap();
     assert!(
@@ -825,4 +842,114 @@ fn watch_rebuilds_after_virtual_workspace_manifest_edits() {
                 .as_str()
                 .is_some_and(|s| s.ends_with("@0.2.0"))
     }));
+}
+
+#[test]
+fn plugin_add_rejects_git_sdk_registry_fallback_without_changing_files() {
+    let scratch = Scratch::new("git-sdk");
+    let sdk = scratch.0.join("sdk");
+    fs::create_dir_all(sdk.join("src")).unwrap();
+    fs::write(
+        sdk.join("Cargo.toml"),
+        "[package]\nname = 'rayengine'\nversion = '0.0.2'\nedition = '2024'\n",
+    )
+    .unwrap();
+    fs::write(sdk.join("src/lib.rs"), "pub fn sdk() {}\n").unwrap();
+    for args in [
+        vec!["init", "--initial-branch=master"],
+        vec!["add", "."],
+        vec![
+            "-c",
+            "user.name=CLI test",
+            "-c",
+            "user.email=cli-test@example.invalid",
+            "commit",
+            "-m",
+            "fixture",
+        ],
+    ] {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(&sdk)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let game = scratch.0.join("game");
+    cpu_game(&game, "fn main() {}");
+    let cargo = game.join("Cargo.toml");
+    let source = format!(
+        "{}\n[dependencies]\nrayengine = {{ git = {}, version = '0.0.2' }}\n",
+        fs::read_to_string(&cargo).unwrap(),
+        serde_json::to_string(&format!("file://{}", sdk.display())).unwrap()
+    );
+    fs::write(&cargo, &source).unwrap();
+    let (ok, result) = cli(&["add", "particles"], Some(&game));
+    assert!(!ok);
+    assert_eq!(result["error"]["code"], "invalid_sdk");
+    assert!(
+        result["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--plugin-path")
+    );
+    assert_eq!(fs::read_to_string(&cargo).unwrap(), source);
+    assert!(!game.join("rayengine.toml").exists());
+}
+
+#[test]
+fn watch_excludes_old_and_new_target_directories_after_config_edits() {
+    let scratch = Scratch::new("watch-target");
+    cpu_game(
+        &scratch.0,
+        r#"fn main() {
+        std::fs::create_dir_all("artifacts").unwrap();
+        std::fs::write("artifacts/started", "running").unwrap();
+        loop { std::thread::sleep(std::time::Duration::from_millis(50)); }
+    }"#,
+    );
+    fs::create_dir(scratch.0.join(".cargo")).unwrap();
+    let config = scratch.0.join(".cargo/config.toml");
+    fs::write(&config, "[build]\ntarget-dir = 'cache-a'\n").unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "watch"])
+        .arg(&scratch.0)
+        .args([
+            "--cycles",
+            "3",
+            "--timeout-ms",
+            "5000",
+            "--debounce-ms",
+            "100",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    while !scratch.0.join("artifacts/started").exists() {
+        assert!(started.elapsed().as_secs() < 4, "watch did not launch");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    fs::write(&config, "[build]\ntarget-dir = 'cache-b'\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(output.status.success(), "{response}");
+    assert!(output.stderr.is_empty());
+    assert_eq!(response["data"]["cycle_count"], 2);
+    assert_eq!(response["data"]["stopped"], "timeout");
+    assert!(scratch.0.join("cache-a").is_dir() && scratch.0.join("cache-b").is_dir());
+    for cycle in response["data"]["cycles"].as_array().unwrap() {
+        assert!(
+            !cycle["changed"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p.as_str().unwrap().contains("/cache-"))
+        );
+    }
 }

@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -26,10 +27,15 @@ def validate(archive):
         folders = list(extracted.iterdir())
         assert len(folders) == 1 and folders[0].is_dir()
         folder = folders[0]
-        assert (folder / "THIRD_PARTY_NOTICES/metadata.json").is_file()
+        notices_path = folder / "THIRD_PARTY_NOTICES/metadata.json"
+        assert notices_path.is_file()
+        notices = json.loads(notices_path.read_text())["packages"]
+        tilemap = next(package for package in notices if package["name"] == "rayengine-tilemap")
+        assert tilemap["files"], "external workspace plugins must retain their shared license"
         assert (folder / "README.txt").is_file()
         assert (folder / "runtime-libraries.txt").is_file()
-        assert (folder / "assets/level.toml").is_file()
+        manifest = tomllib.loads((folder / "rayengine.toml").read_text())
+        assert (folder / manifest["assets"]["roots"][0] / "level.toml").is_file()
         libraries = subprocess.run(["ldd", str(folder / "bin/game")], text=True, capture_output=True, check=True).stdout
         assert "not found" not in libraries, libraries
         # Keep display/driver settings but remove all build and manifest overrides.
