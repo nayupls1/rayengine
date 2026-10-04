@@ -1,5 +1,6 @@
 //! Optional game-owned state composition. See [`crate::guides::states`].
 
+use crate::audio::MusicId;
 use crate::{
     assets::{Assets, MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId},
     input::Bindings,
@@ -105,6 +106,7 @@ pub struct StateResources {
     models: Vec<ModelId>,
     textures: Vec<TextureId>,
     sounds: Vec<SoundId>,
+    music: Vec<MusicId>,
     shaders: Vec<ShaderId>,
 }
 
@@ -158,6 +160,12 @@ impl StateResources {
         "Transfer an exclusive sound handle; returns it for storage in the state."
     );
     own_asset!(
+        own_music,
+        music,
+        MusicId,
+        "Transfer an exclusive music stream; returns it for storage in the state."
+    );
+    own_asset!(
         own_shader,
         shaders,
         ShaderId,
@@ -182,6 +190,9 @@ impl StateResources {
         }
         for id in self.sounds.drain(..).rev() {
             assets.unload_sound(id);
+        }
+        for id in self.music.drain(..).rev() {
+            assets.unload_music(id);
         }
         for id in self.shaders.drain(..).rev() {
             assets.unload_shader(id);

@@ -113,6 +113,10 @@ pub struct ResourceCounts {
     pub models: u64,
     /// Loaded sounds; audio storage bytes are not estimated.
     pub sounds: u64,
+    /// Loaded streamed music resources.
+    pub music_streams: u64,
+    /// Pooled mixer-managed one-shot voices (legacy voices are counted by `sounds`).
+    pub sound_instances: u64,
     /// Generated meshes.
     pub meshes: u64,
     /// Custom shaders plus the SDK material shader when initialized.
@@ -138,6 +142,8 @@ impl ResourceCounts {
             textures,
             models,
             sounds,
+            music_streams,
+            sound_instances,
             meshes,
             shaders,
             materials,

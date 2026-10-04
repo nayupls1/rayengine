@@ -41,6 +41,10 @@ jobs:
         run: xvfb-run -a scripts/native_smoke.sh
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
+      - name: Native streamed audio with a clocked silent output
+        run: xvfb-run -a scripts/native_audio_smoke.sh
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
       - name: Benchmark harnesses compile
         run: cargo bench --locked --workspace --features rayengine-voxel/render,rayengine-minecraft/render,rayengine-particles/render,rayengine-tilemap/render --no-run
       - name: Build Linux Minecraft candidate and offline reference

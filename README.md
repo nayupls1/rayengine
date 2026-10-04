@@ -106,6 +106,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Arcade physics, layers, triggers and moving platforms](crates/rayengine/docs/physics.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
+- [Streamed music, buses and fades](crates/rayengine/docs/audio.md)
 - [Custom fonts, text measurement, and pixel text](crates/rayengine/docs/fonts.md)
 - [Sprite sheets and CPU animation](crates/rayengine/docs/sprites.md)
 - [Tweens, easing and screen shake](crates/rayengine/docs/tweens.md)
@@ -140,6 +141,7 @@ Try the title/gameplay/pause state stack example:
 
 ```sh
 cargo run -p rayengine --example states
+cargo run -p rayengine --example audio
 ```
 
 Enter starts a session. Escape pauses with the world visible; Enter/Escape

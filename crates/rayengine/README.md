@@ -11,6 +11,7 @@ Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/qu
 [responsive viewports](https://docs.rs/rayengine/latest/rayengine/guides/responsive/index.html),
 [timing and input](https://docs.rs/rayengine/latest/rayengine/guides/timing_input/index.html), [assets](https://docs.rs/rayengine/latest/rayengine/guides/assets/index.html),
 [arcade physics](https://docs.rs/rayengine/latest/rayengine/guides/physics/index.html),
+[streamed music and audio mixing](https://docs.rs/rayengine/latest/rayengine/guides/audio/index.html),
 [first-person movement](https://docs.rs/rayengine/latest/rayengine/guides/first_person/index.html),
 [generated meshes](https://docs.rs/rayengine/latest/rayengine/guides/generated_meshes/index.html),
 [materials and shaders](https://docs.rs/rayengine/latest/rayengine/guides/materials/index.html),

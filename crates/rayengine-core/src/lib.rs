@@ -6,6 +6,7 @@
 pub use glam;
 pub use hecs::{Bundle, Entity, World};
 
+pub mod audio;
 pub mod camera;
 pub mod collision;
 pub mod events;
@@ -29,6 +30,7 @@ pub mod viewport;
 
 /// Common imports for display-independent game code.
 pub mod prelude {
+    pub use crate::audio::{AudioBuses, AudioError, AudioSettings, BusId, BusSettings, GainFade};
     pub use crate::camera::{Camera2D, Camera3D};
     pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D, Circle, Sphere};
     pub use crate::events::Events;

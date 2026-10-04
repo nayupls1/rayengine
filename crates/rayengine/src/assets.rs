@@ -54,7 +54,8 @@ pub struct Assets<'audio> {
     pub(crate) textures: Vec<Option<Texture2D>>,
     models: Vec<Option<Model>>,
     model_lit_normals: Vec<bool>,
-    sounds: Vec<Option<Sound<'audio>>>,
+    pub(crate) sounds: Vec<Option<Sound<'audio>>>,
+    pub(crate) mixer: std::cell::RefCell<crate::audio::AudioMixer<'audio>>,
     meshes: MeshAssets,
     surfaces: materials::MaterialAssets,
     shader_paths: HashMap<(Option<PathBuf>, PathBuf), ShaderId>,
@@ -73,6 +74,7 @@ impl<'audio> Assets<'audio> {
         let (meshes, generated_mesh_bytes) = self.meshes.resource_usage();
         let (shaders, materials) = self.surfaces.resource_counts();
         let (fonts, font_atlases, font_bytes) = self.fonts.usage();
+        let (music_streams, sound_instances) = self.mixer.borrow().resource_counts();
         crate::diagnostics::ResourceCounts {
             render_targets: self.targets.usage().0,
             render_target_bytes: self.targets.usage().1,
@@ -82,6 +84,8 @@ impl<'audio> Assets<'audio> {
             textures: self.textures.iter().flatten().count() as u64,
             models: self.models.iter().flatten().count() as u64,
             sounds: self.sounds.iter().flatten().count() as u64,
+            music_streams,
+            sound_instances,
             meshes,
             shaders,
             materials,
@@ -109,6 +113,7 @@ impl<'audio> Assets<'audio> {
             models: Vec::new(),
             model_lit_normals: Vec::new(),
             sounds: Vec::new(),
+            mixer: std::cell::RefCell::new(crate::audio::AudioMixer::new(audio)),
             meshes: MeshAssets::new(),
             surfaces: materials::MaterialAssets::new(),
             shader_paths: HashMap::new(),
@@ -459,19 +464,20 @@ impl<'audio> Assets<'audio> {
         self.meshes.for_draw(id, tint)
     }
 
-    /// Borrow a loaded sound, or `None` after it has been unloaded.
+    /// Borrow the original native voice, or `None` after unloading.
+    /// Raw playback bypasses bus mixing and concurrency controls. Its native
+    /// volume/pitch/pan are never changed by the mixer.
     pub fn sound(&self, id: SoundId) -> Option<&Sound<'audio>> {
         self.sounds.get(id.0).and_then(Option::as_ref)
     }
 
-    /// Plays a sound. Returns false for an unloaded handle.
+    /// Plays/restarts the original voice, preserving its native volume/pitch/pan.
+    /// This legacy voice bypasses bus mixing. The optional concurrency cap applies.
+    /// Returns false for an unloaded handle or a reached cap (restarts are allowed).
+    /// Use `play_sound` for independent mixer-managed instances and bus routing.
     pub fn play(&self, id: SoundId) -> bool {
-        if let Some(sound) = self.sound(id) {
-            sound.play();
-            true
-        } else {
-            false
-        }
+        self.sound(id)
+            .is_some_and(|sound| self.mixer.borrow().play_legacy(id, sound))
     }
 
     /// Unloads a texture immediately. Its handle remains invalid forever in this run.
@@ -490,10 +496,13 @@ impl<'audio> Assets<'audio> {
         self.model_paths.retain(|_, handle| *handle != id);
     }
 
-    /// Unloads a sound immediately.
+    /// Stops/releases a sound and all its overlapping instances immediately.
     pub fn unload_sound(&mut self, id: SoundId) {
         if let Some(slot) = self.sounds.get_mut(id.0) {
             *slot = None;
+        }
+        if let Some(pool) = self.mixer.get_mut().sounds.get_mut(id.0) {
+            *pool = None;
         }
         self.sound_paths.retain(|_, handle| *handle != id);
     }
@@ -571,11 +580,18 @@ impl<'audio> Assets<'audio> {
         if let Some(&id) = self.sound_paths.get(&path) {
             return Ok(id);
         }
+        let wave = audio
+            .new_wave(path_string(&path)?)
+            .map_err(|e| Error::Asset(format!("{}: {e}", path.display())))?;
         let sound = audio
-            .new_sound(path_string(&path)?)
+            .new_sound_from_wave(&wave)
             .map_err(|e| Error::Asset(format!("{}: {e}", path.display())))?;
         let id = SoundId(self.sounds.len());
         self.sounds.push(Some(sound));
+        self.mixer
+            .get_mut()
+            .sounds
+            .push(Some(crate::audio::SoundPool::new(wave)));
         self.sound_paths.insert(path, id);
         Ok(id)
     }
@@ -670,7 +686,7 @@ fn mesh_payload_bytes(mesh: &impl AsRef<raylib::ffi::Mesh>) -> u64 {
         })
 }
 
-fn asset_path(path: &Path) -> Result<PathBuf, Error> {
+pub(crate) fn asset_path(path: &Path) -> Result<PathBuf, Error> {
     let canonical = path.canonicalize()?;
     path_string(&canonical)?;
     Ok(canonical)

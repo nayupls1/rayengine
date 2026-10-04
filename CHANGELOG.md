@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Opt-in cached music streams with looping, frame-clock fades/crossfades and
+  explicit pause/resume; named master/music/sfx and custom buses with volume,
+  mute, transient ducking and serializable settings for versioned saves.
+- Independent one-shot volume/pitch/pan, reusable overlapping voices and optional
+  per-sound concurrency caps; state-owned stream cleanup and resource diagnostics.
+- Checked audio guide, CPU bus/fade/save tests, native playback probes and a
+  runnable scene/pause/settings example with original procedural WAV assets.
 - Versioned engine-owned render targets with fixed/logical/physical/reference sizing,
   point/bilinear sampling, 2D/3D rendering and shared material textures.
 - Ordered material post-processing with UI before/after effects, vignette, color

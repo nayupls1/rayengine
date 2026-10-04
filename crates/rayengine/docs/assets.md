@@ -1,7 +1,7 @@
 # Assets and ownership
 
 Load assets in `Game::init`. The runtime caches them by canonical path and returns
-typed `TextureId`, `ModelId`, `SoundId`, `ShaderId`, and `FontId` handles. Gameplay stores these handles;
+typed `TextureId`, `ModelId`, `SoundId`, `MusicId`, `ShaderId`, and `FontId` handles. Gameplay stores these handles;
 the runtime owns and drops the native resources.
 
 ```no_run
@@ -66,10 +66,10 @@ config.audio = true;
 
 Audio initialization fails explicitly when a requested device is unavailable.
 Geometric examples do not initialize audio, so they run on machines without an
-audio device. Raylib exposes additional streaming/audio features through the
-SDK re-export, with its own resource lifetime rules.
+audio device. Streamed music, named buses, fades, overlapping one-shots and
+persistable settings are covered in the [audio guide](crate::guides::audio).
 
-Textures and models drop before the graphics window closes. Sounds drop before
+Textures and models drop before the graphics window closes. Sounds, pooled voices, cached waveforms and music streams drop before
 the audio device closes. The game itself is also dropped before these handles,
 so game-owned native resources can be cleaned up while the context is alive,
 including when `init` returns an error.

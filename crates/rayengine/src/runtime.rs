@@ -441,6 +441,10 @@ impl InitContext<'_, '_> {
         self.assets
             .load_model(self.raylib, self.thread, path.as_ref())
     }
+    /// Loads/caches a streamed music track. Requires `Config::audio = true`.
+    pub fn music(&mut self, path: impl AsRef<Path>) -> Result<crate::audio::MusicId, Error> {
+        self.assets.load_music(path.as_ref())
+    }
     /// Loads/caches a sound. Requires `Config::audio = true`.
     pub fn sound(&mut self, path: impl AsRef<Path>) -> Result<SoundId, Error> {
         self.assets.load_sound(path.as_ref())
@@ -630,9 +634,19 @@ impl App {
             builder.vsync();
         }
         if options.hidden {
-            builder.hidden().always_run();
+            builder.hidden();
+        }
+        if options.hidden || config.audio {
+            // GLFW otherwise waits for events while minimized, starving streamed
+            // audio. The loop below still pauses simulation and throttles polling.
+            builder.always_run();
         }
         let (mut raylib, thread) = builder.build();
+        if !options.hidden && !config.audio {
+            // raylib retains flags across windows. Do not carry audio's polling
+            // policy into a subsequent audio-disabled run in the same process.
+            raylib.clear_window_state(WindowState::default().set_window_always_run(true));
+        }
         raylib.set_exit_key(config.exit_key);
         raylib.set_target_fps(if options.uncapped {
             0
@@ -725,6 +739,9 @@ impl App {
                 let now = Instant::now();
                 let elapsed = now.duration_since(previous_frame);
                 previous_frame = now;
+                // Audio follows wall time, including minimized iterations, independently
+                // of the fixed clock and state-stack update propagation.
+                assets.update_audio(elapsed);
                 let window = Vec2::new(
                     raylib.get_screen_width() as f32,
                     raylib.get_screen_height() as f32,
