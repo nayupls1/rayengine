@@ -313,6 +313,65 @@ fn native_audio_streams_voices_caching_limits_and_cleanup() {
             assets.update_audio(Duration::from_millis(10));
             std::thread::sleep(Duration::from_millis(10));
         }
+        // Disabling looping after a full loop must still reach a natural end.
+        // raylib's accumulated decoded-frame counter needs a restart here.
+        assets
+            .audio()
+            .play_music(
+                short,
+                MusicOptions {
+                    fade_in: Duration::from_secs(2),
+                    ..MusicOptions::default()
+                },
+            )
+            .unwrap();
+        for _ in 0..100 {
+            assets.update_audio(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assets.audio().pause_music(short).unwrap();
+        let gain = assets.audio().music_status(short).unwrap().gain;
+        assets
+            .audio()
+            .play_music(
+                short,
+                MusicOptions {
+                    looping: false,
+                    fade_in: Duration::from_secs(1),
+                    ..MusicOptions::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(assets.audio().music_status(short).unwrap().gain, gain);
+        assert!(!assets.audio().music_status(short).unwrap().paused);
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while assets.audio().music_status(short).unwrap().active {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "stream did not finish after disabling looping"
+            );
+            assets.update_audio(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        // Stop must rewind the native buffer even when playback was paused.
+        assets
+            .audio()
+            .play_music(short, MusicOptions::default())
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while assets.audio().music_status(short).unwrap().seconds < 0.08 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cursor did not advance"
+            );
+            assets.update_audio(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assets.audio().pause_music(short).unwrap();
+        assets.audio().stop_music(short).unwrap();
+        let stopped = assets.audio().music_status(short).unwrap();
+        assert!(!stopped.active && !stopped.paused);
+        assert_eq!(stopped.seconds, 0.0);
         assert!(assets.unload_music(calm));
         assert!(!assets.unload_music(calm));
         assert!(assets.audio().music_status(calm).is_none());

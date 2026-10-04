@@ -69,7 +69,9 @@ Games should not advance the mixer again in fixed updates or draw callbacks.
 Fades interpolate amplitude linearly. Zero duration switches immediately and
 interrupted fades start from the current envelope gain. `crossfade` fades all
 other active tracks to zero and stops/rewinds them at completion. An active target
-keeps its cursor; a stopped target starts from the beginning. `fade_out` also
+keeps its cursor; a stopped target starts from the beginning. Changing the looping
+mode through `play_music` or `crossfade` restarts the target's cursor while retaining
+its current envelope gain. `fade_out` also
 stops/rewinds at completion. Explicit `pause_music` freezes the cursor; envelopes
 continue, so an outgoing paused stream still stops when its fade completes.
 `resume_music` resumes at the current envelope gain. Nonlooping tracks become

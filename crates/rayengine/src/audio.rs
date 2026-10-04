@@ -96,7 +96,8 @@ pub struct MusicOptions {
     pub bus: BusId,
     /// Finite per-track volume in 0..=1.
     pub volume: f32,
-    /// Whether the stream repeats at end of file.
+    /// Whether the stream repeats at end of file. Changing this on an active
+    /// stream restarts its cursor while retaining its current fade gain.
     pub looping: bool,
     /// Initial fade duration when starting a stopped stream.
     pub fade_in: Duration,
@@ -146,6 +147,11 @@ impl Track<'_> {
         );
     }
     fn stop(&mut self) {
+        // raylib's buffer stop ignores paused buffers. Resume first so stopping
+        // also resets the native cursor/counters, including after a paused fade.
+        if self.paused {
+            self.stream.resume_stream();
+        }
         self.stream.stop_stream();
         self.active = false;
         self.paused = false;
@@ -154,6 +160,13 @@ impl Track<'_> {
     }
     fn start(&mut self, options: MusicOptions, duration: Duration, buses: &AudioBuses) {
         let start = if self.active { self.fade.gain() } else { 0.0 };
+        // raylib accumulates decoded frames while looping. Disabling looping
+        // without resetting that counter can underflow its remaining-frame
+        // calculation and loop forever. Restart on mode changes for every
+        // supported format (some formats cannot seek), preserving the envelope.
+        if self.active && self.options.looping != options.looping {
+            self.stop();
+        }
         self.options = options;
         self.stream.set_looping(options.looping);
         self.fade = GainFade::new(start, 1.0, duration).expect("unit gains");
@@ -244,8 +257,9 @@ impl<'audio> AudioMixer<'audio> {
             .and_then(Option::as_mut)
             .ok_or_else(|| Error::Asset("music handle is unloaded".into()))
     }
-    /// Starts/fades in a stream. An active handle retains its cursor and current
-    /// gain, retargeting toward full gain; an explicitly paused handle resumes.
+    /// Starts/fades in a stream. An active handle retains its current gain,
+    /// retargeting toward full gain; an explicitly paused handle resumes. Its
+    /// cursor is retained unless `options.looping` changes, which restarts it.
     pub fn play_music(&mut self, id: MusicId, options: MusicOptions) -> Result<(), Error> {
         options.validate(&self.buses)?;
         let buses = &self.buses;
@@ -258,6 +272,7 @@ impl<'audio> AudioMixer<'audio> {
         Ok(())
     }
     /// Fades all other active streams out and this stream in over `duration`.
+    /// An active target retains its cursor unless its looping mode changes.
     /// Interrupted fades begin at current gains; zero duration switches immediately.
     /// Validates the target/options before changing any outgoing stream.
     /// `options.fade_in` is replaced by `duration` for this operation.
