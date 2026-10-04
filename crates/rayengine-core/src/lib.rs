@@ -6,6 +6,7 @@
 pub use glam;
 pub use hecs::{Bundle, Entity, World};
 
+pub mod audio;
 pub mod camera;
 pub mod collision;
 pub mod events;
@@ -15,6 +16,7 @@ pub mod jobs;
 pub mod manifest;
 pub mod mesh;
 pub mod pathfinding;
+pub mod physics;
 pub mod quality;
 pub mod save;
 pub mod scene;
@@ -28,8 +30,9 @@ pub mod viewport;
 
 /// Common imports for display-independent game code.
 pub mod prelude {
+    pub use crate::audio::{AudioBuses, AudioError, AudioSettings, BusId, BusSettings, GainFade};
     pub use crate::camera::{Camera2D, Camera3D};
-    pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D};
+    pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D, Circle, Sphere};
     pub use crate::events::Events;
     pub use crate::first_person::{
         FirstPersonActions, FirstPersonConfig, FirstPersonController, FirstPersonError,
@@ -41,6 +44,11 @@ pub mod prelude {
     pub use crate::pathfinding::{
         CostGrid, DiagonalRule, DistanceField, GridFn, GridLayout, NavGrid, Neighborhood,
         PathError, PathFinder, PathFollower, PathOptions, PathStatus,
+    };
+    pub use crate::physics::{
+        BodyId, BodyKind, CollisionFilter, Penetration2D, Penetration3D, PhysicsBody2D,
+        PhysicsBody3D, PhysicsWorld2D, PhysicsWorld3D, Shape2D, Shape3D, StepReport, TriggerEvent,
+        TriggerPhase, UniformGrid2D, UniformGrid3D,
     };
     pub use crate::quality::{AntiAliasing, RenderPlan, RenderQuality};
     pub use crate::scene::Scene;

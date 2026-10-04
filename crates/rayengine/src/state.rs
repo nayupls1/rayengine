@@ -1,5 +1,6 @@
 //! Optional game-owned state composition. See [`crate::guides::states`].
 
+use crate::audio::MusicId;
 use crate::{
     assets::{Assets, MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId},
     input::Bindings,
@@ -99,11 +100,13 @@ impl StateCommands {
 /// Shared assets belong to the game run and are untouched by this collection.
 #[derive(Default)]
 pub struct StateResources {
+    targets: Vec<crate::targets::RenderTargetId>,
     materials: Vec<MaterialId>,
     meshes: Vec<MeshId>,
     models: Vec<ModelId>,
     textures: Vec<TextureId>,
     sounds: Vec<SoundId>,
+    music: Vec<MusicId>,
     shaders: Vec<ShaderId>,
 }
 
@@ -120,6 +123,12 @@ macro_rules! own_asset {
 }
 
 impl StateResources {
+    own_asset!(
+        own_render_target,
+        targets,
+        crate::targets::RenderTargetId,
+        "Transfer an exclusive render target handle; returns it for storage in the state."
+    );
     own_asset!(
         own_material,
         materials,
@@ -151,6 +160,12 @@ impl StateResources {
         "Transfer an exclusive sound handle; returns it for storage in the state."
     );
     own_asset!(
+        own_music,
+        music,
+        MusicId,
+        "Transfer an exclusive music stream; returns it for storage in the state."
+    );
+    own_asset!(
         own_shader,
         shaders,
         ShaderId,
@@ -167,11 +182,17 @@ impl StateResources {
         for id in self.models.drain(..).rev() {
             assets.unload_model(id);
         }
+        for id in self.targets.drain(..).rev() {
+            assets.unload_render_target(id);
+        }
         for id in self.textures.drain(..).rev() {
             assets.unload_texture(id);
         }
         for id in self.sounds.drain(..).rev() {
             assets.unload_sound(id);
+        }
+        for id in self.music.drain(..).rev() {
+            assets.unload_music(id);
         }
         for id in self.shaders.drain(..).rev() {
             assets.unload_shader(id);

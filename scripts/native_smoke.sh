@@ -12,6 +12,7 @@ elif [[ "$backend" != x11 ]]; then
     echo 'RAYENGINE_BACKEND must be x11 or wayland' >&2
     exit 2
 fi
+cargo test -p rayengine "${features[@]}" native_post_processing -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_quality -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_render_smoke -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_mesh -- --ignored --test-threads=1
@@ -49,6 +50,8 @@ cargo run -p rayengine "${features[@]}" --example tweens -- --hidden --frames 30
 cargo run -p rayengine "${features[@]}" --example tweens -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/tweens-portrait.png"
 cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 1280x720 --screenshot "artifacts/smoke/$backend/pathfinding-wide.png"
 cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 800x1000 --screenshot "artifacts/smoke/$backend/pathfinding-portrait.png"
+cargo run -p rayengine "${features[@]}" --example physics -- --hidden --frames 120 --size 1280x720 --screenshot "artifacts/smoke/$backend/physics-wide.png"
+cargo run -p rayengine "${features[@]}" --example physics -- --hidden --frames 120 --size 800x1000 --screenshot "artifacts/smoke/$backend/physics-portrait.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/first-person-wide.png"
 cargo run -p rayengine "${features[@]}" --example first_person -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/first-person-portrait.png"
 cargo run -p rayengine-beacons "${demo_features[@]}" --example composition -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/plugins-wide.png"
@@ -65,4 +68,5 @@ if [[ -n "${RAYENGINE_MINECRAFT_TEXTURES:-}" ]]; then
     done
 fi
 cargo run -p rayengine "${features[@]}" --example lighting -- --hidden --frames 30 --screenshot "artifacts/smoke/$backend/lighting.png"
+cargo run -p rayengine "${features[@]}" --example post_processing -- effects --hidden --frames 30 --screenshot "artifacts/smoke/$backend/post-processing.png"
 echo "Native smoke screenshots: artifacts/smoke/$backend"

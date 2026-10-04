@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Opt-in cached music streams with looping, frame-clock fades/crossfades and
+  explicit pause/resume; named master/music/sfx and custom buses with volume,
+  mute, transient ducking and serializable settings for versioned saves.
+- Independent one-shot volume/pitch/pan, reusable overlapping voices and optional
+  per-sound concurrency caps; state-owned stream cleanup and resource diagnostics.
+- Checked audio guide, CPU bus/fade/save tests, native playback probes and a
+  runnable scene/pause/settings example with original procedural WAV assets.
+- Versioned engine-owned render targets with fixed/logical/physical/reference sizing,
+  point/bilinear sampling, 2D/3D rendering and shared material textures.
+- Ordered material post-processing with UI before/after effects, vignette, color
+  grade and scanline shaders, resize/DPI allocation bounds, checked docs/example,
+  native pixel probes and direct-versus-empty-chain performance comparison.
+- Screenshots capture the final rendered frame before buffer swap.
+
 - Display-independent tweens in `rayengine-core`: 22 pure easing functions,
   typed `f32`/`Vec2`/`Vec3`/`Vec4`/`Quat`/RGBA tweens with delay, loop/ping-pong,
   finite cycles, retargeting, pause/resume/reset/cancel/finish and one-shot

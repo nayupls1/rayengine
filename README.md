@@ -6,7 +6,7 @@ Games are ordinary Cargo projects, with a shared lifecycle and conventions for
 
 The SDK includes dense typed entities/components, optional scene parenting,
 fixed simulation updates, action input, timers, typed events, interpolated rendering, fitted cameras,
-high-DPI viewports, anchored UI, swept character collision, 2D/3D ray selection,
+high-DPI viewports, anchored UI, swept character collision, arcade physics, 2D/3D ray selection,
 proximity and camera-visibility queries, and cached
 texture/model/sound handles, generated meshes, and materials with typed shader
 parameters and explicit alpha policies. Raylib is available directly for specialized work.
@@ -103,8 +103,10 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Render quality, supersampling and anti-aliasing](crates/rayengine/docs/render_quality.md)
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
+- [Arcade physics, layers, triggers and moving platforms](crates/rayengine/docs/physics.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
+- [Streamed music, buses and fades](crates/rayengine/docs/audio.md)
 - [Custom fonts, text measurement, and pixel text](crates/rayengine/docs/fonts.md)
 - [Sprite sheets and CPU animation](crates/rayengine/docs/sprites.md)
 - [Tweens, easing and screen shake](crates/rayengine/docs/tweens.md)
@@ -139,6 +141,7 @@ Try the title/gameplay/pause state stack example:
 
 ```sh
 cargo run -p rayengine --example states
+cargo run -p rayengine --example audio
 ```
 
 Enter starts a session. Escape pauses with the world visible; Enter/Escape
@@ -184,10 +187,13 @@ GPU timer or a game's FPS. Graphics probes check rendering separately.
 Shared CI runs correctness checks, native render probes,
 template checks, minimum-Rust checks and benchmark compilation.
 
-The first release keeps physics and rendering small: axis-aligned static
-collision and character movement, geometric drawing, textures and model access.
+Physics stays small and predictable: axis-aligned boxes, circles/spheres,
+continuous translation, mass-weighted separation, layers, triggers and moving
+platforms. The independent swept character helpers remain available. Rendering
+includes geometric drawing, textures and model access.
 The game owns optional voxel streaming. Navigation is limited to grid pathfinding.
-There is no rigid-body solver, advanced lighting, navigation mesh, networking or editor. Linux is the tested target; Windows/macOS are
+There is no rigid-body solver, advanced lighting, navigation mesh, networking or editor.
+Linux is the tested target; Windows/macOS are
 optional, and browser/mobile are outside the current scope.
 
 The [interactive agent testing protocol](https://github.com/nayupls1/rayengine/issues/1)

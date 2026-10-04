@@ -103,12 +103,20 @@ pub struct ResourceCounts {
     pub font_atlases: u64,
     /// RGBA font atlas payload bytes, excluding CPU outline storage.
     pub font_bytes: u64,
+    /// Allocated custom offscreen targets.
+    pub render_targets: u64,
+    /// Custom target RGBA plus depth allocation estimate.
+    pub render_target_bytes: u64,
     /// Standalone cached textures.
     pub textures: u64,
     /// Imported models.
     pub models: u64,
     /// Loaded sounds; audio storage bytes are not estimated.
     pub sounds: u64,
+    /// Loaded streamed music resources.
+    pub music_streams: u64,
+    /// Pooled mixer-managed one-shot voices (legacy voices are counted by `sounds`).
+    pub sound_instances: u64,
     /// Generated meshes.
     pub meshes: u64,
     /// Custom shaders plus the SDK material shader when initialized.
@@ -129,9 +137,13 @@ impl ResourceCounts {
             fonts,
             font_atlases,
             font_bytes,
+            render_targets,
+            render_target_bytes,
             textures,
             models,
             sounds,
+            music_streams,
+            sound_instances,
             meshes,
             shaders,
             materials,

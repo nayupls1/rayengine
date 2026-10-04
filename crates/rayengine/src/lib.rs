@@ -4,22 +4,26 @@ pub use rayengine_core as core;
 pub use rayengine_core::first_person;
 pub use rayengine_core::manifest;
 pub use rayengine_core::pathfinding;
+pub use rayengine_core::physics;
 pub use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 pub use rayengine_core::save;
 pub use rayengine_core::sprite;
 pub use raylib;
 
 pub mod assets;
+pub mod audio;
 pub mod diagnostics;
 pub mod fonts;
 pub mod input;
 pub mod lighting;
 pub mod material;
 pub mod plugin;
+pub mod post_processing;
 mod quality;
 pub mod render;
 pub mod runtime;
 pub mod state;
+pub mod targets;
 pub mod upload;
 
 pub use plugin::Plugin;
@@ -42,6 +46,11 @@ pub mod guides {
     pub mod plugins {}
     #[doc = include_str!("../docs/render_quality.md")]
     pub mod render_quality {}
+    #[doc = include_str!("../docs/post_processing.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/post_processing.rs")]
+    #[doc = "```"]
+    pub mod post_processing {}
     #[doc = include_str!("../docs/responsive.md")]
     pub mod responsive {}
     #[doc = include_str!("../docs/timing_input.md")]
@@ -49,11 +58,21 @@ pub mod guides {
     #[doc = include_str!("../examples/controls.rs")]
     #[doc = "```"]
     pub mod timing_input {}
+    #[doc = include_str!("../docs/physics.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/physics.rs")]
+    #[doc = "```"]
+    pub mod physics {}
     #[doc = include_str!("../docs/first_person.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/first_person.rs")]
     #[doc = "```"]
     pub mod first_person {}
+    #[doc = include_str!("../docs/audio.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/audio.rs")]
+    #[doc = "```"]
+    pub mod audio {}
     #[doc = include_str!("../docs/assets.md")]
     pub mod assets {}
     #[doc = include_str!("../docs/fonts.md")]
@@ -109,6 +128,7 @@ pub mod guides {
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
     pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
+    pub use crate::audio::{AudioMixer, MusicId, MusicOptions, MusicStatus, SoundOptions};
     pub use crate::fonts::{
         FontId, FontOptions, FontRasterization, FontSampling, TextMetrics, TextStyle,
     };
@@ -119,10 +139,12 @@ pub mod prelude {
     pub use crate::material::{
         AlphaMode, MaterialDesc, MaterialParam, Shading, UniformId, UniformValue,
     };
+    pub use crate::post_processing::{BuiltinEffect, PostProcessing, UiPlacement};
     pub use crate::render::{Frame, UiButtonStyle};
     pub use crate::state::{
         State, StateCommands, StatePolicy, StateResources, StateStack, Transition,
     };
+    pub use crate::targets::{RenderTargetDesc, RenderTargetId, TargetFilter, TargetSize};
     pub use crate::upload::{
         MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
         UploadBudget, UploadReport,
