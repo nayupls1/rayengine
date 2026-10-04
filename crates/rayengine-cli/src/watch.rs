@@ -385,6 +385,17 @@ fn watch_roots(meta: &Value, project: Option<&ResolvedManifest>) -> Vec<PathBuf>
                 .map(Path::to_path_buf)
         })
         .collect();
+    if let Some(workspace) = meta["workspace_root"].as_str() {
+        for file in [
+            "Cargo.toml",
+            "Cargo.lock",
+            ".cargo",
+            "rust-toolchain",
+            "rust-toolchain.toml",
+        ] {
+            roots.push(Path::new(workspace).join(file));
+        }
+    }
     if let Some(project) = project {
         roots.extend(project.settings.assets.roots.iter().cloned());
         roots.extend(project.settings.fonts.values().map(|f| f.path.clone()));

@@ -141,20 +141,26 @@ pub(crate) fn package(
         {
             merge(&mut table, overlay);
         }
-        for source in project
-            .discover_assets()
-            .map_err(|e| Failure::new("invalid_assets", e.to_string()))?
-        {
-            let relative = project
-                .settings
-                .assets
-                .roots
-                .iter()
-                .find_map(|r| source.strip_prefix(r).ok())
-                .ok_or_else(|| Failure::new("invalid_assets", "asset outside declared roots"))?;
-            let destination = Path::new("assets").join(relative);
-            copy_file(&source, &folder.join(&destination))?;
-            assets.push(destination);
+        let mut logical_names = BTreeSet::new();
+        // Discovery yields physical paths; overlapping roots can give one file
+        // multiple logical names. Keep the declaring root while discovering.
+        for root in &project.settings.assets.roots {
+            let mut discovery = project.clone();
+            discovery.settings.assets.roots = vec![root.clone()];
+            for source in discovery
+                .discover_assets()
+                .map_err(|e| Failure::new("invalid_assets", e.to_string()))?
+            {
+                let relative = source
+                    .strip_prefix(root)
+                    .map_err(|_| Failure::new("invalid_assets", "asset outside declared root"))?;
+                if !logical_names.insert(relative.to_path_buf()) {
+                    continue;
+                }
+                let destination = Path::new("assets").join(relative);
+                copy_file(&source, &folder.join(&destination))?;
+                assets.push(destination);
+            }
         }
         // Fonts are explicit file declarations independent of asset exclusions.
         if let Some(fonts) = table.get_mut("fonts").and_then(toml::Value::as_table_mut) {

@@ -517,15 +517,35 @@ fn bundle_relocates_assets_fonts_profiles_and_clean_preserves_unrelated_files() 
     fs::write(game.join("assets/level.txt"), "base").unwrap();
     fs::write(game.join("release-assets/level.txt"), "selected").unwrap();
     fs::write(game.join("release-assets/secret.bak"), "excluded").unwrap();
+    fs::create_dir(game.join("release-assets/nested")).unwrap();
+    fs::write(game.join("release-assets/nested/nested-only.txt"), "nested").unwrap();
+    fs::create_dir(game.join("fallback-assets")).unwrap();
+    fs::write(game.join("fallback-assets/level.txt"), "shadowed").unwrap();
     fs::write(game.join("font.ttf"), "font fixture").unwrap();
     fs::write(game.join("LICENSE"), "game license").unwrap();
-    fs::write(game.join("rayengine.toml"), "schema_version = 1\n[project]\nexecutable = 'lifecycle-game'\n[assets]\nroots = ['assets']\nexclude = ['*.bak']\n[fonts.ui]\npath = 'font.ttf'\n[profiles.ship.assets]\nroots = ['release-assets']\n[profiles.ship.render]\nvsync = false\n").unwrap();
+    fs::write(game.join("rayengine.toml"), "schema_version = 1\n[project]\nexecutable = 'lifecycle-game'\n[assets]\nroots = ['assets']\nexclude = ['*.bak']\n[fonts.ui]\npath = 'font.ttf'\n[profiles.ship.assets]\nroots = ['release-assets', 'release-assets/nested', 'fallback-assets']\n[profiles.ship.render]\nvsync = false\n").unwrap();
     let (ok, response) = cli(&["bundle", "--profile", "ship"], Some(&game));
     assert!(ok, "{response}");
     assert_eq!(response["command"], "package");
     let folder = PathBuf::from(response["data"]["folder"].as_str().unwrap());
     let archive = PathBuf::from(response["data"]["archive"].as_str().unwrap());
     assert!(!folder.join("assets/secret.bak").exists());
+    assert_eq!(
+        fs::read_to_string(folder.join("assets/nested/nested-only.txt")).unwrap(),
+        "nested"
+    );
+    assert_eq!(
+        fs::read_to_string(folder.join("assets/nested-only.txt")).unwrap(),
+        "nested"
+    );
+    assert_eq!(
+        fs::read_to_string(folder.join("assets/level.txt")).unwrap(),
+        "selected"
+    );
+    let assets = response["data"]["assets"].as_array().unwrap();
+    let unique: std::collections::BTreeSet<_> =
+        assets.iter().map(|v| v.as_str().unwrap()).collect();
+    assert_eq!(assets.len(), unique.len());
     assert_eq!(
         fs::read_to_string(folder.join("LICENSE")).unwrap(),
         "game license"
@@ -689,4 +709,120 @@ fn doctor_hints_are_structured_on_success_and_failure_without_execution() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn remove_prunes_optional_alias_references_and_preserves_named_features() {
+    let scratch = Scratch::new("remove-features");
+    let plugin = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("plugins/voxel");
+    for explicit in [false, true] {
+        let game = scratch
+            .0
+            .join(if explicit { "explicit" } else { "implicit" });
+        cpu_game(&game, "fn main() {}");
+        let cargo = game.join("Cargo.toml");
+        let features = if explicit {
+            "terrain = ['dep:world', 'world/render', 'world?/render', 'world', 'stay']\nworld = ['dep:world']\n"
+        } else {
+            "terrain = ['world', 'world/render', 'world?/render', 'stay']\n"
+        };
+        fs::write(&cargo, format!("{}\n[dependencies]\nworld = {{ package = 'rayengine-voxel', path = {}, optional = true }}\n\n# Keep authored feature names\n[features]\n{features}stay = []\n", fs::read_to_string(&cargo).unwrap(), serde_json::to_string(plugin.to_str().unwrap()).unwrap())).unwrap();
+        let (ok, result) = cli(&["remove", "voxel"], Some(&game));
+        assert!(ok, "{result}");
+        assert!(result["data"]["project_manifest"].is_null());
+        assert!(!game.join("rayengine.toml").exists());
+        let source = fs::read_to_string(&cargo).unwrap();
+        assert!(source.contains("# Keep authored feature names"));
+        let parsed: toml::Value = toml::from_str(&source).unwrap();
+        let terrain: Vec<_> = parsed["features"]["terrain"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            terrain,
+            if explicit {
+                vec!["world", "stay"]
+            } else {
+                vec!["stay"]
+            }
+        );
+        if explicit {
+            assert!(parsed["features"]["world"].as_array().unwrap().is_empty());
+        }
+        assert!(
+            cli(&["info"], Some(&game)).0,
+            "edited manifest must remain valid Cargo"
+        );
+    }
+}
+
+#[test]
+fn watch_rebuilds_after_virtual_workspace_manifest_edits() {
+    let scratch = Scratch::new("watch-workspace");
+    let game = scratch.0.join("game");
+    cpu_game(
+        &game,
+        r#"fn main() {
+        std::fs::create_dir_all("artifacts").unwrap();
+        std::fs::write("artifacts/started", env!("CARGO_PKG_VERSION")).unwrap();
+        loop { std::thread::sleep(std::time::Duration::from_millis(50)); }
+    }"#,
+    );
+    fs::write(
+        game.join("Cargo.toml"),
+        "[package]\nname = 'lifecycle-game'\nversion.workspace = true\nedition = '2024'\n",
+    )
+    .unwrap();
+    let workspace = scratch.0.join("Cargo.toml");
+    fs::write(
+        &workspace,
+        "[workspace]\nmembers = ['game']\nresolver = '3'\n[workspace.package]\nversion = '0.1.0'\n",
+    )
+    .unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "watch"])
+        .arg(game.join("Cargo.toml"))
+        .args(["--cycles", "2", "--timeout-ms", "15000"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    while !game.join("artifacts/started").exists() {
+        assert!(started.elapsed().as_secs() < 10, "watch did not launch");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    fs::write(
+        &workspace,
+        fs::read_to_string(&workspace)
+            .unwrap()
+            .replace("0.1.0", "0.2.0"),
+    )
+    .unwrap();
+    let output = child.wait_with_output().unwrap();
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(output.status.success(), "{response}");
+    assert!(output.stderr.is_empty());
+    assert_eq!(response["data"]["cycle_count"], 2);
+    assert_eq!(response["data"]["stopped"], "cycle_limit");
+    let cycle = &response["data"]["cycles"][1];
+    assert!(
+        cycle["changed"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!(workspace))
+    );
+    assert!(cycle["diagnostics"].as_array().unwrap().iter().any(|d| {
+        d["reason"] == "compiler-artifact"
+            && d["package_id"]
+                .as_str()
+                .is_some_and(|s| s.ends_with("@0.2.0"))
+    }));
 }

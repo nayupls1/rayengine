@@ -100,7 +100,10 @@ concrete version; a local SDK infers `../../plugins/<name>`. `--plugin-path` sel
 another local plugin with the same SDK source/version; `--features a,b` enables
 optional Cargo features. Edits preserve TOML comments and existing namespaces.
 Repeated add/remove return explicit errors. Remove deletes that plugin namespace
-from both base and profiles, leaving other plugins alone. Commands edit manifests;
+from both base and profiles, leaving other plugins alone. It also removes Cargo
+feature references to the removed dependency (including aliases and forwarding),
+while retaining authored feature names. Cargo validates the result; failure
+restores the original manifest. Commands edit manifests;
 they do not register hooks, invoke plugin code or fetch/build the new dependency.
 Generated libraries remain explicit game-owned compositions.
 
@@ -135,7 +138,9 @@ libraries, Python, Xvfb and archive tools.
 
 `watch` polls content changes every 50 ms and debounces for 200 ms by default
 (`--debounce-ms N`). It watches the package, local Cargo dependencies, declared
-asset roots/fonts and project manifest. It skips symlinks, `.git`, `target`,
+asset roots/fonts and project manifest. Workspace Cargo manifests/lockfiles,
+workspace Cargo configuration and toolchain declarations are also watched,
+including virtual workspaces. It skips symlinks, `.git`, `target`,
 `artifacts`, and `bundles` to avoid feedback loops. Each cycle stops the old game,
 builds, and starts the selected binary with the same manifest/profile environment
 as `run`. Failed builds keep watching so the next edit can recover. A game exit

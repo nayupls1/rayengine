@@ -206,6 +206,7 @@ pub(crate) fn edit(
                 format!("{dependency} is not a direct dependency"),
             ));
         }
+        remove_feature_references(&mut cargo, &key);
         remove_namespace(&mut config, name);
     }
     // Validation and rendering finish before either file is modified.
@@ -213,6 +214,12 @@ pub(crate) fn edit(
     let config_source = config.to_string();
     let previous = fs::read(&manifest).map_err(io_error)?;
     fs::write(&manifest, cargo_source).map_err(io_error)?;
+    // Cargo checks feature references and inherited workspace declarations.
+    // Restore the original before returning any validation failure.
+    if let Err(error) = lifecycle::metadata(&manifest, false) {
+        fs::write(&manifest, previous).map_err(io_error)?;
+        return Err(error);
+    }
     let write_config = add || project.is_some();
     if write_config && let Err(e) = fs::write(&project_path, config_source) {
         fs::write(&manifest, previous).map_err(io_error)?;
@@ -241,4 +248,25 @@ pub(crate) fn document(path: &Path) -> Result<DocumentMut> {
         .map_err(io_error)?
         .parse()
         .map_err(|e| Failure::new("invalid_cargo_manifest", format!("{}: {e}", path.display())))
+}
+
+fn remove_feature_references(doc: &mut DocumentMut, dependency: &str) {
+    let Some(features) = doc.get_mut("features").and_then(Item::as_table_like_mut) else {
+        return;
+    };
+    // An explicitly declared feature with the dependency's name remains valid;
+    // implicit optional-dependency features disappear with their dependency.
+    let explicit_feature = features.contains_key(dependency);
+    for (_, feature) in features.iter_mut() {
+        if let Some(values) = feature.as_array_mut() {
+            values.retain(|value| {
+                value.as_str().is_none_or(|name| {
+                    name != format!("dep:{dependency}")
+                        && !name.starts_with(&format!("{dependency}/"))
+                        && !name.starts_with(&format!("{dependency}?/"))
+                        && (name != dependency || explicit_feature)
+                })
+            });
+        }
+    }
 }
