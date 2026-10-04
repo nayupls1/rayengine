@@ -879,6 +879,94 @@ fn watch_rebuilds_after_virtual_workspace_manifest_edits() {
 }
 
 #[test]
+fn plugin_add_matches_the_sdks_actual_core_dependency() {
+    let scratch = Scratch::new("custom-sdk-layout");
+    for (directory, name, version, dependencies, source) in [
+        ("shared", "rayengine-core", "1.2.3", "", "pub struct Thing;"),
+        (
+            "other-shared",
+            "rayengine-core",
+            "1.2.3",
+            "",
+            "pub struct Thing;",
+        ),
+        (
+            "sdk",
+            "rayengine",
+            "0.0.2",
+            "[dependencies]\nrayengine-core = { path = '../shared' }\n",
+            "pub use rayengine_core::Thing;",
+        ),
+        (
+            "plugin",
+            "rayengine-particles",
+            "0.0.2",
+            "[dependencies]\nrayengine-core = { path = '../shared' }\n",
+            "pub fn accept(_: rayengine_core::Thing) {}",
+        ),
+    ] {
+        let root = scratch.0.join(directory);
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("Cargo.toml"), format!("[package]\nname = '{name}'\nversion = '{version}'\nedition = '2024'\n{dependencies}")).unwrap();
+        fs::write(root.join("src/lib.rs"), source).unwrap();
+    }
+    let game = scratch.0.join("game");
+    cpu_game(
+        &game,
+        "fn main() { rayengine_particles::accept(rayengine::Thing); }",
+    );
+    let cargo = game.join("Cargo.toml");
+    fs::write(
+        &cargo,
+        format!(
+            "{}\n[dependencies]\nrayengine = {{ path = '../sdk' }}\n",
+            fs::read_to_string(&cargo).unwrap()
+        ),
+    )
+    .unwrap();
+    let plugin = scratch.0.join("plugin");
+    let (ok, result) = cli(
+        &[
+            "add",
+            "particles",
+            "--plugin-path",
+            plugin.to_str().unwrap(),
+        ],
+        Some(&game),
+    );
+    assert!(ok, "{result}");
+    assert!(cli(&["check"], Some(&game)).0);
+    assert!(cli(&["remove", "particles"], Some(&game)).0);
+
+    let plugin_cargo = plugin.join("Cargo.toml");
+    fs::write(
+        &plugin_cargo,
+        fs::read_to_string(&plugin_cargo)
+            .unwrap()
+            .replace("../shared", "../other-shared"),
+    )
+    .unwrap();
+    let original_cargo = fs::read(&cargo).unwrap();
+    let original_config = fs::read(game.join("rayengine.toml")).unwrap();
+    let (ok, result) = cli(
+        &[
+            "add",
+            "particles",
+            "--plugin-path",
+            plugin.to_str().unwrap(),
+        ],
+        Some(&game),
+    );
+    assert!(!ok);
+    assert_eq!(result["error"]["code"], "plugin_sdk_mismatch");
+    assert_eq!(fs::read(&cargo).unwrap(), original_cargo);
+    assert_eq!(
+        fs::read(game.join("rayengine.toml")).unwrap(),
+        original_config
+    );
+}
+
+#[test]
 fn plugin_add_rejects_custom_registry_sdk_without_changing_files() {
     let scratch = Scratch::new("custom-registry-sdk");
     cpu_game(&scratch.0, "fn main() {}");
@@ -967,6 +1055,58 @@ fn plugin_add_rejects_git_sdk_registry_fallback_without_changing_files() {
     );
     assert_eq!(fs::read_to_string(&cargo).unwrap(), source);
     assert!(!game.join("rayengine.toml").exists());
+}
+
+#[test]
+fn watch_completion_tracks_manifest_executable_changes() {
+    let scratch = Scratch::new("watch-binary-change");
+    cpu_game(
+        &scratch.0,
+        r#"fn main() {
+        std::fs::create_dir_all("artifacts").unwrap();
+        std::fs::write("artifacts/started", "running").unwrap();
+        loop { std::thread::sleep(std::time::Duration::from_millis(50)); }
+    }"#,
+    );
+    let cargo = scratch.0.join("Cargo.toml");
+    let source = fs::read_to_string(&cargo)
+        .unwrap()
+        .replace("edition = '2024'", "edition = '2024'\ndefault-run = 'one'")
+        + "\n[[bin]]\nname = 'one'\npath = 'src/main.rs'\n[[bin]]\nname = 'two'\npath = 'src/main.rs'\n";
+    fs::write(&cargo, &source).unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .args(["--json", "watch"])
+        .arg(&scratch.0)
+        .args([
+            "--cycles",
+            "2",
+            "--timeout-ms",
+            "15000",
+            "--debounce-ms",
+            "150",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    while !scratch.0.join("artifacts/started").exists() {
+        assert!(started.elapsed().as_secs() < 15, "watch did not launch");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    fs::write(
+        &cargo,
+        source.replace("default-run = 'one'", "default-run = 'two'"),
+    )
+    .unwrap();
+    let output = child.wait_with_output().unwrap();
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(output.status.success(), "{response}");
+    assert!(output.stderr.is_empty());
+    assert_eq!(response["data"]["cycle_count"], 2);
+    assert_eq!(response["data"]["cycles"][0]["binary"], "one");
+    assert_eq!(response["data"]["cycles"][1]["binary"], "two");
+    assert_eq!(response["data"]["binary"], "two");
 }
 
 #[test]

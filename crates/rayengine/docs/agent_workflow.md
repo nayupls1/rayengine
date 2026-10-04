@@ -100,7 +100,8 @@ concrete version; a local SDK infers `../../plugins/<name>`. `--plugin-path` sel
 another local plugin with the same SDK source/version. SDK sources outside crates.io,
 including Git and custom registries, require a compatible `--plugin-path`; an
 unsupported source never silently falls back to crates.io plugins. `--features a,b` enables
-optional Cargo features. Edits preserve TOML comments and existing namespaces.
+optional Cargo features. Local core dependencies are matched against the SDK's
+declared dependency, allowing custom source layouts. Edits preserve TOML comments and existing namespaces.
 Repeated add/remove return explicit errors. Removal matches the Cargo package
 identity, so an alias for a different package is preserved. Remove deletes that plugin namespace
 from both base and profiles, leaving other plugins alone. It also removes Cargo
@@ -183,7 +184,7 @@ paths serialize as strings, absent options as null, lists as arrays.
 | `new --template` | Existing `new` fields; `kind` is the template name; `files` includes generated level | Existing creation/SDK errors; plugin errors below for tilemap starters |
 | `add`, `remove` | `manifest`, `project_manifest` (file path, or null for remove without a project manifest), `plugin`, `dependency`, `plugin_path` (path or null), `features: [string]` | `unknown_plugin`, `plugin_already_added`, `plugin_not_added`, `invalid_plugin`, `plugin_sdk_mismatch`, `missing_sdk`, `invalid_sdk`, `invalid_cargo_manifest`; details null |
 | `package`, `bundle` | `manifest`, `folder`, `archive`, `binary`, `profile`, `target`, `features`, `release: true`, `assets: [relative path]`, `runtime_libraries: string`, `notices: [{name, version, license, repository, files}]`, `diagnostics: [Cargo object]`, `stderr: string` | `unsupported_platform`, `invalid_package`, `invalid_binary`, `bundle_exists`, `missing_executable`, `invalid_assets`, `runtime_libraries_failed`, `archive_failed`; details null. `cargo_failed` retains Cargo diagnostics/stdout/stderr/exit_code |
-| `watch` | `manifest`, `binary`, `profile`, `release`, `features`, `cycle_count: integer`, `cycles: [cycle]`, `stopped: signal/cycle_limit/timeout` | `watch_failed`: details is the completion data for a failed final cycle; setup failures have null details. `invalid_binary` and Cargo setup failures use their usual schemas |
+| `watch` | `manifest`, `binary` (latest selected executable), `profile`, `release`, `features`, `cycle_count: integer`, `cycles: [cycle]`, `stopped: signal/cycle_limit/timeout` | `watch_failed`: details is the completion data for a failed final cycle; setup failures have null details. `invalid_binary` and Cargo setup failures use their usual schemas |
 | `clean` | `manifest`, `removed_bundles: [absolute path]`, `stdout`, `stderr` | `cargo_failed` with Cargo details |
 | `doctor --fix-hints` | Existing `engine_version`, `platform`, `checks`; `fix_hints: [string]` (empty without flag) | `missing_prerequisites`: details has all doctor data, including hints |
 

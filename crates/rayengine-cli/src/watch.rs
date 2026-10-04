@@ -154,7 +154,7 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
     let (project, _) = project_manifest(&options.path, options.profile.as_deref())?;
     let meta = lifecycle::metadata_with_features(&manifest, true, &options.features)?;
     let package = lifecycle::project_package(&meta, &manifest)?;
-    let bin = lifecycle::binary(package, project.as_ref(), options.bin.as_deref())?;
+    let mut bin = lifecycle::binary(package, project.as_ref(), options.bin.as_deref())?;
     let mut roots = watch_roots(&meta, project.as_ref());
     let mut targets = BTreeSet::from([PathBuf::from(
         meta["target_directory"].as_str().expect("target directory"),
@@ -244,6 +244,7 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
                 let package = lifecycle::project_package(&meta, &manifest)?;
                 let selected =
                     lifecycle::binary(package, project.as_ref(), options.bin.as_deref())?;
+                bin.clone_from(&selected);
                 let mut build = Command::new("cargo");
                 build
                     .args(["build", "--message-format=json", "--manifest-path"])

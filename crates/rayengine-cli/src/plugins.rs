@@ -108,6 +108,22 @@ pub(crate) fn edit(
                     "requested feature does not exist in the local plugin",
                 ));
             }
+            // Read the SDK's authored core dependency rather than assuming its layout.
+            let sdk_core = if let Some(path) = sdk["path"].as_str() {
+                let sdk_manifest = Path::new(path)
+                    .join("Cargo.toml")
+                    .canonicalize()
+                    .map_err(io_error)?;
+                let sdk_meta = lifecycle::metadata(&sdk_manifest, false)?;
+                lifecycle::project_package(&sdk_meta, &sdk_manifest)?["dependencies"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|d| d["name"] == "rayengine-core" && d["kind"].is_null())
+                    .cloned()
+            } else {
+                None
+            };
             // Local source trees must agree so games do not acquire two incompatible SDKs.
             for dep in plugin["dependencies"]
                 .as_array()
@@ -115,13 +131,17 @@ pub(crate) fn edit(
                 .flatten()
                 .filter(|d| d["name"] == "rayengine" || d["name"] == "rayengine-core")
             {
-                let expected_path = sdk["path"].as_str().map(|s| {
-                    if dep["name"] == "rayengine-core" {
-                        Path::new(s).with_file_name("rayengine-core")
-                    } else {
-                        PathBuf::from(s)
-                    }
-                });
+                let expected = if dep["name"] == "rayengine-core" && sdk["path"].is_string() {
+                    sdk_core.as_ref().ok_or_else(|| {
+                        Failure::new(
+                            "plugin_sdk_mismatch",
+                            "the local SDK must declare the plugin's rayengine-core dependency",
+                        )
+                    })?
+                } else {
+                    sdk
+                };
+                let expected_path = expected["path"].as_str().map(PathBuf::from);
                 let compatible = match (expected_path, dep["path"].as_str()) {
                     (Some(expected), Some(actual)) => {
                         match (expected.canonicalize(), Path::new(actual).canonicalize()) {
@@ -129,7 +149,9 @@ pub(crate) fn edit(
                             _ => false,
                         }
                     }
-                    (None, None) => sdk["req"] == dep["req"] && sdk["source"] == dep["source"],
+                    (None, None) => {
+                        expected["req"] == dep["req"] && expected["source"] == dep["source"]
+                    }
                     _ => false,
                 };
                 if !compatible {
