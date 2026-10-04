@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Versioned engine-owned render targets with fixed/logical/physical/reference sizing,
+  point/bilinear sampling, 2D/3D rendering and shared material textures.
+- Ordered material post-processing with UI before/after effects, vignette, color
+  grade and scanline shaders, resize/DPI allocation bounds, checked docs/example,
+  native pixel probes and direct-versus-empty-chain performance comparison.
+- Screenshots capture the final rendered frame before buffer swap.
+
 - Display-independent tweens in `rayengine-core`: 22 pure easing functions,
   typed `f32`/`Vec2`/`Vec3`/`Vec4`/`Quat`/RGBA tweens with delay, loop/ping-pong,
   finite cycles, retargeting, pause/resume/reset/cancel/finish and one-shot

@@ -17,10 +17,12 @@ pub mod input;
 pub mod lighting;
 pub mod material;
 pub mod plugin;
+pub mod post_processing;
 mod quality;
 pub mod render;
 pub mod runtime;
 pub mod state;
+pub mod targets;
 pub mod upload;
 
 pub use plugin::Plugin;
@@ -43,6 +45,11 @@ pub mod guides {
     pub mod plugins {}
     #[doc = include_str!("../docs/render_quality.md")]
     pub mod render_quality {}
+    #[doc = include_str!("../docs/post_processing.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/post_processing.rs")]
+    #[doc = "```"]
+    pub mod post_processing {}
     #[doc = include_str!("../docs/responsive.md")]
     pub mod responsive {}
     #[doc = include_str!("../docs/timing_input.md")]
@@ -125,10 +132,12 @@ pub mod prelude {
     pub use crate::material::{
         AlphaMode, MaterialDesc, MaterialParam, Shading, UniformId, UniformValue,
     };
+    pub use crate::post_processing::{BuiltinEffect, PostProcessing, UiPlacement};
     pub use crate::render::{Frame, UiButtonStyle};
     pub use crate::state::{
         State, StateCommands, StatePolicy, StateResources, StateStack, Transition,
     };
+    pub use crate::targets::{RenderTargetDesc, RenderTargetId, TargetFilter, TargetSize};
     pub use crate::upload::{
         MeshUpload, MeshUploadOutcome, MeshUploadQueue, MeshUploadResult, MeshUploadTarget,
         UploadBudget, UploadReport,

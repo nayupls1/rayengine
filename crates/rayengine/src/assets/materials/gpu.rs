@@ -57,7 +57,7 @@ pub(super) fn draw<D: RaylibDraw + RaylibDraw3D>(
     raw: &mut D,
     mesh: impl AsRef<ffi::Mesh>,
     shader: &Shader,
-    texture: Option<&Texture2D>,
+    texture: Option<&dyn AsRef<ffi::Texture2D>>,
     tint: Color,
     transform: Matrix,
 ) {
@@ -189,6 +189,18 @@ impl SurfaceGuard {
         self.current = Some(blend);
     }
 
+    pub(crate) fn premultiplied(&mut self) {
+        // SAFETY: This guard is context-bound; flush before changing native state.
+        // Keep raylib's logical blend mode unchanged, then restore exact GL state.
+        unsafe {
+            ffi::rlDrawRenderBatchActive();
+            (self.state.depth)(0);
+            (self.state.enable)(0x0BE2);
+            (self.state.equation)(0x8006, 0x8006);
+            (self.state.blend)(1, 0x0303, 1, 0x0303);
+        }
+        self.current = Some(true);
+    }
     pub(crate) fn legacy(&mut self) {
         if self.current.take().is_none() {
             return;

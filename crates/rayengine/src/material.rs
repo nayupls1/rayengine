@@ -116,6 +116,9 @@ pub enum Shading {
 pub struct MaterialDesc {
     /// Optional albedo texture, sampled through texture0.
     pub texture: Option<TextureId>,
+    /// Optional offscreen color attachment, mutually exclusive with texture.
+    /// Mesh UVs use native target orientation: invert V for a top-left image.
+    pub render_target: Option<crate::targets::RenderTargetId>,
     /// Optional custom shader with raylib's standard mesh attributes/uniforms.
     pub shader: Option<ShaderId>,
     /// Built-in shading; Lit requires valid normals and an invertible affine transform.
@@ -132,6 +135,7 @@ impl Default for MaterialDesc {
     fn default() -> Self {
         Self {
             texture: None,
+            render_target: None,
             shader: None,
             shading: Shading::Unlit,
             tint: Color::WHITE,
