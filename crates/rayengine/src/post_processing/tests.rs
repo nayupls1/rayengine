@@ -567,3 +567,58 @@ fn native_post_processing_target_materials_and_sampling_restore_blend() {
             .is_err()
     );
 }
+
+#[test]
+#[ignore = "requires native OpenGL; run serially"]
+fn native_post_processing_target_ownership_recovers_after_caught_panic() {
+    let (mut rl, thread) = raylib::init()
+        .size(160, 90)
+        .hidden()
+        .log_level(TraceLogLevel::LOG_WARNING)
+        .build();
+    let mut assets = Assets::new(None);
+    let view = Viewport::new(
+        Vec2::new(160.0, 90.0),
+        Vec2::new(160.0, 90.0),
+        ScaleMode::Fit,
+    )
+    .unwrap();
+    let mut output = crate::quality::target(&mut rl, &thread, (160, 90), true).unwrap();
+    let mut f = frame(&mut rl, &thread, &mut output, None, &mut assets, view);
+    let id = f.render_target(RenderTargetDesc::fixed(16, 16)).unwrap();
+    f.set_draw_counters_enabled(true);
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        f.with_target(id, |nested| {
+            nested.clear(Color::RED);
+            nested.ui(|ui| {
+                ui.rectangle(
+                    Aabb2 {
+                        min: Vec2::ZERO,
+                        max: Vec2::ONE,
+                    },
+                    Color::WHITE,
+                );
+                panic!("target callback panic");
+            });
+        })
+        .unwrap();
+    }));
+    assert!(panic.is_err());
+    assert_eq!(f.assets.render_target_usage(), (1, 16 * 16 * 8));
+    assert_eq!(f.draw_counters().unwrap().clears, 1);
+    f.with_target(id, |nested| nested.clear(Color::BLUE))
+        .unwrap();
+    let color = f
+        .assets
+        .render_target_texture(id)
+        .unwrap()
+        .load_image()
+        .unwrap()
+        .get_color(8, 8);
+    assert_eq!(color, Color::BLUE);
+    assert!(f.assets.unload_render_target(id));
+    assert_eq!(f.assets.render_target_usage(), (0, 0));
+    let fresh = f.render_target(RenderTargetDesc::fixed(16, 16)).unwrap();
+    assert_ne!(id, fresh);
+    assert!(f.with_target(id, |_| ()).is_err());
+}

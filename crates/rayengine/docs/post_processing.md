@@ -52,7 +52,8 @@ or declare the reserved int `rayenginePremultipliedTexture` and implement its
 conversion. A material can sample either a loaded texture or a render target.
 An active target is unavailable for sampling; drawing dependent materials returns
 false and recursively drawing into the same target returns an error. Unloading an
-active target returns false. Raw attachment borrows are intended for advanced
+active target returns false. Target ownership is restored when a callback unwinds,
+so catching its panic does not leave the target permanently active. Raw attachment borrows are intended for advanced
 interop and use native orientation; never retain weak copies beyond target lifetime.
 
 ## Ordered effects and UI

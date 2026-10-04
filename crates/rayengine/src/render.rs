@@ -84,6 +84,7 @@ impl Frame<'_, '_> {
     /// Camera coverage and logical UI units remain unchanged. Contents persist
     /// until clear or resize. Active attachments cannot be sampled or unloaded;
     /// recursive use of the same target returns an error instead of GPU feedback.
+    /// Ownership and counters are restored if the callback unwinds.
     pub fn with_target<R>(
         &mut self,
         id: crate::targets::RenderTargetId,
@@ -103,10 +104,13 @@ impl Frame<'_, '_> {
             index: self.index,
             delta: self.delta,
         };
-        let result = draw(&mut nested);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| draw(&mut nested)));
         self.counters = nested.counters.take();
         self.assets.targets.restore(id, target);
-        Ok(result)
+        match result {
+            Ok(value) => Ok(value),
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
     }
     /// Loads/caches a font on the render thread, including after initialization.
     pub fn font(
