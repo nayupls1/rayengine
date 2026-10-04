@@ -1,0 +1,135 @@
+{
+  "utc": "2026-10-04T13:19:21.391443+00:00",
+  "commit": "6003a1c18ba26ee0a97d346d424c98101855147d",
+  "dirty_files": [],
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+  "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+  "cpu": "12th Gen Intel(R) Core(TM) i7-12700K",
+  "backend": "x11",
+  "environment": {
+    "DISPLAY": ":0",
+    "WAYLAND_DISPLAY": "wayland-1",
+    "LIBGL_ALWAYS_SOFTWARE": "",
+    "RUSTFLAGS": ""
+  },
+  "frames_per_run": 5000,
+  "repeats": 7,
+  "measurement": "Uncapped frame wall time including initial target allocation, resolve, driver stalls and presentation; no GPU timer",
+  "workload": "post-processing/mixed.v1",
+  "draws": {
+    "clears": 10000,
+    "world_2d_passes": 5000,
+    "world_3d_passes": 5000,
+    "ui_passes": 5000,
+    "raw_passes": 0,
+    "primitives_2d": 5000,
+    "primitives_3d": 10000,
+    "meshes": 0,
+    "models": 0,
+    "textures": 0,
+    "ui_primitives": 0,
+    "text": 5000
+  },
+  "profiles": {
+    "direct": {
+      "settings": {
+        "backend": "glfw-x11",
+        "os": "linux",
+        "arch": "x86_64",
+        "sdk_version": "0.0.2",
+        "graphics": [
+          "NVIDIA Corporation",
+          "NVIDIA GeForce RTX 4070/PCIe/SSE2",
+          "3.3.0 NVIDIA 610.57.04"
+        ],
+        "window_size": [
+          1280,
+          720
+        ],
+        "reference_size": [
+          960.0,
+          540.0
+        ],
+        "scale_mode": "fit",
+        "fixed_hz": 120,
+        "max_catch_up": 8,
+        "target_fps": 0,
+        "vsync": false,
+        "render_size": [
+          1280,
+          720
+        ],
+        "render_scale": 1.0,
+        "anti_aliasing": "none",
+        "output_size": [
+          1280,
+          720
+        ],
+        "render_target_bytes": 7372800
+      },
+      "frame_ms_per_run": [
+        0.0860293732,
+        0.0865278382,
+        0.088753098,
+        0.0849141486,
+        0.0939471656,
+        0.08393664519999999,
+        0.08289785159999999
+      ],
+      "median_frame_ms": 0.0860293732,
+      "median_render_ms": 0.0538273506,
+      "median_present_ms": 0.0318926742
+    },
+    "empty": {
+      "settings": {
+        "backend": "glfw-x11",
+        "os": "linux",
+        "arch": "x86_64",
+        "sdk_version": "0.0.2",
+        "graphics": [
+          "NVIDIA Corporation",
+          "NVIDIA GeForce RTX 4070/PCIe/SSE2",
+          "3.3.0 NVIDIA 610.57.04"
+        ],
+        "window_size": [
+          1280,
+          720
+        ],
+        "reference_size": [
+          960.0,
+          540.0
+        ],
+        "scale_mode": "fit",
+        "fixed_hz": 120,
+        "max_catch_up": 8,
+        "target_fps": 0,
+        "vsync": false,
+        "render_size": [
+          1280,
+          720
+        ],
+        "render_scale": 1.0,
+        "anti_aliasing": "none",
+        "output_size": [
+          1280,
+          720
+        ],
+        "render_target_bytes": 7372800
+      },
+      "frame_ms_per_run": [
+        0.08701243060000001,
+        0.0851563114,
+        0.08629957099999999,
+        0.08472923360000001,
+        0.0864023056,
+        0.0844319402,
+        0.08268628019999999
+      ],
+      "median_frame_ms": 0.0851563114,
+      "median_render_ms": 0.0528543194,
+      "median_present_ms": 0.0320869992
+    }
+  },
+  "empty_vs_direct": 0.9898515847840678
+}
