@@ -95,11 +95,11 @@ are not yet published; use a repository SDK path for those starters until their
 matching plugin versions are published.
 
 `add <plugin> [path]` and `remove <plugin> [path]` accept particles, voxel, beacons,
-and tilemap (also `rayengine-` prefixed names). Registry dependencies pin the SDK's
+and tilemap (also `rayengine-` prefixed names). Crates.io dependencies pin the SDK's
 concrete version; a local SDK infers `../../plugins/<name>`. `--plugin-path` selects
-another local plugin with the same SDK source/version. Non-registry SDK sources
-such as Git require a compatible `--plugin-path`; an unsupported source never
-silently falls back to registry plugins. `--features a,b` enables
+another local plugin with the same SDK source/version. SDK sources outside crates.io,
+including Git and custom registries, require a compatible `--plugin-path`; an
+unsupported source never silently falls back to crates.io plugins. `--features a,b` enables
 optional Cargo features. Edits preserve TOML comments and existing namespaces.
 Repeated add/remove return explicit errors. Removal matches the Cargo package
 identity, so an alias for a different package is preserved. Remove deletes that plugin namespace

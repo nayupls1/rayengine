@@ -879,6 +879,40 @@ fn watch_rebuilds_after_virtual_workspace_manifest_edits() {
 }
 
 #[test]
+fn plugin_add_rejects_custom_registry_sdk_without_changing_files() {
+    let scratch = Scratch::new("custom-registry-sdk");
+    cpu_game(&scratch.0, "fn main() {}");
+    fs::create_dir(scratch.0.join(".cargo")).unwrap();
+    let cargo = scratch.0.join("Cargo.toml");
+    let source = format!(
+        "{}\n[dependencies]\nrayengine = {{ version = '0.0.2', registry = 'company' }}\n",
+        fs::read_to_string(&cargo).unwrap()
+    );
+    fs::write(&cargo, &source).unwrap();
+    for index in [
+        "https://example.invalid/index",
+        "sparse+https://example.invalid/index/",
+    ] {
+        fs::write(
+            scratch.0.join(".cargo/config.toml"),
+            format!("[registries.company]\nindex = '{index}'\n"),
+        )
+        .unwrap();
+        let (ok, result) = cli(&["add", "particles"], Some(&scratch.0));
+        assert!(!ok);
+        assert_eq!(result["error"]["code"], "invalid_sdk");
+        assert!(
+            result["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("--plugin-path")
+        );
+        assert_eq!(fs::read_to_string(&cargo).unwrap(), source);
+        assert!(!scratch.0.join("rayengine.toml").exists());
+    }
+}
+
+#[test]
 fn plugin_add_rejects_git_sdk_registry_fallback_without_changing_files() {
     let scratch = Scratch::new("git-sdk");
     let sdk = scratch.0.join("sdk");

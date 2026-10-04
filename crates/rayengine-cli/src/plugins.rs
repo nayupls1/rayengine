@@ -146,13 +146,12 @@ pub(crate) fn edit(
             );
             selected_path = Some(local);
         } else {
-            if !sdk["source"]
-                .as_str()
-                .is_some_and(|source| source.starts_with("registry+"))
+            if sdk["source"].as_str()
+                != Some("registry+https://github.com/rust-lang/crates.io-index")
             {
                 return Err(Failure::new(
                     "invalid_sdk",
-                    "non-registry SDK sources require a compatible --plugin-path; version numbers alone do not identify the SDK source",
+                    "SDK sources outside crates.io require a compatible --plugin-path; version numbers alone do not identify the SDK source",
                 ));
             }
             let req = sdk["req"]
