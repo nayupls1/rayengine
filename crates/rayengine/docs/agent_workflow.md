@@ -101,7 +101,8 @@ another local plugin with the same SDK source/version. Non-registry SDK sources
 such as Git require a compatible `--plugin-path`; an unsupported source never
 silently falls back to registry plugins. `--features a,b` enables
 optional Cargo features. Edits preserve TOML comments and existing namespaces.
-Repeated add/remove return explicit errors. Remove deletes that plugin namespace
+Repeated add/remove return explicit errors. Removal matches the Cargo package
+identity, so an alias for a different package is preserved. Remove deletes that plugin namespace
 from both base and profiles, leaving other plugins alone. It also removes Cargo
 feature references to the removed dependency (including aliases and forwarding),
 while retaining authored feature names. Cargo validates the result; failure
@@ -157,8 +158,8 @@ as `run`. Failed builds keep watching so the next edit can recover. A game exit
 waits for another edit. Ctrl-C stops owned children; on Unix this includes their
 process groups. `--cycles N` counts the initial build and stops immediately after
 the Nth cycle; `--features a,b` enables Cargo features. `--timeout-ms N` limits the watch loop/build waits. Initial Cargo
-metadata resolution occurs before this timer. Interactive mode reports each cycle
-on stderr. JSON mode captures children and returns **one completion object** on
+metadata resolution occurs before this timer. Interactive mode reports each cycle, its underlying errors and rendered compiler
+diagnostics on stderr. JSON mode captures children and returns **one completion object** on
 termination, retaining the latest 32 cycles and total count. It emits no live
 JSON events. Use a bound or Ctrl-C to obtain the result; a failed final build/game
 returns `watch_failed`, while an interrupted build is a successful user stop.

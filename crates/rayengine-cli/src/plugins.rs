@@ -208,6 +208,12 @@ pub(crate) fn edit(
             namespaces.insert(name, Item::Table(Table::new()));
         }
     } else {
+        if existing.is_none() {
+            return Err(Failure::new(
+                "plugin_not_added",
+                format!("{dependency} is not a direct dependency"),
+            ));
+        }
         let removed = cargo
             .get_mut("dependencies")
             .and_then(Item::as_table_like_mut)

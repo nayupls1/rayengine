@@ -1088,3 +1088,55 @@ os.execv(sys.argv[1], sys.argv[1:])"#,
         }));
     }
 }
+
+#[test]
+fn removal_preserves_an_unrelated_package_using_a_plugin_dependency_key() {
+    let scratch = Scratch::new("plugin-identity");
+    let unrelated = scratch.0.join("unrelated");
+    fs::create_dir_all(unrelated.join("src")).unwrap();
+    fs::write(
+        unrelated.join("Cargo.toml"),
+        "[package]\nname = 'unrelated'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .unwrap();
+    fs::write(
+        unrelated.join("src/lib.rs"),
+        "pub fn answer() -> u32 { 42 }\n",
+    )
+    .unwrap();
+    let game = scratch.0.join("game");
+    cpu_game(
+        &game,
+        "fn main() { assert_eq!(rayengine_voxel::answer(), 42); }\n",
+    );
+    let cargo = game.join("Cargo.toml");
+    fs::write(&cargo, format!("{}\n[dependencies]\nrayengine-voxel = {{ package = 'unrelated', path = '../unrelated' }}\n", fs::read_to_string(&cargo).unwrap())).unwrap();
+    let config = game.join("rayengine.toml");
+    fs::write(&config, "schema_version = 1\n[plugins.voxel]\nkeep = 42\n").unwrap();
+    assert!(cli(&["check"], Some(&game)).0);
+    let original_cargo = fs::read(&cargo).unwrap();
+    let original_config = fs::read(&config).unwrap();
+    let (ok, response) = cli(&["remove", "voxel"], Some(&game));
+    assert!(!ok);
+    assert_eq!(response["error"]["code"], "plugin_not_added");
+    assert_eq!(fs::read(&cargo).unwrap(), original_cargo);
+    assert_eq!(fs::read(&config).unwrap(), original_config);
+    assert!(cli(&["check"], Some(&game)).0);
+}
+
+#[test]
+fn interactive_watch_prints_compiler_diagnostics_in_the_failing_cycle() {
+    let scratch = Scratch::new("watch-text-errors");
+    cpu_game(&scratch.0, "fn main() { non_existent_function(); }\n");
+    let output = Command::new(env!("CARGO_BIN_EXE_rayengine"))
+        .arg("watch")
+        .arg(&scratch.0)
+        .args(["--cycles", "1", "--timeout-ms", "5000"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E0425"), "{stderr}");
+    assert!(stderr.contains("src/main.rs"), "{stderr}");
+    assert!(stderr.contains("non_existent_function"), "{stderr}");
+}

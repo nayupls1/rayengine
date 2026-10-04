@@ -342,6 +342,9 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
                     }
                 );
             }
+            if !options.json_mode && cycle["ok"] == false {
+                report_failure(&cycle);
+            }
             game = process;
             cycles.push(cycle);
             if cycles.len() > 32 {
@@ -360,6 +363,9 @@ pub(crate) fn watch(options: Options) -> Result<Value> {
                 if !status.success() {
                     cycle["ok"] = json!(false);
                     cycle["error"] = json!({"code":"game_failed","message":format!("game exited with {status}"),"details":null});
+                    if !options.json_mode {
+                        report_failure(cycle);
+                    }
                 }
             }
             if !options.json_mode {
@@ -436,4 +442,24 @@ fn watch_roots(meta: &Value, project: Option<&ResolvedManifest>) -> Vec<PathBuf>
     roots.sort();
     roots.dedup();
     roots
+}
+
+fn report_failure(cycle: &Value) {
+    if let Some(message) = cycle["error"]["message"].as_str() {
+        eprintln!("watch: {message}");
+    }
+    for diagnostic in cycle["diagnostics"].as_array().into_iter().flatten() {
+        if let Some(rendered) = diagnostic["message"]["rendered"].as_str() {
+            eprint!("{rendered}");
+        }
+    }
+    for stderr in [
+        cycle["error"]["details"]["stderr"].as_str(),
+        cycle["game_output"]["stderr"].as_str(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        eprint!("{stderr}");
+    }
 }
