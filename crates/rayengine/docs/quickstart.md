@@ -1,5 +1,24 @@
 # Getting started
 
+Install the checkout CLI with persistent user PATH setup (no admin privileges):
+
+```sh
+# Linux/macOS, from the repository root:
+bash scripts/setup.sh
+```
+
+```powershell
+# Windows, from the repository root:
+& .\scripts\setup.ps1
+```
+
+Install Rust **1.89+** first and reopen the terminal. Setup checks Rust/Cargo,
+installs the checkout version, and prints current-session activation instructions.
+Open a new terminal and verify `rayengine --help`. The CLI does not link raylib.
+See the [CLI setup guide](https://github.com/nayupls1/rayengine/blob/master/docs/cli_setup.md)
+for installation locations, supported shells, updates, tests and reversal.
+The following native prerequisites apply to building/running **games**.
+
 Install Rust **1.89 or later**, CMake, a C compiler, libclang and the native
 graphics/audio development headers. Raylib's C sources and GLFW are built by
 the Rust dependency; a separate raylib installation is unnecessary.
@@ -57,7 +76,8 @@ For development before publication, build/install the CLI from this checkout
 and explicitly use the local SDK:
 
 ```sh
-cargo install --path crates/rayengine-cli --locked
+bash scripts/setup.sh
+# Apply the printed activation command, or open a new terminal first.
 rayengine new ../another-game --kind 3d --sdk-path "$PWD/crates/rayengine"
 ```
 
