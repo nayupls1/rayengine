@@ -64,8 +64,9 @@ Clip names are stored in at most 31 bytes and decoded lossily.
 glTF skins must have a parent for their first joint, typically an armature
 node. Raylib 6's loader crashes when the root joint is a scene root, so the SDK
 parses the glTF JSON first and returns an `Error::Asset` mentioning the "parent
-node" instead. Clips with no keyframes, missing pose rows or nonfinite
-transforms are rejected at load.
+node" instead. Loading is all-or-nothing: a file with no clips, or with any clip
+that has no keyframes, missing pose rows or nonfinite transforms, returns an
+error and loads none of its clips.
 
 ## Compatibility
 

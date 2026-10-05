@@ -445,7 +445,8 @@ impl InitContext<'_, '_> {
     /// canonical path and rate. The rate states how the backend sampled the
     /// file: [`KeyframeRate::GLTF`](crate::core::skeletal::KeyframeRate::GLTF),
     /// [`KeyframeRate::M3D`](crate::core::skeletal::KeyframeRate::M3D), or the
-    /// authored rate for IQM. Fails if the file has no valid clips.
+    /// authored rate for IQM. Fails if the file has no clips or if any clip is
+    /// invalid (no keyframes, missing pose rows or nonfinite transforms).
     pub fn model_animations(
         &mut self,
         path: impl AsRef<Path>,
