@@ -22,3 +22,6 @@ CPU/backend subcrates for a plugin should stay beneath that plugin's directory.
 - `tilemap/` (`rayengine-tilemap`): layered chunked CPU grids, TOML levels,
   solid/one-way character collision, region and ray queries, and optional
   viewport-culled sprite-sheet drawing.
+
+- `actions/` (`rayengine-actions`): CPU FIFO agent activities, explicit lifecycle
+  hooks, bounded retries and action-owned exclusive/capacity reservations.
