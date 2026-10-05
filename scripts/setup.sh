@@ -44,8 +44,11 @@ done
 case $shell_name in
     bash)
         files=("$HOME/.bashrc")
+        if $remove_path; then
+            # Login-file precedence may have changed since setup ran.
+            files+=("$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile")
         # Bash uses only the first existing login file in this order.
-        if [[ -e $HOME/.bash_profile ]]; then files+=("$HOME/.bash_profile")
+        elif [[ -e $HOME/.bash_profile ]]; then files+=("$HOME/.bash_profile")
         elif [[ -e $HOME/.bash_login ]]; then files+=("$HOME/.bash_login")
         else files+=("$HOME/.profile"); fi ;;
     zsh) files=("${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zprofile") ;;

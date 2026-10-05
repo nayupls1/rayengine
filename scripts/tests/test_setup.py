@@ -157,6 +157,23 @@ if not os.environ.get('MOCK_NO_BINARY'):
         self.setup('--remove-path')
         self.assertEqual(target.read_text(), '# preserved\n')
 
+    def test_bash_removal_after_login_precedence_changes(self):
+        self.install()
+        profile = self.home / '.profile'
+        login = self.home / '.bash_profile'
+        baseline = '. "$HOME/.profile"\n'
+        login.write_text(baseline)
+        self.setup('--remove-path')
+        self.assertEqual(profile.read_text(), '')
+        self.assertEqual(login.read_text(), baseline)
+        self.assertFalse((self.home / '.bash_login').exists())
+        result = subprocess.run(['bash', '--noprofile', '--norc', '-c',
+                                 '. "$HOME/.bash_profile"; command -v rayengine'],
+                                env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.setup('--remove-path')
+        self.assertEqual(login.read_text(), baseline)
+
     def test_sh_profile(self):
         self.install('--shell', 'sh')
         self.fresh('sh')

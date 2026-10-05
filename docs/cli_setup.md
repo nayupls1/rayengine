@@ -156,7 +156,9 @@ cargo uninstall rayengine-cli --root "$env:LOCALAPPDATA\rayengine cli"
 
 On Unix, repeat `--remove-path` for each configured shell, with the same
 `ZDOTDIR`/`XDG_CONFIG_HOME` if customized. It removes setup's marked blocks only;
-any earlier Cargo/shell PATH configuration remains. Windows removes only entries
+any earlier Cargo/shell PATH configuration remains. Bash removal checks all three
+login-file candidates so changes in startup-file precedence leave no old blocks.
+Windows removes only entries
 recorded in its ownership file, preserves other user entries and deletes that
 file. Keep the state file until reversal; if deleted, remove the printed binary
 directory manually from the **user** PATH in Windows Environment Variables.
