@@ -62,7 +62,7 @@ assert_eq!(topology.get(climb).unwrap().tag, Passage::Stairs);
 
 Routes include the start and goal. `NavOptions` mirrors `PathOptions`
 (neighborhood, `min_cost`, `budget`) and adds `clearance`. The search is A*
-with a heuristic that stays exact across links, so routes are optimal; ties
+with a heuristic that stays admissible across links, so routes are optimal; ties
 break deterministically, so identical layers, links and options give
 identical routes. A budgeted search returns `Pending` and continues with
 `resume`, as in single-grid search.
@@ -215,7 +215,7 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 | Situation | What happens |
 | --- | --- |
 | Next cell held by an agent moving away | Wait (`Waiting`); move once it is free. |
-| Head-on: the blocker's next cell is this agent's cell | The lower-priority agent searches up to `yield_radius` steps on its layer, through free cells, for the nearest cell off the other's remaining route, walks there (`Yielding`), waits until the other's route no longer crosses the cells it backed through, then plans again. |
+| Head-on: the blocker's next cell is this agent's cell | The lower-priority agent searches up to `yield_radius` steps on its layer, through free cells, for the nearest cell off the other's remaining route, walks there (`Yielding`), waits until the other's route no longer crosses the cells it backed through, then plans again. Both drop queued detours, and the other does not plan new ones while it is being made room for. If the other's route changes to run through the side cell, the yielding agent stops waiting and plans again. |
 | Head-on, and the lower-priority agent has nowhere to go | The higher-priority agent tries to step aside instead. |
 | Blocked for `patience` ticks | Plan a detour treating cells held by other agents as walls, at most `max_detours` times per goal. A failed detour keeps the current route and the agent keeps waiting. |
 | Blocked (or waiting aside) for `give_up` ticks | Report `Stuck` once. The agent keeps its cell and keeps waiting, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
@@ -233,7 +233,8 @@ each other.
 
 Per tick, planning expands at most `plan_budget` nodes, each yield search
 visits at most `(2 × yield_radius + 1)²` cells, route checks after an edit
-cost one step check per remaining step, and detours are capped per goal.
+cost one step check per remaining step (each reading up to `(2r + 1)²`
+cells with clearance), and detours are capped per goal.
 Agents, links and events are processed in a fixed order, so the same layers,
 topology, agents and calls produce the same moves on every run.
 

@@ -750,3 +750,71 @@ fn traffic_reroutes_after_edits_and_retries_unreachable_goals() {
     assert_eq!(traffic.state(agent), Some(AgentState::Arrived));
     assert_eq!(traffic.position(agent), Some(at(1, 2, 2)));
 }
+
+#[test]
+fn yielding_drops_a_queued_detour() {
+    // A ring: the detour around the blocker is long, so it is still being
+    // planned when the blocker turns head-on and the agent steps aside.
+    let layers = [parse(&[
+        "...............",
+        ".#############.",
+        "...............",
+    ])];
+    let topology = NavTopology::<()>::new();
+    let goal = at(0, 10, 0);
+    for plan_budget in 18..=34 {
+        let mut traffic = Traffic::new(TrafficOptions {
+            neighborhood: Neighborhood::Four,
+            patience: 1,
+            plan_budget,
+            ..TrafficOptions::default()
+        });
+        let blocker = traffic.add(at(0, 6, 0), Vec2::ZERO, 5);
+        let walker = traffic.add(at(0, 5, 0), Vec2::ZERO, 0);
+        traffic.set_goal(walker, Some(goal));
+        let mut events = Vec::new();
+        let mut sent = false;
+        for _ in 0..80 {
+            traffic.tick(&layers, &topology, &mut events).unwrap();
+            if !sent && traffic.state(walker) == Some(AgentState::Waiting) {
+                traffic.set_goal(blocker, Some(at(0, 0, 0)));
+                sent = true;
+            }
+            let reached = events.iter().any(|event| {
+                matches!(event, TrafficEvent::Moved { agent, to, .. } if *agent == walker && *to == goal)
+            });
+            if reached {
+                assert!(
+                    events.contains(&TrafficEvent::Arrived(walker)),
+                    "budget {plan_budget}"
+                );
+            }
+        }
+        assert!(sent);
+        assert_eq!(
+            traffic.state(walker),
+            Some(AgentState::Arrived),
+            "budget {plan_budget}"
+        );
+    }
+}
+
+#[test]
+fn priority_ties_go_to_the_agent_added_first() {
+    let layers = [parse(&["....."])];
+    let topology = NavTopology::<()>::new();
+    let mut traffic = Traffic::new(TrafficOptions::default());
+    let early = traffic.add(at(0, 4, 0), Vec2::ZERO, 0);
+    let removed = traffic.add(at(0, 2, 0), Vec2::ZERO, 0);
+    traffic.remove(removed);
+    // Reuses the removed agent's slot, ahead of `early` in slot order.
+    let late = traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
+    // Both want (2, 0); the agent added first moves first and takes it.
+    traffic.set_goal(early, Some(at(0, 2, 0)));
+    traffic.set_goal(late, Some(at(0, 2, 0)));
+    let mut events = Vec::new();
+    traffic.tick(&layers, &topology, &mut events).unwrap();
+    traffic.tick(&layers, &topology, &mut events).unwrap();
+    assert_eq!(traffic.position(early), Some(at(0, 2, 0)));
+    assert_eq!(traffic.position(late), Some(at(0, 1, 0)));
+}

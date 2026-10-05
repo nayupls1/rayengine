@@ -126,6 +126,8 @@ struct Agent {
     position: NavPoint,
     clearance: Vec2,
     priority: i32,
+    // When the agent was added; breaks priority ties.
+    added: u64,
     goal: Option<NavPoint>,
     route: Route,
     // Index of `position` in the route.
@@ -142,6 +144,11 @@ struct Agent {
 }
 
 impl Agent {
+    /// Sorts agents that move first, and win head-on meetings, first.
+    fn rank(&self) -> (std::cmp::Reverse<i32>, u64) {
+        (std::cmp::Reverse(self.priority), self.added)
+    }
+
     fn next_step(&self) -> Option<NavStep> {
         self.route.steps().get(self.at + 1).copied()
     }
@@ -175,7 +182,9 @@ impl Agent {
 ///
 /// Each [`tick`](Self::tick) plans routes within a shared search budget, then
 /// lets every agent advance at most one step, in priority order. An agent only
-/// enters a cell no other agent holds, so agents never overlap or push. When
+/// enters a cell no other agent holds, so agents never share a cell or push.
+/// Cells are held one per agent whatever its clearance, which keeps agents
+/// off walls but not off each other. When
 /// its next cell is taken it waits; two agents meeting head-on in a corridor
 /// resolve it by the lower-priority one stepping aside into the nearest cell
 /// off the other's route, then waiting there until the other has passed.
@@ -220,6 +229,7 @@ pub struct Traffic {
     occupied: HashMap<NavPoint, u32>,
     avoid: HashSet<NavPoint>,
     order: Vec<u32>,
+    added: u64,
     passing: HashSet<NavPoint>,
     visited: HashMap<UVec2, UVec2>,
     queue: VecDeque<(UVec2, u32)>,
@@ -245,6 +255,7 @@ impl Traffic {
             occupied: HashMap::new(),
             avoid: HashSet::new(),
             order: Vec::new(),
+            added: 0,
             passing: HashSet::new(),
             visited: HashMap::new(),
             queue: VecDeque::new(),
@@ -274,6 +285,7 @@ impl Traffic {
                 position,
                 clearance,
                 priority,
+                added: 0,
                 goal: None,
                 route: Route::new(),
                 at: 0,
@@ -293,6 +305,8 @@ impl Traffic {
         agent.position = position;
         agent.clearance = clearance;
         agent.priority = priority;
+        agent.added = self.added;
+        self.added += 1;
         agent.goal = None;
         agent.hold = 0;
         agent.reset();
@@ -592,7 +606,7 @@ impl Traffic {
         );
         let agents = &self.agents;
         self.order
-            .sort_by_key(|&index| (std::cmp::Reverse(agents[index as usize].priority), index));
+            .sort_by_key(|&index| agents[index as usize].rank());
         for position in 0..self.order.len() {
             let index = self.order[position];
             let agent = &mut self.agents[index as usize];
@@ -617,15 +631,9 @@ impl Traffic {
 
     fn step(&mut self, index: u32, next: NavStep, events: &mut Vec<TrafficEvent>) {
         let id = self.id(index);
+        // The way cleared; a detour from the old cell is no longer needed.
+        self.drop_detour(index);
         let agent = &mut self.agents[index as usize];
-        if agent.plan == Plan::Detour {
-            // The way cleared; a detour from the old cell is no longer needed.
-            agent.plan = Plan::None;
-            if self.planning == Some(index) {
-                self.finder.cancel();
-                self.planning = None;
-            }
-        }
         let from = agent.position;
         if self.occupied.get(&from) == Some(&index) {
             self.occupied.remove(&from);
@@ -657,6 +665,18 @@ impl Traffic {
         }
     }
 
+    /// Forgets a detour the agent queued or is searching for.
+    fn drop_detour(&mut self, index: u32) {
+        let agent = &mut self.agents[index as usize];
+        if agent.plan == Plan::Detour {
+            agent.plan = Plan::None;
+            if self.planning == Some(index) {
+                self.finder.cancel();
+                self.planning = None;
+            }
+        }
+    }
+
     /// Waits at the side cell until the agent it yields to has passed it.
     fn wait_aside(&mut self, index: u32, events: &mut Vec<TrafficEvent>) {
         let agent = &self.agents[index as usize];
@@ -664,13 +684,18 @@ impl Traffic {
             return;
         };
         let passing = self.agent(yielding.to).map_or(&[][..], Agent::remaining);
-        let in_way = passing.iter().any(|step| {
-            agent
-                .route
-                .steps()
-                .iter()
-                .any(|own| own.point == step.point)
-        });
+        // Its route changed to run through the side cell: stop waiting here.
+        let blocking = passing
+            .get(1)
+            .is_some_and(|step| step.point == agent.position);
+        let in_way = !blocking
+            && passing.iter().any(|step| {
+                agent
+                    .route
+                    .steps()
+                    .iter()
+                    .any(|own| own.point == step.point)
+            });
         let give_up = self.options.give_up;
         let id = self.id(index);
         let agent = &mut self.agents[index as usize];
@@ -703,12 +728,15 @@ impl Traffic {
         let head_on = them
             .next_step()
             .is_some_and(|step| step.point == me.position);
-        let lower =
-            (me.priority, std::cmp::Reverse(index)) < (them.priority, std::cmp::Reverse(other));
+        let lower = me.rank() > them.rank();
         let should_yield =
             me.yielding.is_none() && head_on && ((lower && !me.cannot_yield) || them.cannot_yield);
         if should_yield {
             if self.find_escape(index, other, layers, topology) {
+                // Queued detours would replace the escape route, or send the
+                // other agent around instead of through the room just made.
+                self.drop_detour(index);
+                self.drop_detour(other);
                 let (id, to) = (self.id(index), self.id(other));
                 let agent = &mut self.agents[index as usize];
                 agent.yielding = Some(Yield { to, ticks: 0 });
@@ -720,9 +748,14 @@ impl Traffic {
             self.agents[index as usize].cannot_yield = true;
         }
         let id = self.id(index);
+        // An agent stepping aside for this one is about to clear the way.
+        let making_room = self.agents[other as usize]
+            .yielding
+            .is_some_and(|yielding| yielding.to == id);
         let agent = &mut self.agents[index as usize];
         agent.blocked += 1;
         if agent.yielding.is_none()
+            && !making_room
             && agent.plan == Plan::None
             && agent.blocked >= options.patience
             && agent.detours < options.max_detours
