@@ -95,7 +95,8 @@ if ! $remove_path; then
         command -v "$tool" >/dev/null 2>&1 || fail "Missing $tool. Install Rust 1.89+ from https://rustup.rs, reopen the terminal, and retry."
     done
     rust_version=$(rustc --version) || fail 'rustc failed. Repair/select your Rust toolchain with rustup and retry.'
-    [[ $rust_version =~ ^rustc\ ([0-9]+)\.([0-9]+)\. ]] || fail "Cannot read Rust version: $rust_version"
+    rust_regex='^rustc ([0-9]+)\.([0-9]+)\.'
+    [[ $rust_version =~ $rust_regex ]] || fail "Cannot read Rust version: $rust_version"
     (( BASH_REMATCH[1] > 1 || (BASH_REMATCH[1] == 1 && BASH_REMATCH[2] >= 89) )) || fail "Rust 1.89+ required; found $rust_version. Run rustup update stable."
     cargo --version >/dev/null || fail 'Cargo failed. Repair/select your Rust toolchain with rustup and retry.'
     mkdir -p -- "$install_root" || fail "Cannot create install root $install_root; choose a writable --root."
