@@ -2,6 +2,9 @@
 
 use std::time::Duration;
 
+mod simulation;
+pub use simulation::{InvalidSimulationSpeed, SimulationClock};
+
 /// Information for exactly one fixed simulation update.
 #[derive(Clone, Copy, Debug)]
 pub struct Tick {
@@ -22,6 +25,19 @@ pub struct FramePlan {
     pub alpha: f32,
     /// Whole simulation time discarded to bound catch-up work.
     pub dropped: Duration,
+}
+
+impl FramePlan {
+    /// Iterates the requested ticks with an unchanged fixed timestep.
+    /// Pass the originating clock's `step()`, never a speed-scaled duration.
+    pub fn ticks(&self, step: Duration) -> impl ExactSizeIterator<Item = Tick> {
+        let first = self.first_tick;
+        let dt = step.as_secs_f32();
+        (0..self.steps).map(move |offset| Tick {
+            index: first.saturating_add(u64::from(offset)),
+            dt,
+        })
+    }
 }
 
 /// Accumulator clock that never requests an unbounded number of updates.
@@ -65,6 +81,12 @@ impl FixedClock {
         self.tick
     }
 
+    /// Current interpolation fraction, in `[0, 1)`.
+    pub fn alpha(&self) -> f32 {
+        (self.accumulator.as_secs_f64() / self.step.as_secs_f64())
+            .min(f64::from(f32::from_bits(1.0f32.to_bits() - 1))) as f32
+    }
+
     /// Adds elapsed wall time and returns the bounded work for this render frame.
     /// Excess whole ticks are dropped, while the fractional remainder is kept.
     pub fn advance(&mut self, elapsed: Duration) -> FramePlan {
@@ -83,8 +105,7 @@ impl FixedClock {
             steps,
             first_tick,
             // f32 rounding must not turn a fraction just below one into one.
-            alpha: (fraction.as_secs_f64() / self.step.as_secs_f64())
-                .min(f64::from(f32::from_bits(1.0f32.to_bits() - 1))) as f32,
+            alpha: self.alpha(),
             dropped,
         }
     }

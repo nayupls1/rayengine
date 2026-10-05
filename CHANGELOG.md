@@ -6,6 +6,10 @@
   and 3D boxes/spheres, with symmetric filters, exclusions, opt-in triggers and
   deterministic first hits over current world bodies; checked docs and a headless example.
 
+- Game-owned CPU simulation timelines with pause, validated speed controls,
+  fixed timesteps, fractional time carry and bounded discard; checked guide and
+  interactive example keep UI responsive and consume simulation commands once.
+
 ## 0.0.3
 
 - Opt-in cached music streams with looping, frame-clock fades/crossfades and

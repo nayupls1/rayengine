@@ -46,6 +46,12 @@ Simulation has a fixed timestep and bounded catch-up. Input edges survive
 render frames without an update and are consumed once by a fixed update.
 Games can interpolate between simulation states during rendering.
 
+An optional game-owned `SimulationClock` adds pause and speed controls without
+changing input/menu updates or presentation. It preserves fixed simulation dt,
+bounds work per advance, reports discarded whole ticks, and retains fractional
+time. Game code routes physics, timers, animation and events through its ticks,
+and queues player-command edges once across accelerated or zero-step updates.
+
 Optional `Plugin<State>` hooks borrow explicit shared state and the same public
 init/update/frame contexts as games. Games own instances, action IDs, dependencies,
 call order, failure policies, and removal. There is no registry or runtime loader,

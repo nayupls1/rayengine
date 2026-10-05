@@ -32,7 +32,9 @@ pub mod viewport;
 pub mod prelude {
     pub use crate::audio::{AudioBuses, AudioError, AudioSettings, BusId, BusSettings, GainFade};
     pub use crate::camera::{Camera2D, Camera3D};
-    pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D, Circle, Sphere};
+    pub use crate::collision::{
+        Aabb2, Aabb3, Body2D, Body3D, Circle, Sector2, SectorError, Sphere,
+    };
     pub use crate::events::Events;
     pub use crate::first_person::{
         FirstPersonActions, FirstPersonConfig, FirstPersonController, FirstPersonError,
@@ -61,7 +63,9 @@ pub mod prelude {
         AnimationClip, AnimationCompleted, AnimationPlayer, PlaybackMode, SpriteError, SpriteFrame,
         SpriteRegion, SpriteTransform,
     };
-    pub use crate::time::{FixedClock, Tick, Timer};
+    pub use crate::time::{
+        FixedClock, FramePlan, InvalidSimulationSpeed, SimulationClock, Tick, Timer,
+    };
     pub use crate::transform::{
         GlobalTransform2D, GlobalTransform3D, Parent, Transform2D, Transform3D,
     };
