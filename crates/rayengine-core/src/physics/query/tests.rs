@@ -658,3 +658,32 @@ fn sphere_casts_resolve_box_edges_corners_and_z_motion() {
     let ray = Ray3::new(Vec3::new(0.9, 0.9, -5.0), Vec3::Z).unwrap();
     assert!(sphere.raycast(Vec3::ZERO, ray, 10.0).unwrap().is_none());
 }
+
+#[test]
+fn fully_three_dimensional_tangencies_do_not_hit() {
+    for scale in [1.0, 1.0 / 8192.0] {
+        let shape = Shape3D::round(5895.5 * scale);
+        let start = Vec3::new(11193.0, 5041.0, 8295.0) * scale;
+        let delta = Vec3::new(-16944.0, -2826.0, 5178.0) * scale;
+        assert!(
+            shape
+                .cast(start, delta, shape, Vec3::ZERO)
+                .unwrap()
+                .is_none()
+        );
+        // A small inward/outward offset must remain distinguishable from the
+        // tangent trajectory; the uncertainty guard must not swallow crossings.
+        assert!(
+            shape
+                .cast(start * 0.9999, delta * 0.9999, shape, Vec3::ZERO)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            shape
+                .cast(start * 1.0001, delta * 1.0001, shape, Vec3::ZERO)
+                .unwrap()
+                .is_none()
+        );
+    }
+}

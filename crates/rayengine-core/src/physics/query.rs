@@ -137,7 +137,8 @@ macro_rules! queries {
             /// Casts this shape's center along `translation` against a fixed target.
             /// Initial positive overlaps return zero travel and zero normal.
             /// Touching hits only while entering; tangencies and parallel grazing
-            /// miss. Zero travel reports only positive overlap. Invalid inputs
+            /// miss, including grazing within f64 discriminant roundoff.
+            /// Zero travel reports only positive overlap. Invalid inputs
             /// return an error. See [`super::guide`] for snapshot semantics.
             pub fn cast(
                 self,

@@ -116,7 +116,9 @@ fraction/distance, so reconstructing position from those fields can lose
 precision. World queries compare the unrounded fractions. Initial positive overlaps report fraction/distance zero,
 the original center and a zero normal; use `overlap` for a separating normal.
 Touching at the start hits only with inward motion. Outward motion, parallel
-surface grazing and pure tangency miss. Entering contact at the end of travel
+surface grazing and pure tangency miss. A discriminant gap within f64
+arithmetic roundoff is treated as tangency, so numerically indistinguishable
+grazing crossings also miss. Entering contact at the end of travel
 is included. Zero travel reports only positive initial overlap. Overlap
 visitors require positive penetration, so touching is excluded.
 

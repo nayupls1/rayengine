@@ -262,9 +262,15 @@ fn rounded_sweep<const N: usize>(
                 }
             }
         }
-        let discriminant = r * r * qa - perpendicular;
-        if discriminant <= 0.0 {
-            continue; // Tangency has no inward velocity.
+        let radial = r * r * qa;
+        let discriminant = radial - perpendicular;
+        // Products and the cross-square sum can round an exact 3D tangency
+        // slightly positive. Treat a gap within f64 arithmetic uncertainty as
+        // grazing. Scale by the discriminant's terms, not world position, so
+        // distant head-on casts retain even small collider radii.
+        let roundoff = 16.0 * f64::EPSILON * (radial + perpendicular);
+        if discriminant <= roundoff {
+            continue; // Tangency has no reliable inward contact.
         }
         let span = discriminant.sqrt() / qa;
         let mut t = vertex - span;
