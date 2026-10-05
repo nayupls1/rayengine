@@ -58,6 +58,11 @@ pub mod guides {
     #[doc = include_str!("../examples/controls.rs")]
     #[doc = "```"]
     pub mod timing_input {}
+    #[doc = include_str!("../docs/simulation.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/simulation.rs")]
+    #[doc = "```"]
+    pub mod simulation {}
     #[doc = include_str!("../docs/physics.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/physics.rs")]

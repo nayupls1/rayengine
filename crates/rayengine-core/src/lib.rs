@@ -60,7 +60,9 @@ pub mod prelude {
         AnimationClip, AnimationCompleted, AnimationPlayer, PlaybackMode, SpriteError, SpriteFrame,
         SpriteRegion, SpriteTransform,
     };
-    pub use crate::time::{FixedClock, Tick, Timer};
+    pub use crate::time::{
+        FixedClock, FramePlan, InvalidSimulationSpeed, SimulationClock, Tick, Timer,
+    };
     pub use crate::transform::{
         GlobalTransform2D, GlobalTransform3D, Parent, Transform2D, Transform3D,
     };

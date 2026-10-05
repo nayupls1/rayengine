@@ -7,6 +7,9 @@ layers, triggers and moving platforms), spatial queries, grid pathfinding,
 tweens, easing, screen shake, background jobs and saves. No raylib, native
 graphics libraries or display are required.
 
+Optional game-owned simulation timelines add pause and speed controls while
+preserving fixed timesteps, bounded catch-up and separate presentation timing.
+
 ```toml
 [dependencies]
 rayengine-core = "0.0.3"
