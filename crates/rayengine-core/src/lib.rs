@@ -20,6 +20,7 @@ pub mod physics;
 pub mod quality;
 pub mod save;
 pub mod scene;
+pub mod skeletal;
 pub mod spatial;
 pub mod sprite;
 pub mod time;
@@ -55,6 +56,9 @@ pub mod prelude {
     };
     pub use crate::quality::{AntiAliasing, RenderPlan, RenderQuality};
     pub use crate::scene::Scene;
+    pub use crate::skeletal::{
+        ClipCompleted, ClipTiming, KeyframePlayer, KeyframeRate, SkeletalError,
+    };
     pub use crate::spatial::{
         Frustum2D, Frustum3D, Ray2, Ray3, RayHit2, RayHit3, SpatialError, SpatialHit2, SpatialHit3,
         SpatialIndex2D, SpatialIndex3D,

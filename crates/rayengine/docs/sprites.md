@@ -86,4 +86,5 @@ Space plays a one-shot swing. Face the golden orb and swing within reach to
 collect it. P pauses/resumes, R restarts the current clip, and Escape exits.
 The bundled sprite sheet is original MIT-licensed artwork, documented in
 `examples/assets/README.md`; no download or working-directory setup is needed.
+For skinned 3D models, see [skeletal animation](crate::guides::skeletal_animation).
 The complete example below is checked by rustdoc.

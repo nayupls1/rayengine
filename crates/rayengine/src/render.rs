@@ -5,7 +5,7 @@ use crate::fonts::{FontId, FontOptions, TextMetrics, TextStyle};
 use crate::{
     Error,
     assets::{
-        Assets, MaterialId, MeshId, ModelId, ShaderId, TextureId,
+        Assets, MaterialId, MeshId, ModelId, ModelPose, ShaderId, TextureId,
         materials::{Prepared, SurfaceGuard},
     },
     material::{MaterialDesc, UniformId, UniformValue},
@@ -267,6 +267,7 @@ impl Frame<'_, '_> {
         let surface = self.assets.material_pass();
         draw(&mut Canvas3D {
             raw: &mut raw,
+            thread: self.thread,
             models: self.assets,
             surface,
             counters: &mut self.counters,
@@ -485,6 +486,7 @@ pub struct Canvas3D<'draw, D: RaylibDraw> {
     counters: &'draw mut Option<DrawCounters>,
     /// Raylib guard for advanced drawing within this camera pass.
     pub raw: &'draw mut D,
+    thread: &'draw RaylibThread,
     models: &'draw mut dyn ModelSource,
     surface: Option<SurfaceGuard>,
 }
@@ -498,6 +500,18 @@ trait ModelSource {
         transform: Mat4,
     ) -> Result<(), Error>;
     fn model(&self, id: ModelId) -> Option<&Model>;
+    fn posed_model(
+        &self,
+        model: ModelId,
+        pose: ModelPose,
+    ) -> Result<Option<(&Model, &ModelAnimation)>, Error>;
+    fn posed_model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        pose: ModelPose,
+        tint: Color,
+    ) -> Result<Option<(&Model, &ModelAnimation, Prepared<'_>)>, Error>;
     fn mesh(&mut self, id: MeshId, tint: Color) -> Option<(&Mesh, WeakMaterial)>;
     fn mesh_material(
         &mut self,
@@ -524,6 +538,22 @@ impl ModelSource for Assets<'_> {
     }
     fn model(&self, id: ModelId) -> Option<&Model> {
         self.model(id)
+    }
+    fn posed_model(
+        &self,
+        model: ModelId,
+        pose: ModelPose,
+    ) -> Result<Option<(&Model, &ModelAnimation)>, Error> {
+        self.posed_model(model, pose)
+    }
+    fn posed_model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        pose: ModelPose,
+        tint: Color,
+    ) -> Result<Option<(&Model, &ModelAnimation, Prepared<'_>)>, Error> {
+        self.posed_model_material(model, material, pose, tint)
     }
     fn mesh(&mut self, id: MeshId, tint: Color) -> Option<(&Mesh, WeakMaterial)> {
         self.mesh_for_draw(id, tint)
@@ -652,11 +682,7 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         let Some(native_model) = self.models.model(model) else {
             return Ok(false);
         };
-        let m = native_model.transform;
-        let local = Mat4::from_cols_array(&[
-            m.m0, m.m1, m.m2, m.m3, m.m4, m.m5, m.m6, m.m7, m.m8, m.m9, m.m10, m.m11, m.m12, m.m13,
-            m.m14, m.m15,
-        ]);
+        let local = model_local(native_model);
         self.models
             .validate_lit_draw(None, Some(model), material, transform * local)?;
         if let Some((model, material)) = self.models.model_material(model, material, tint) {
@@ -723,6 +749,113 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         self.legacy();
         self.raw.draw_line3D(v3(start), v3(end), color);
     }
+    /// Poses a skinned model with a clip keyframe, then draws it with its own
+    /// materials, transform and tint. Returns false for stale handles or
+    /// invalid poses; use try_animated_model for actionable errors.
+    ///
+    /// The pose is written into the shared model immediately before this draw,
+    /// so several characters may share one `ModelId` with different poses.
+    pub fn animated_model(
+        &mut self,
+        model: ModelId,
+        pose: impl Into<ModelPose>,
+        transform: Transform3D,
+        tint: Color,
+    ) -> bool {
+        self.try_animated_model(model, pose, transform, tint)
+            .unwrap_or(false)
+    }
+    /// Checked animated drawing. Stale model/clip handles return Ok(false);
+    /// incompatible skeletons and keyframes outside the clip return errors.
+    /// Nothing is posed or submitted unless the result is Ok(true).
+    pub fn try_animated_model(
+        &mut self,
+        model: ModelId,
+        pose: impl Into<ModelPose>,
+        transform: Transform3D,
+        tint: Color,
+    ) -> Result<bool, Error> {
+        let pose = pose.into();
+        let Some((native, clip)) = self.models.posed_model(model, pose)? else {
+            return Ok(false);
+        };
+        let rotation = transform.rotation.length_squared();
+        if !(transform.position.is_finite()
+            && transform.scale.is_finite()
+            && rotation.is_finite()
+            && rotation > 0.0)
+        {
+            return Err(Error::Asset(
+                "animated model transform needs finite values and a nonzero rotation".into(),
+            ));
+        }
+        if let Some(surface) = &mut self.surface {
+            surface.legacy();
+        }
+        crate::assets::apply_pose(self.thread, native, clip, pose.keyframe);
+        let (axis, angle) = transform.rotation.normalize().to_axis_angle();
+        self.raw.draw_model_ex(
+            native,
+            v3(transform.position),
+            v3(axis),
+            angle.to_degrees(),
+            v3(transform.scale),
+            tint,
+        );
+        count!(self.counters, model_poses, 1);
+        count!(self.counters, models, 1);
+        count!(self.counters, meshes, native.meshes().len() as u64);
+        Ok(true)
+    }
+    /// Poses a skinned model, then overrides its meshes with a material.
+    /// Returns false for stale dependencies or invalid poses, lit normals or transforms.
+    pub fn animated_model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        pose: impl Into<ModelPose>,
+        transform: Transform3D,
+        tint: Color,
+    ) -> bool {
+        self.try_animated_model_material_matrix(model, material, pose, transform.matrix(), tint)
+            .unwrap_or(false)
+    }
+    /// Checked animated material drawing with an affine world matrix. Lit
+    /// validation uses the bind-pose normals; skinned normals follow the pose.
+    pub fn try_animated_model_material_matrix(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        pose: impl Into<ModelPose>,
+        transform: Mat4,
+        tint: Color,
+    ) -> Result<bool, Error> {
+        let pose = pose.into();
+        let Some(native_model) = self.models.model(model) else {
+            return Ok(false);
+        };
+        let local = model_local(native_model);
+        self.models
+            .validate_lit_draw(None, Some(model), material, transform * local)?;
+        let Some((native, clip, material)) = self
+            .models
+            .posed_model_material(model, material, pose, tint)?
+        else {
+            return Ok(false);
+        };
+        crate::assets::apply_pose(self.thread, native, clip, pose.keyframe);
+        if let Some(surface) = &mut self.surface {
+            surface.apply(material.alpha);
+        }
+        let transform = matrix(transform * local);
+        count!(self.counters, model_poses, 1);
+        count!(self.counters, models, 1);
+        count!(self.counters, meshes, native.meshes().len() as u64);
+        for mesh in native.meshes() {
+            material.draw(self.raw, mesh, transform);
+        }
+        Ok(true)
+    }
     /// Draws a model with uniform scale; false for an unloaded handle.
     pub fn model(&mut self, id: ModelId, position: Vec3, scale: f32, tint: Color) -> bool {
         self.legacy();
@@ -735,6 +868,15 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
             false
         }
     }
+}
+
+/// An imported model's native local transform, applied before the world matrix.
+fn model_local(model: &Model) -> Mat4 {
+    let m = model.transform;
+    Mat4::from_cols_array(&[
+        m.m0, m.m1, m.m2, m.m3, m.m4, m.m5, m.m6, m.m7, m.m8, m.m9, m.m10, m.m11, m.m12, m.m13,
+        m.m14, m.m15,
+    ])
 }
 
 /// UI primitives in logical reference units, shared by 2D and 3D.

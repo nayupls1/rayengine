@@ -15,8 +15,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod animation;
 pub(crate) mod materials;
 mod mesh;
+pub(crate) use animation::apply_pose;
+pub use animation::{ModelAnimationsId, ModelAnimator, ModelClipId, ModelClipInfo, ModelPose};
 use mesh::MeshAssets;
 
 /// Stable handle for a texture owned by the current game run.
@@ -54,6 +57,8 @@ pub struct Assets<'audio> {
     pub(crate) textures: Vec<Option<Texture2D>>,
     models: Vec<Option<Model>>,
     model_lit_normals: Vec<bool>,
+    model_skins: Vec<animation::Skin>,
+    animations: animation::AnimationAssets,
     pub(crate) sounds: Vec<Option<Sound<'audio>>>,
     pub(crate) mixer: std::cell::RefCell<crate::audio::AudioMixer<'audio>>,
     meshes: MeshAssets,
@@ -69,12 +74,13 @@ impl<'audio> Assets<'audio> {
     /// Samples live owned resources. This scans asset slots without GPU queries
     /// or readback; automatic sampling occurs only when diagnostics are enabled.
     /// Logical payload bytes exclude driver overhead, default resources,
-    /// imported model textures/animations, and game-owned raw handles.
+    /// imported model textures, and game-owned raw handles.
     pub fn resource_counts(&self) -> crate::diagnostics::ResourceCounts {
         let (meshes, generated_mesh_bytes) = self.meshes.resource_usage();
         let (shaders, materials) = self.surfaces.resource_counts();
         let (fonts, font_atlases, font_bytes) = self.fonts.usage();
         let (music_streams, sound_instances) = self.mixer.borrow().resource_counts();
+        let (model_animations, model_clips, model_animation_bytes) = self.animations.usage();
         crate::diagnostics::ResourceCounts {
             render_targets: self.targets.usage().0,
             render_target_bytes: self.targets.usage().1,
@@ -83,6 +89,9 @@ impl<'audio> Assets<'audio> {
             font_bytes,
             textures: self.textures.iter().flatten().count() as u64,
             models: self.models.iter().flatten().count() as u64,
+            model_animations,
+            model_clips,
+            model_animation_bytes,
             sounds: self.sounds.iter().flatten().count() as u64,
             music_streams,
             sound_instances,
@@ -112,6 +121,8 @@ impl<'audio> Assets<'audio> {
             textures: Vec::new(),
             models: Vec::new(),
             model_lit_normals: Vec::new(),
+            model_skins: Vec::new(),
+            animations: animation::AnimationAssets::default(),
             sounds: Vec::new(),
             mixer: std::cell::RefCell::new(crate::audio::AudioMixer::new(audio)),
             meshes: MeshAssets::new(),
@@ -229,6 +240,120 @@ impl<'audio> Assets<'audio> {
     /// Borrow a loaded model, or `None` after it has been unloaded.
     pub fn model(&self, id: ModelId) -> Option<&Model> {
         self.models.get(id.0).and_then(Option::as_ref)
+    }
+
+    /// Describes a loaded clip, or `None` after its set has been unloaded.
+    pub fn model_clip_info(&self, clip: ModelClipId) -> Option<&ModelClipInfo> {
+        self.animations.info(clip)
+    }
+
+    /// Number of clips in a loaded set, in file order; `None` after unloading.
+    pub fn model_clip_count(&self, set: ModelAnimationsId) -> Option<usize> {
+        self.animations.clip_count(set)
+    }
+
+    /// Clip at a zero-based file position; `None` if out of range or unloaded.
+    pub fn model_clip(&self, set: ModelAnimationsId, index: usize) -> Option<ModelClipId> {
+        self.animations.clip(set, index)
+    }
+
+    /// First clip with exactly this stored name; `None` if absent or unloaded.
+    pub fn find_model_clip(&self, set: ModelAnimationsId, name: &str) -> Option<ModelClipId> {
+        self.animations.find(set, name)
+    }
+
+    /// Checks that a clip can pose a model: both are loaded, the model has a
+    /// skeleton with in-range skinned vertex influences, and the bone counts match.
+    pub fn check_model_clip(&self, model: ModelId, clip: ModelClipId) -> Result<(), Error> {
+        let (skin, info) = self.model_clip_pair(model, clip)?;
+        animation::check(model, skin, info)
+    }
+
+    /// Creates a playback cursor at the clip's first keyframe after the same
+    /// checks as [`Self::check_model_clip`]. Timing comes from the clip's load rate.
+    pub fn model_animator(
+        &self,
+        model: ModelId,
+        clip: ModelClipId,
+        mode: rayengine_core::skeletal::PlaybackMode,
+    ) -> Result<ModelAnimator, Error> {
+        let (skin, info) = self.model_clip_pair(model, clip)?;
+        animation::animator(model, skin, clip, info, mode)
+    }
+
+    fn model_clip_pair(
+        &self,
+        model: ModelId,
+        clip: ModelClipId,
+    ) -> Result<(&animation::Skin, &ModelClipInfo), Error> {
+        if self.model(model).is_none() {
+            return Err(Error::Asset("animated model is unloaded".into()));
+        }
+        let info = self
+            .model_clip_info(clip)
+            .ok_or_else(|| Error::Asset("animation clip is unloaded".into()))?;
+        Ok((&self.model_skins[model.0], info))
+    }
+
+    /// Checks and resolves a pose for drawing: `Ok(None)` for stale handles.
+    pub(crate) fn posed_model(
+        &self,
+        model: ModelId,
+        pose: ModelPose,
+    ) -> Result<Option<(&Model, &raylib::prelude::ModelAnimation)>, Error> {
+        let (Some(native_model), Some((clip, info))) =
+            (self.model(model), self.animations.native(pose.clip))
+        else {
+            return Ok(None);
+        };
+        animation::check(model, &self.model_skins[model.0], info)?;
+        animation::check_pose(pose, info)?;
+        Ok(Some((native_model, clip)))
+    }
+
+    pub(crate) fn posed_model_material(
+        &mut self,
+        model: ModelId,
+        material: MaterialId,
+        pose: ModelPose,
+        tint: Color,
+    ) -> Result<
+        Option<(
+            &Model,
+            &raylib::prelude::ModelAnimation,
+            materials::Prepared<'_>,
+        )>,
+        Error,
+    > {
+        if self.posed_model(model, pose)?.is_none() {
+            return Ok(None);
+        }
+        let (Some(native), Some((clip, _))) = (
+            self.models.get(model.0).and_then(Option::as_ref),
+            self.animations.native(pose.clip),
+        ) else {
+            return Ok(None);
+        };
+        Ok(self
+            .surfaces
+            .prepare(material, &self.textures, &self.targets, tint)
+            .map(|prepared| (native, clip, prepared)))
+    }
+
+    /// Releases every clip loaded from one file. Its clip handles become stale
+    /// forever; models are unaffected. Returns false if already unloaded.
+    pub fn unload_model_animations(&mut self, set: ModelAnimationsId) -> bool {
+        self.animations.unload(set)
+    }
+
+    pub(crate) fn load_model_animations(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        path: &Path,
+        rate: rayengine_core::skeletal::KeyframeRate,
+    ) -> Result<ModelAnimationsId, Error> {
+        self.animations.load(raylib, thread, path, rate)
     }
 
     /// Borrows an uploaded generated mesh, or `None` for an unloaded handle.
@@ -567,6 +692,7 @@ impl<'audio> Assets<'audio> {
                         })
                 }),
         );
+        self.model_skins.push(animation::inspect_skin(&model));
         self.models.push(Some(model));
         self.model_paths.insert(path, id);
         Ok(id)

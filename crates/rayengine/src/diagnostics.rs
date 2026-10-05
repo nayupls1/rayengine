@@ -64,8 +64,10 @@ pub struct DrawCounters {
     pub primitives_3d: u64,
     /// Mesh submissions, including constituent meshes of imported models.
     pub meshes: u64,
-    /// Imported model requests.
+    /// Imported model requests, including animated models.
     pub models: u64,
+    /// Skeletal poses applied before animated model draws (CPU skinning updates).
+    pub model_poses: u64,
     /// World textures and UI icons.
     pub textures: u64,
     /// UI rectangles, circles and button focus outlines.
@@ -86,6 +88,7 @@ impl DrawCounters {
             primitives_3d,
             meshes,
             models,
+            model_poses,
             textures,
             ui_primitives,
             text
@@ -111,6 +114,12 @@ pub struct ResourceCounts {
     pub textures: u64,
     /// Imported models.
     pub models: u64,
+    /// Loaded skeletal animation files (each owns one or more clips).
+    pub model_animations: u64,
+    /// Skeletal clips in loaded animation files.
+    pub model_clips: u64,
+    /// Keyframe pose payload bytes (one transform per bone per keyframe).
+    pub model_animation_bytes: u64,
     /// Loaded sounds; audio storage bytes are not estimated.
     pub sounds: u64,
     /// Loaded streamed music resources.
@@ -141,6 +150,9 @@ impl ResourceCounts {
             render_target_bytes,
             textures,
             models,
+            model_animations,
+            model_clips,
+            model_animation_bytes,
             sounds,
             music_streams,
             sound_instances,

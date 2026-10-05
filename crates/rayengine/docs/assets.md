@@ -33,7 +33,7 @@ the SDK validates them before passing strings to raylib.
 
 Loading the same canonical path returns the same live handle. Explicit unload
 invalidates that handle, and future loads get a new one: indices are never
-reused during a run. `assets.texture/model/sound` return `None` after unload;
+reused during a run. `assets.texture/model/sound` and `model_clip_info` return `None` after unload;
 drawing an unloaded handle returns `false`. Handles belong to one run and should
 not be retained for another `App::run`.
 
@@ -53,6 +53,12 @@ typed uniforms, custom GLSL, replacement, and dependency lifetime rules.
 Sprite sheets draw selected `SpriteRegion`s from the same cached texture handles.
 See [sprite sheets and animation](crate::guides::sprites) for explicit pivots,
 rotation, flips, tint, CPU playback and region validation.
+
+Skinned models play clips loaded with `InitContext::model_animations` into a
+`ModelAnimationsId` set, cached by path and keyframe rate and unloaded as a
+whole with `Assets::unload_model_animations`. See
+[skeletal animation](crate::guides::skeletal_animation) for formats, timing,
+compatibility checks and limits.
 
 Audio is opt-in:
 

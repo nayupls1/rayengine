@@ -23,6 +23,7 @@ cargo test -p rayengine "${features[@]}" native_state -- --ignored --test-thread
 cargo test -p rayengine "${features[@]}" native_ui -- --ignored --test-threads=1
 RAYENGINE_FONT_ARTIFACTS="$rayengine_root/artifacts/smoke/fonts" cargo test -p rayengine "${features[@]}" native_font -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_sprite -- --ignored --test-threads=1
+cargo test -p rayengine "${features[@]}" native_animation -- --ignored --test-threads=1
 cargo test -p rayengine "${features[@]}" native_diagnostics -- --ignored --test-threads=1
 cargo test -p rayengine-demos "${demo_features[@]}" native_gameplay -- --ignored --test-threads=1
 cargo test -p rayengine-beacons "${demo_features[@]}" native_plugin -- --ignored --test-threads=1
@@ -46,6 +47,8 @@ cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 
 cargo run -p rayengine "${features[@]}" --example controls -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/controls-portrait.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/sprites-wide.png"
 cargo run -p rayengine "${features[@]}" --example sprites -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/sprites-portrait.png"
+cargo run -p rayengine "${features[@]}" --example character -- --hidden --frames 140 --size 1280x720 --screenshot "artifacts/smoke/$backend/character-wide.png"
+cargo run -p rayengine "${features[@]}" --example character -- --hidden --frames 140 --size 800x1000 --screenshot "artifacts/smoke/$backend/character-portrait.png"
 cargo run -p rayengine "${features[@]}" --example tweens -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/tweens-wide.png"
 cargo run -p rayengine "${features[@]}" --example tweens -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/tweens-portrait.png"
 cargo run -p rayengine "${features[@]}" --example simulation -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/simulation-wide.png"
