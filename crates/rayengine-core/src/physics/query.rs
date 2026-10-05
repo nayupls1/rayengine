@@ -55,7 +55,7 @@ fn validate<const N: usize>(shape: geometry::Shape<N>, center: [f32; N]) -> Resu
     }
     Ok(())
 }
-fn motion<const N: usize>(center: [f32; N], delta: [f32; N]) -> Result<f32, QueryError> {
+fn motion<const N: usize>(center: [f32; N], delta: [f32; N]) -> Result<f64, QueryError> {
     let length = delta
         .iter()
         .map(|v| f64::from(*v).powi(2))
@@ -67,7 +67,7 @@ fn motion<const N: usize>(center: [f32; N], delta: [f32; N]) -> Result<f32, Quer
     {
         return Err(QueryError::InvalidMotion);
     }
-    Ok(length as f32)
+    Ok(length)
 }
 fn pair<const N: usize>(
     a: geometry::Shape<N>,
@@ -90,13 +90,13 @@ fn cast<const N: usize>(
     pa: [f32; N],
     b: geometry::Shape<N>,
     pb: [f32; N],
-    delta: [f32; N],
-) -> Option<(f32, [f32; N])> {
+    delta: [f64; N],
+) -> Option<(f64, [f32; N])> {
     // Point rays use a zero-sized box internally; public shapes stay positive.
     if geometry::overlap(a, pa, b, pb).is_some() {
         return Some((0.0, [0.0; N]));
     }
-    geometry::sweep(a, pa, b, pb, delta)
+    geometry::sweep_precise(a, pa, b, pb, delta)
 }
 
 macro_rules! queries {
@@ -104,9 +104,11 @@ macro_rules! queries {
         /// Earliest entering contact along a finite translation.
         #[derive(Clone, Copy, Debug, PartialEq)]
         pub struct $hit {
-            /// Fraction of the requested translation, in `[0, 1]`.
+            /// Fraction of the requested translation, in `[0, 1]`, rounded to f32.
+            /// World ordering uses the unrounded fraction.
             pub fraction: f32,
             /// Distance traveled by the cast's reference center, in world units.
+            /// Rounded to f32 independently of position and fraction.
             pub distance: f32,
             /// Reference center at impact (ray point for raycasts). For shape
             /// casts this is the moving center, not a point on either surface.
@@ -144,6 +146,17 @@ macro_rules! queries {
                 target: Self,
                 target_center: $v,
             ) -> Result<Option<$hit>, QueryError> {
+                Ok(self
+                    .cast_precise(center, translation, target, target_center)?
+                    .map(|(_, hit)| hit))
+            }
+            fn cast_precise(
+                self,
+                center: $v,
+                translation: $v,
+                target: Self,
+                target_center: $v,
+            ) -> Result<Option<(f64, $hit)>, QueryError> {
                 validate(self.internal(), center.to_array())?;
                 let length = motion(center.to_array(), translation.to_array())?;
                 pair(
@@ -157,13 +170,20 @@ macro_rules! queries {
                     center.to_array(),
                     target.internal(),
                     target_center.to_array(),
-                    translation.to_array(),
+                    translation.to_array().map(f64::from),
                 )
-                .map(|(fraction, normal)| $hit {
-                    fraction,
-                    distance: length * fraction,
-                    position: center + translation * fraction,
-                    normal: $v::from_array(normal),
+                .map(|(fraction, normal)| {
+                    (
+                        fraction,
+                        $hit {
+                            fraction: fraction as f32,
+                            distance: (length * fraction) as f32,
+                            position: $v::from_array(std::array::from_fn(|i| {
+                                (f64::from(center[i]) + f64::from(translation[i]) * fraction) as f32
+                            })),
+                            normal: $v::from_array(normal),
+                        },
+                    )
                 }))
             }
             /// Casts a point ray against this exact shape at `center`.
@@ -176,6 +196,16 @@ macro_rules! queries {
                 ray: $ray,
                 max_distance: f32,
             ) -> Result<Option<$hit>, QueryError> {
+                Ok(self
+                    .raycast_precise(center, ray, max_distance)?
+                    .map(|(_, hit)| hit))
+            }
+            fn raycast_precise(
+                self,
+                center: $v,
+                ray: $ray,
+                max_distance: f32,
+            ) -> Result<Option<(f64, $hit)>, QueryError> {
                 if !max_distance.is_finite() || max_distance < 0.0 {
                     return Err(QueryError::InvalidMotion);
                 }
@@ -193,19 +223,31 @@ macro_rules! queries {
                     ray.origin().to_array(),
                     self.internal(),
                     center.to_array(),
-                    delta.to_array(),
+                    ray.direction()
+                        .to_array()
+                        .map(|v| f64::from(v) * f64::from(max_distance)),
                 )
-                .map(|(fraction, normal)| $hit {
-                    fraction,
-                    distance: max_distance * fraction,
-                    position: ray.at(max_distance * fraction),
-                    normal: $v::from_array(normal),
+                .map(|(fraction, normal)| {
+                    (
+                        fraction,
+                        $hit {
+                            fraction: fraction as f32,
+                            distance: (f64::from(max_distance) * fraction) as f32,
+                            position: $v::from_array(std::array::from_fn(|i| {
+                                (f64::from(ray.origin()[i])
+                                    + f64::from(ray.direction()[i])
+                                        * f64::from(max_distance)
+                                        * fraction) as f32
+                            })),
+                            normal: $v::from_array(normal),
+                        },
+                    )
                 }))
             }
         }
         impl super::$world {
             /// Earliest eligible snapshot hit, scanning current body geometry.
-            /// Equal fractions choose the lowest [`BodyId`]. Target velocities
+            /// Equal unrounded fractions choose the lowest [`BodyId`]. Target velocities
             /// are ignored. Includes edits made through `body_mut` immediately.
             /// Invalid query or eligible body geometry returns an error.
             pub fn cast_shape(
@@ -217,22 +259,24 @@ macro_rules! queries {
             ) -> Result<Option<$world_hit>, QueryError> {
                 validate(shape.internal(), center.to_array())?;
                 motion(center.to_array(), translation.to_array())?;
-                let mut nearest: Option<$world_hit> = None;
+                let mut nearest: Option<(f64, $world_hit)> = None;
                 for (id, body) in self.iter() {
                     if !filter.allows(id, body.filter, body.is_trigger) {
                         continue;
                     }
-                    if let Some(hit) = shape.cast(center, translation, body.shape, body.position)? {
-                        if nearest.is_none_or(|old| hit.fraction < old.hit.fraction) {
-                            nearest = Some($world_hit { body: id, hit });
+                    if let Some((fraction, hit)) =
+                        shape.cast_precise(center, translation, body.shape, body.position)?
+                    {
+                        if nearest.is_none_or(|(old_fraction, _)| fraction < old_fraction) {
+                            nearest = Some((fraction, $world_hit { body: id, hit }));
                         }
                     }
                 }
-                Ok(nearest)
+                Ok(nearest.map(|(_, hit)| hit))
             }
             /// Earliest eligible exact point ray hit. Same finite limits,
             /// initial-overlap and entering rules as the standalone shape query.
-            /// Equal fractions choose the lowest [`BodyId`].
+            /// Equal unrounded fractions choose the lowest [`BodyId`].
             pub fn raycast(
                 &self,
                 ray: $ray,
@@ -246,18 +290,21 @@ macro_rules! queries {
                     ray.origin().to_array(),
                     (ray.direction() * max_distance).to_array(),
                 )?;
-                let mut nearest: Option<$world_hit> = None;
+                let mut nearest: Option<(f64, $world_hit)> = None;
                 for (id, body) in self.iter() {
                     if !filter.allows(id, body.filter, body.is_trigger) {
                         continue;
                     }
-                    if let Some(hit) = body.shape.raycast(body.position, ray, max_distance)? {
-                        if nearest.is_none_or(|old| hit.fraction < old.hit.fraction) {
-                            nearest = Some($world_hit { body: id, hit });
+                    if let Some((fraction, hit)) =
+                        body.shape
+                            .raycast_precise(body.position, ray, max_distance)?
+                    {
+                        if nearest.is_none_or(|(old_fraction, _)| fraction < old_fraction) {
+                            nearest = Some((fraction, $world_hit { body: id, hit }));
                         }
                     }
                 }
-                Ok(nearest)
+                Ok(nearest.map(|(_, hit)| hit))
             }
             /// Visits exact positive overlaps in ascending [`BodyId`] order.
             /// Touching is excluded. Scans current geometry without an index or

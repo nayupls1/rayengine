@@ -82,7 +82,7 @@ collision masks must accept each other's layers. Triggers are excluded by
 default; opt in with `include_triggers: true`. Exclude the casting body's ID
 and any other identities through `excluded`. All body kinds are eligible.
 The first cast hit is the smallest travel fraction, with the lowest `BodyId`
-breaking equal-fraction ties. Overlap visits occur in ascending identity order,
+breaking equal unrounded-fraction ties. Overlap visits occur in ascending identity order,
 with exact narrowphase tests rather than bounding-box overlap.
 
 ```rust
@@ -109,7 +109,11 @@ assert_eq!(overlaps, vec![target]);
 A cast reports `fraction` in `[0, 1]`, `distance` in world units, `position`
 and `normal`. **Position is the cast's reference center at impact** (the ray
 point for a ray), not a shape surface contact point. The normal points from
-target toward caster. Initial positive overlaps report fraction/distance zero,
+target toward caster. Relative coordinates, hit selection and contact construction
+use f64 internally; public distance/fraction fields round to f32 independently
+of position. On very long casts, distinct hits may share the same rounded
+fraction/distance, so reconstructing position from those fields can lose
+precision. World queries compare the unrounded fractions. Initial positive overlaps report fraction/distance zero,
 the original center and a zero normal; use `overlap` for a separating normal.
 Touching at the start hits only with inward motion. Outward motion, parallel
 surface grazing and pure tangency miss. Entering contact at the end of travel

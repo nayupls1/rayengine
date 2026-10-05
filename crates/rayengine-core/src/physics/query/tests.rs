@@ -399,6 +399,7 @@ macro_rules! scenarios {
                     .unwrap()
                     .unwrap();
                 assert_eq!(hit.normal, x(-1.0));
+                near(hit.position.x, -2.0);
                 let tangent = $ray::new(x(-100_000_000.0) + y(1.0), x(1.0)).unwrap();
                 assert!(
                     shape(true)
@@ -406,6 +407,71 @@ macro_rules! scenarios {
                         .unwrap()
                         .is_none()
                 );
+            }
+            #[test]
+            fn oblique_round_touching_and_endpoint_contacts_are_included() {
+                let caster = $shape::round(2.0);
+                let target = $shape::round(3.0);
+                let start = x(3.0) + y(4.0);
+                let hit = caster
+                    .cast(start, x(-20.0) + y(-12.0), target, $v::ZERO)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(hit.fraction, 0.0);
+                assert_eq!(hit.position, start);
+                near(hit.normal.x, 0.6);
+                near(hit.normal.y, 0.8);
+                let hit = caster
+                    .cast(x(23.0) + y(1.0), x(-20.0) + y(3.0), target, $v::ZERO)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(hit.fraction, 1.0);
+                assert_eq!(hit.position, start);
+                near(hit.normal.x, 0.6);
+                near(hit.normal.y, 0.8);
+                assert!(
+                    caster
+                        .cast(start, x(20.0) + y(12.0), target, $v::ZERO)
+                        .unwrap()
+                        .is_none()
+                );
+                // Do not promote actual near misses beyond the end to a hit.
+                let before = x((-20.0_f32).next_up()) + y(3.0);
+                assert!(
+                    caster
+                        .cast(x(23.0) + y(1.0), before, target, $v::ZERO)
+                        .unwrap()
+                        .is_none()
+                );
+            }
+            #[test]
+            fn long_world_casts_choose_the_actual_first_hit_before_rounding() {
+                for a in [false, true] {
+                    for b in [false, true] {
+                        let mut world = $world::new(4.0);
+                        let farther = world.insert($body::new($v::ZERO, shape(b)));
+                        let nearer = world.insert($body::new(x(-2.0), shape(b)));
+                        assert!(farther < nearer);
+                        let ray = $ray::new(x(-100_000_000.0), x(1.0)).unwrap();
+                        let hit = world
+                            .raycast(ray, 200_000_000.0, QueryFilter::default())
+                            .unwrap()
+                            .unwrap();
+                        assert_eq!(hit.body, nearer);
+                        near(hit.hit.position.x, -3.0);
+                        let hit = world
+                            .cast_shape(
+                                shape(a),
+                                x(-1_000_000_000.0),
+                                x(2_000_000_000.0),
+                                QueryFilter::default(),
+                            )
+                            .unwrap()
+                            .unwrap();
+                        assert_eq!(hit.body, nearer);
+                        near(hit.hit.position.x, -4.0);
+                    }
+                }
             }
             #[test]
             fn large_and_small_geometry_does_not_overflow_distance_squares() {
