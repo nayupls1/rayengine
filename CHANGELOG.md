@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Exact CPU raycasts, translation casts and overlap visitors for 2D boxes/circles
+  and 3D boxes/spheres, with symmetric filters, exclusions, opt-in triggers and
+  deterministic first hits over current world bodies; checked docs and a headless example.
+
 - Game-owned CPU simulation timelines with pause, validated speed controls,
   fixed timesteps, fractional time carry and bounded discard; checked guide and
   interactive example keep UI responsive and consume simulation commands once.

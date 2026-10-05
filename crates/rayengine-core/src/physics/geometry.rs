@@ -59,11 +59,11 @@ pub(super) fn overlap<const N: usize>(
     b: Shape<N>,
     pb: [f32; N],
 ) -> Option<Contact<N>> {
-    let p = sub(pa, pb);
+    let p: [f64; N] = std::array::from_fn(|i| f64::from(pa[i]) - f64::from(pb[i]));
     match (a, b) {
         (Shape::Box(ha), Shape::Box(hb)) => {
-            let extent = add(ha, hb);
-            let depths = std::array::from_fn::<_, N, _>(|i| extent[i] - p[i].abs());
+            let depths: [f64; N] =
+                std::array::from_fn(|i| f64::from(ha[i]) + f64::from(hb[i]) - p[i].abs());
             if depths.iter().any(|d| *d <= 0.0) {
                 return None;
             }
@@ -74,40 +74,44 @@ pub(super) fn overlap<const N: usize>(
             normal[axis] = if p[axis] < 0.0 { -1.0 } else { 1.0 };
             Some(Contact {
                 normal,
-                depth: depths[axis],
+                depth: depths[axis] as f32,
             })
         }
         (Shape::Round(ra), Shape::Round(rb)) => {
-            let distance = dot(p, p).sqrt();
-            let depth = ra + rb - distance;
+            let distance = p.iter().map(|v| v * v).sum::<f64>().sqrt();
+            let depth = f64::from(ra) + f64::from(rb) - distance;
             if depth <= 0.0 {
                 return None;
             }
             let normal = if distance > 0.0 {
-                scale(p, 1.0 / distance)
+                p.map(|v| (v / distance) as f32)
             } else {
                 let mut n = [0.0; N];
                 n[0] = 1.0;
                 n
             };
-            Some(Contact { normal, depth })
+            Some(Contact {
+                normal,
+                depth: depth as f32,
+            })
         }
-        (Shape::Round(r), Shape::Box(h)) => round_box(p, r, h),
-        (Shape::Box(h), Shape::Round(r)) => round_box(scale(p, -1.0), r, h).map(|c| Contact {
-            normal: scale(c.normal, -1.0),
-            depth: c.depth,
-        }),
+        (Shape::Round(r), Shape::Box(h)) => round_box(p, f64::from(r), h.map(f64::from)),
+        (Shape::Box(h), Shape::Round(r)) => {
+            round_box(p.map(|v| -v), f64::from(r), h.map(f64::from)).map(|c| Contact {
+                normal: scale(c.normal, -1.0),
+                depth: c.depth,
+            })
+        }
     }
 }
-fn round_box<const N: usize>(p: [f32; N], r: f32, h: [f32; N]) -> Option<Contact<N>> {
-    let closest = std::array::from_fn(|i| p[i].clamp(-h[i], h[i]));
-    let delta = sub(p, closest);
-    let distance = dot(delta, delta).sqrt();
+fn round_box<const N: usize>(p: [f64; N], r: f64, h: [f64; N]) -> Option<Contact<N>> {
+    let delta: [f64; N] = std::array::from_fn(|i| p[i] - p[i].clamp(-h[i], h[i]));
+    let distance = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
     if distance > 0.0 {
         let depth = r - distance;
         return (depth > 0.0).then(|| Contact {
-            normal: scale(delta, 1.0 / distance),
-            depth,
+            normal: delta.map(|v| (v / distance) as f32),
+            depth: depth as f32,
         });
     }
     let axis = (0..N)
@@ -117,7 +121,7 @@ fn round_box<const N: usize>(p: [f32; N], r: f32, h: [f32; N]) -> Option<Contact
     normal[axis] = if p[axis] < 0.0 { -1.0 } else { 1.0 };
     Some(Contact {
         normal,
-        depth: r + h[axis] - p[axis].abs(),
+        depth: (r + h[axis] - p[axis].abs()) as f32,
     })
 }
 
@@ -130,10 +134,22 @@ pub(super) fn sweep<const N: usize>(
     pb: [f32; N],
     delta: [f32; N],
 ) -> Option<(f32, [f32; N])> {
-    let p = sub(pa, pb);
+    sweep_precise(a, pa, b, pb, delta.map(f64::from)).map(|(time, normal)| (time as f32, normal))
+}
+
+// Keep relative subtraction, extents and travel fractions wide until the
+// caller has selected the first collider and constructed its contact position.
+pub(super) fn sweep_precise<const N: usize>(
+    a: Shape<N>,
+    pa: [f32; N],
+    b: Shape<N>,
+    pb: [f32; N],
+    delta: [f64; N],
+) -> Option<(f64, [f32; N])> {
+    let p: [f64; N] = std::array::from_fn(|i| f64::from(pa[i]) - f64::from(pb[i]));
     match (a, b) {
         (Shape::Box(ha), Shape::Box(hb)) => {
-            let h = add(ha, hb);
+            let h: [f64; N] = std::array::from_fn(|i| f64::from(ha[i]) + f64::from(hb[i]));
             let mut enter = 0.0_f64;
             let mut exit = f64::INFINITY;
             let mut normal = [0.0; N];
@@ -144,39 +160,56 @@ pub(super) fn sweep<const N: usize>(
                         return None;
                     }
                 } else {
-                    let t1 = f64::from(-h[i] - p[i]) / f64::from(delta[i]);
-                    let t2 = f64::from(h[i] - p[i]) / f64::from(delta[i]);
+                    let t1 = (-h[i] - p[i]) / delta[i];
+                    let t2 = (h[i] - p[i]) / delta[i];
                     let lo = t1.min(t2);
                     if lo >= enter {
                         enter = lo;
                         normal = [0.0; N];
-                        normal[i] = -delta[i].signum();
+                        normal[i] = -delta[i].signum() as f32;
                     }
                     exit = exit.min(t1.max(t2));
                 }
             }
-            (enter < exit && enter <= 1.0 && dot(normal, delta) < 0.0)
-                .then_some((enter as f32, normal))
+            (enter < exit
+                && enter <= 1.0
+                && (0..N).map(|i| f64::from(normal[i]) * delta[i]).sum::<f64>() < 0.0)
+                .then_some((enter, normal))
         }
-        (Shape::Round(ra), Shape::Round(rb)) => rounded_sweep(p, delta, [0.0; N], ra + rb),
-        (Shape::Round(r), Shape::Box(h)) => rounded_sweep(p, delta, h, r),
-        (Shape::Box(h), Shape::Round(r)) => rounded_sweep(scale(p, -1.0), scale(delta, -1.0), h, r)
-            .map(|(t, n)| (t, scale(n, -1.0))),
+        (Shape::Round(ra), Shape::Round(rb)) => {
+            rounded_sweep(p, delta, [0.0; N], f64::from(ra) + f64::from(rb))
+        }
+        (Shape::Round(r), Shape::Box(h)) => rounded_sweep(p, delta, h.map(f64::from), f64::from(r)),
+        (Shape::Box(h), Shape::Round(r)) => rounded_sweep(
+            p.map(|v| -v),
+            delta.map(|v| -v),
+            h.map(f64::from),
+            f64::from(r),
+        )
+        .map(|(t, n)| (t, scale(n, -1.0))),
     }
 }
 
 // Squared distance to an AABB is quadratic between crossings of its faces.
 // Solving those intervals gives exact face, edge and corner CCD for rounds.
 fn rounded_sweep<const N: usize>(
-    p: [f32; N],
-    delta: [f32; N],
-    half: [f32; N],
-    radius: f32,
-) -> Option<(f32, [f32; N])> {
-    let p = p.map(f64::from);
-    let d = delta.map(f64::from);
-    let h = half.map(f64::from);
-    let r = f64::from(radius);
+    p: [f64; N],
+    d: [f64; N],
+    h: [f64; N],
+    r: f64,
+) -> Option<(f64, [f32; N])> {
+    let surface_offset = |time: f64| -> [f64; N] {
+        std::array::from_fn(|i| {
+            let at = p[i] + d[i] * time;
+            at - at.clamp(-h[i], h[i])
+        })
+    };
+    let initial = surface_offset(0.0);
+    if initial.iter().map(|v| v * v).sum::<f64>() == r * r
+        && (0..N).map(|i| initial[i] * d[i]).sum::<f64>() < 0.0
+    {
+        return Some((0.0, initial.map(|v| (v / r) as f32)));
+    }
     let mut cuts = vec![0.0, 1.0];
     for i in 0..N {
         if d[i] != 0.0 {
@@ -192,43 +225,99 @@ fn rounded_sweep<const N: usize>(
     cuts.dedup();
     for interval in cuts.windows(2) {
         let mid = (interval[0] + interval[1]) * 0.5;
-        let mut qa = 0.0;
-        let mut qb = 0.0;
-        let mut qc = -r * r;
-        for i in 0..N {
-            let at = p[i] + d[i] * mid;
-            if at.abs() > h[i] {
-                let offset = p[i] - h[i].copysign(at);
-                qa += d[i] * d[i];
-                qb += 2.0 * offset * d[i];
-                qc += offset * offset;
+        let active: [bool; N] = std::array::from_fn(|i| (p[i] + d[i] * mid).abs() > h[i]);
+        let offset: [f64; N] = std::array::from_fn(|i| {
+            if active[i] {
+                p[i] - h[i].copysign(p[i] + d[i] * mid)
+            } else {
+                0.0
             }
-        }
+        });
+        let qa: f64 = (0..N).filter(|&i| active[i]).map(|i| d[i] * d[i]).sum();
         if qa == 0.0 {
             continue;
         }
-        let disc = qb * qb - 4.0 * qa * qc;
-        if disc <= 0.0 {
-            continue;
-        } // Tangency has no inward velocity.
-        let root = disc.sqrt();
-        let q = -0.5 * (qb + root.copysign(qb));
-        let t = (q / qa).min(qc / q);
-        if t < interval[0] - 1e-10 || t > interval[1] + 1e-10 {
+        let qb: f64 = (0..N)
+            .filter(|&i| active[i])
+            .map(|i| 2.0 * offset[i] * d[i])
+            .sum();
+        let vertex = -qb / (2.0 * qa);
+        let at_vertex: [f64; N] = std::array::from_fn(|i| {
+            if active[i] {
+                offset[i] + d[i] * vertex
+            } else {
+                0.0
+            }
+        });
+        // Gram's identity expresses the discriminant without subtracting
+        // large position squares or evaluating a rounded vertex distance:
+        // r²*|d|² - sum((offset_i*d_j - offset_j*d_i)²).
+        // It retains small radii on distant rays and exact oblique tangencies.
+        let mut perpendicular = 0.0;
+        for i in 0..N {
+            for j in i + 1..N {
+                if active[i] && active[j] {
+                    let cross = offset[i] * d[j] - offset[j] * d[i];
+                    perpendicular += cross * cross;
+                }
+            }
+        }
+        let radial = r * r * qa;
+        let discriminant = radial - perpendicular;
+        // Products and the cross-square sum can round an exact 3D tangency
+        // slightly positive. Treat a gap within f64 arithmetic uncertainty as
+        // grazing. Scale by the discriminant's terms, not world position, so
+        // distant head-on casts retain even small collider radii.
+        let roundoff = 16.0 * f64::EPSILON * (radial + perpendicular);
+        if discriminant <= roundoff {
+            continue; // Tangency has no reliable inward contact.
+        }
+        let span = discriminant.sqrt() / qa;
+        let mut t = vertex - span;
+        if t > 1.0 {
+            // Snap a rounded endpoint root only if the actual endpoint reaches
+            // the rounded geometry; a near miss beyond travel still misses.
+            let end = surface_offset(1.0);
+            if end.iter().map(|v| v * v).sum::<f64>() <= r * r {
+                t = 1.0;
+            }
+        }
+        if !(0.0..=1.0).contains(&t) {
             continue;
         }
-        let t = t.clamp(0.0, 1.0);
-        let normal64: [f64; N] = std::array::from_fn(|i| {
-            let at = p[i] + d[i] * t;
-            at - at.clamp(-h[i], h[i])
+        // Never extend a face equation into a different surface region. Only
+        // snap a root a few f64 ULPs outside its interval when the actual
+        // boundary reaches the rounded geometry. A fixed fraction tolerance
+        // spans entire unrelated faces on long casts.
+        let boundary = t.clamp(interval[0], interval[1]);
+        let snapped = boundary != t;
+        if snapped {
+            let tolerance = 4.0 * f64::EPSILON * t.abs().max(boundary.abs());
+            let offset = surface_offset(boundary);
+            if (t - boundary).abs() > tolerance || offset.iter().map(|v| v * v).sum::<f64>() > r * r
+            {
+                continue;
+            }
+            t = boundary;
+        }
+        // Recover the normal near the vertex too, avoiding p + d*t cancellation.
+        let mut normal64: [f64; N] = std::array::from_fn(|i| {
+            if active[i] {
+                at_vertex[i] - d[i] * span
+            } else {
+                0.0
+            }
         });
+        if snapped {
+            normal64 = surface_offset(t);
+        }
         let length = normal64.iter().map(|x| x * x).sum::<f64>().sqrt();
         if length == 0.0 {
             continue;
         }
         let normal = normal64.map(|x| (x / length) as f32);
-        if dot(normal, delta) < 0.0 {
-            return Some((t as f32, normal));
+        if (0..N).map(|i| f64::from(normal[i]) * d[i]).sum::<f64>() < 0.0 {
+            return Some((t, normal));
         }
     }
     None
