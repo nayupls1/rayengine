@@ -139,3 +139,129 @@ fn native_ui_cursor_and_scaled_icons_smoke() {
     }
     std::fs::remove_file(path).unwrap();
 }
+
+#[test]
+#[ignore = "requires native OpenGL; scripts/native_smoke.sh runs serially"]
+fn native_ui_nested_clipping_matches_hit_tests_and_restores_scissor() {
+    use rayengine_core::{collision::Aabb2, ui::UiClip};
+    struct Probe;
+    impl Game for Probe {
+        fn fixed_update(&mut self, _: &mut Update<'_, '_>) {}
+        fn draw(&mut self, frame: &mut Frame<'_, '_>) {
+            let size = frame.viewport.logical_size;
+            let full = Aabb2 {
+                min: Vec2::ZERO,
+                max: size,
+            };
+            let parent = UiClip::new(Aabb2 {
+                min: Vec2::new(10.25, 20.25),
+                max: size - Vec2::new(15.25, 25.25),
+            });
+            let child = UiClip::new(Aabb2 {
+                min: Vec2::new(-5.0, 45.75),
+                max: Vec2::new(size.x * 0.5 + 0.25, size.y + 10.0),
+            });
+            let empty = UiClip::new(Aabb2 {
+                min: size + Vec2::ONE,
+                max: size + Vec2::splat(20.0),
+            });
+            frame.clear(Color::BLACK);
+            frame.ui(|canvas| {
+                canvas.clipped(parent, |canvas| {
+                    canvas.rectangle(full, Color::RED);
+                    canvas.clipped(child, |canvas| canvas.rectangle(full, Color::GREEN));
+                    // Sibling scopes must recover the parent, including empty scopes.
+                    canvas.clipped(empty, |canvas| canvas.rectangle(full, Color::MAGENTA));
+                    canvas.rectangle(
+                        Aabb2 {
+                            min: Vec2::ZERO,
+                            max: Vec2::new(size.x, 40.0),
+                        },
+                        Color::BLUE,
+                    );
+                });
+                // Exiting the outer scope removes scissor entirely.
+                canvas.rectangle(
+                    Aabb2 {
+                        min: size - Vec2::splat(8.0),
+                        max: size,
+                    },
+                    Color::WHITE,
+                );
+            });
+            let background = if frame.ui_target.is_some() {
+                Color::BLANK
+            } else {
+                Color::BLACK
+            };
+            let texture = frame.ui_target.as_deref().unwrap_or(frame.target).texture();
+            let mut image = texture.load_image().unwrap();
+            image.flip_vertical();
+            let scale = Vec2::new(image.width as f32, image.height as f32) / size;
+            let mut ui = UiState::default();
+            let mut region = UiRegion::new(UiId(1), full);
+            region.clip = Some(parent.intersect(child));
+            for py in 0..image.height {
+                for px in 0..image.width {
+                    let point = Vec2::new(px as f32 + 0.5, py as f32 + 0.5) / scale;
+                    let inside_parent = parent.contains(point);
+                    let expected = if point.cmpge(size - Vec2::splat(8.0)).all() {
+                        Color::WHITE
+                    } else if inside_parent && point.y < 40.0 {
+                        Color::BLUE
+                    } else if inside_parent && child.contains(point) {
+                        Color::GREEN
+                    } else if inside_parent {
+                        Color::RED
+                    } else {
+                        background
+                    };
+                    assert_eq!(
+                        image.get_color(px, py),
+                        expected,
+                        "pixel ({px}, {py}) at scale {scale:?}"
+                    );
+                    ui.update(
+                        &[region],
+                        UiInput {
+                            pointer: Some(point),
+                            window_focused: true,
+                            ..UiInput::default()
+                        },
+                    );
+                    assert_eq!(
+                        ui.response(region.id).unwrap().hovered,
+                        parent.intersect(child).contains(point)
+                    );
+                }
+            }
+        }
+    }
+    for (size, mode, quality) in [
+        ((320, 180), ScaleMode::Fit, RenderQuality::default()),
+        ((480, 320), ScaleMode::Expand, RenderQuality::default()),
+        (
+            (480, 320),
+            ScaleMode::Fit,
+            RenderQuality {
+                render_scale: 2.0,
+                ..Default::default()
+            },
+        ),
+    ] {
+        let mut config = Config::new("native UI clip probe");
+        config.reference_size = Vec2::new(240.0, 135.0);
+        config.window_size = size;
+        config.scale_mode = mode;
+        config.render_quality = quality;
+        App::new(config)
+            .with_options(RunOptions {
+                frames: Some(1),
+                hidden: true,
+                uncapped: true,
+                ..Default::default()
+            })
+            .run(Probe)
+            .unwrap();
+    }
+}

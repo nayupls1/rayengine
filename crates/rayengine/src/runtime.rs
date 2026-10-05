@@ -766,6 +766,10 @@ impl App {
                     let delta = raylib.get_mouse_delta();
                     input.add_pointer_delta(Vec2::new(delta.x, delta.y));
                 }
+                if window_focused {
+                    let wheel = raylib.get_mouse_wheel_move_v();
+                    input.add_scroll_delta(Vec2::new(wheel.x, wheel.y));
+                }
                 let mouse = raylib.get_mouse_position();
                 let plan = clock.advance(elapsed);
                 report.dropped_time += plan.dropped;

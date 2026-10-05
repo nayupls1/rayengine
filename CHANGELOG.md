@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reusable UI list/grid layout, retained scroll offsets and scrollbar geometry,
+  nested drawing/hit-test clipping, wheel routing and stable offscreen focus;
+  checked guide and native catalog/action-inspector example with controller input.
+
 - Exact CPU raycasts, translation casts and overlap visitors for 2D boxes/circles
   and 3D boxes/spheres, with symmetric filters, exclusions, opt-in triggers and
   deterministic first hits over current world bodies; checked docs and a headless example.

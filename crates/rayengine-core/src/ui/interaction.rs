@@ -1,5 +1,6 @@
 //! Interaction only: game-owned region IDs/layout and no renderer dependency.
 
+use super::UiClip;
 use crate::{
     collision::Aabb2,
     input::{Action, Input},
@@ -18,6 +19,11 @@ pub struct UiRegion {
     pub id: UiId,
     /// Resolved bounds using the current viewport's logical size.
     pub bounds: Aabb2,
+    /// Effective drawing clip. Offscreen regions remain eligible for navigation.
+    pub clip: Option<UiClip>,
+    /// Explicit wheel recipient (usually the enclosing scroll surface ID).
+    /// Set on both the surface and its children; overlays omit it to block scrolling.
+    pub scroll_target: Option<UiId>,
     /// Disabled regions cannot activate, focus, or begin dragging.
     pub enabled: bool,
     /// Eligible for pointer and keyboard focus.
@@ -32,6 +38,8 @@ impl UiRegion {
         Self {
             id,
             bounds,
+            clip: None,
+            scroll_target: None,
             enabled: true,
             focusable: true,
             draggable: false,
@@ -73,6 +81,8 @@ pub struct UiInput {
     pub pointer: Option<Vec2>,
     /// Primary pointer button.
     pub primary: UiButton,
+    /// Wheel displacement; positive Y means up. Consumed once per fixed tick.
+    pub scroll: Vec2,
     /// Forward focus press edge.
     pub next: bool,
     /// Backward focus press edge.
@@ -101,6 +111,7 @@ impl UiInput {
                 pressed: input.pressed(actions.primary),
                 released: input.released(actions.primary),
             },
+            scroll: input.scroll_delta(),
             next: input.pressed(actions.next),
             previous: input.pressed(actions.previous),
             activate: input.pressed(actions.activate),
@@ -129,6 +140,8 @@ pub struct UiResponse {
     pub enabled: bool,
     /// Topmost pointer hit, including disabled regions.
     pub hovered: bool,
+    /// Wheel displacement routed by the topmost hovered region.
+    pub scroll: Vec2,
     /// Keyboard focus.
     pub focused: bool,
     /// Pointer press began here.
@@ -157,6 +170,7 @@ impl UiResponse {
             id,
             enabled,
             hovered: false,
+            scroll: Vec2::ZERO,
             focused: false,
             pressed: false,
             held: false,
@@ -263,7 +277,15 @@ impl UiState {
             };
         }
         let pointer = input.pointer.filter(|p| p.is_finite());
-        let hovered = pointer.and_then(|p| regions.iter().rposition(|r| r.bounds.contains(p)));
+        let hovered = pointer.and_then(|p| {
+            regions.iter().rposition(|r| {
+                r.bounds.min.is_finite()
+                    && r.bounds.max.is_finite()
+                    && p.cmpge(r.bounds.min).all()
+                    && p.cmplt(r.bounds.max).all()
+                    && r.clip.is_none_or(|clip| clip.contains(p))
+            })
+        });
         if !input.cancel && self.active.is_none() && input.next != input.previous {
             let current = self
                 .focus
@@ -334,6 +356,16 @@ impl UiState {
         }
         if let Some(index) = hovered {
             self.responses[index].hovered = true;
+            if !input.cancel
+                && input.scroll.is_finite()
+                && let Some(target) = regions[index].scroll_target
+                && let Some(response) = self
+                    .responses
+                    .iter_mut()
+                    .find(|r| r.id == target && r.enabled)
+            {
+                response.scroll = input.scroll;
+            }
         }
         if let Some(id) = self.focus {
             self.response_mut(id).focused = true;

@@ -166,6 +166,13 @@ See [controls, save behavior and Linux packaging](examples/games/README.md).
 In the state stack example, Enter starts a session. Escape pauses with the world visible; Enter/Escape
 resumes, and T while paused returns to title and releases session resources.
 
+Try the catalog grid and action inspector with wheel scrolling, clipped panes,
+scrollbar/header dragging and keyboard/controller focus:
+
+```sh
+cargo run -p rayengine --example catalog
+```
+
 Try the draggable menu, keyboard focus, and dynamic cursor capture example:
 
 ```sh
