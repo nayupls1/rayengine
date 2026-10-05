@@ -173,3 +173,28 @@ macro_rules! ray_impl {
 
 ray_impl!(Ray2, RayHit2, Vec2, Aabb2, 2);
 ray_impl!(Ray3, RayHit3, Vec3, Aabb3, 3);
+
+impl Ray3 {
+    /// Intersects an infinite plane in front of this ray (including its origin).
+    /// Returns `None` for invalid plane inputs, a parallel ray, an intersection
+    /// behind the origin, or a result outside finite f32 world coordinates.
+    /// The plane normal need not be normalized. An in-plane ray has no unique hit.
+    pub fn intersect_plane(self, point: Vec3, normal: Vec3) -> Option<Vec3> {
+        if !point.is_finite() {
+            return None;
+        }
+        let normal = Self::new(Vec3::ZERO, normal).ok()?.direction().as_dvec3();
+        let origin = self.origin.as_dvec3();
+        let direction = self.direction.as_dvec3();
+        let denominator = normal.dot(direction);
+        if denominator == 0.0 {
+            return None;
+        }
+        let distance = normal.dot(point.as_dvec3() - origin) / denominator;
+        if !distance.is_finite() || distance < 0.0 {
+            return None;
+        }
+        let hit = (origin + direction * distance).as_vec3();
+        hit.is_finite().then_some(hit)
+    }
+}

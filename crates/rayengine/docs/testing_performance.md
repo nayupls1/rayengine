@@ -35,6 +35,13 @@ across buffer reuse and stamp wraparound, diagonal rules, invalid costs,
 resumed budgets, unchanged buffers in steady state, corner-exact line of sight,
 cost-aware smoothing, follower overshoot, and bodies sliding around walls.
 
+Placement CPU tests cover overlap, all four rotations, negative and extreme
+offsets, shared and blocked access, atomic failed edits, moves/removals, and
+navigation overlays preserving terrain costs. The placement example's test
+checks collision refresh after edits. Camera tests independently project picked
+rays in Fit/Expand and wide/portrait viewports and check invalid/parallel/behind
+plane picks. The native smoke script renders build mode at wide/portrait sizes.
+
 Native rendering is separate and requires a display/OpenGL context:
 
 ```sh
