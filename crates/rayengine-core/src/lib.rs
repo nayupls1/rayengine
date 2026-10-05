@@ -46,9 +46,10 @@ pub mod prelude {
         PathError, PathFinder, PathFollower, PathOptions, PathStatus,
     };
     pub use crate::physics::{
-        BodyId, BodyKind, CollisionFilter, Penetration2D, Penetration3D, PhysicsBody2D,
-        PhysicsBody3D, PhysicsWorld2D, PhysicsWorld3D, Shape2D, Shape3D, StepReport, TriggerEvent,
-        TriggerPhase, UniformGrid2D, UniformGrid3D,
+        BodyId, BodyKind, CastHit2D, CastHit3D, CollisionFilter, OverlapHit2D, OverlapHit3D,
+        Penetration2D, Penetration3D, PhysicsBody2D, PhysicsBody3D, PhysicsWorld2D, PhysicsWorld3D,
+        QueryError, QueryFilter, Shape2D, Shape3D, StepReport, TriggerEvent, TriggerPhase,
+        UniformGrid2D, UniformGrid3D, WorldCastHit2D, WorldCastHit3D,
     };
     pub use crate::quality::{AntiAliasing, RenderPlan, RenderQuality};
     pub use crate::scene::Scene;

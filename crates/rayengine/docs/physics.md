@@ -68,3 +68,74 @@ swept bodies also depenetrate initial overlaps with static AABBs.
 Run the interactive example with `cargo run -p rayengine --example physics`.
 It has pushable boxes, bouncing balls, a moving platform and a trigger zone.
 For broadphase scaling: `cargo bench -p rayengine-core --bench physics`.
+
+## Filtered collision queries
+
+`Shape2D`/`Shape3D::cast` query any supported shape pair without a world;
+`shape.raycast(center, ray, max_distance)` queries an exact box/circle/sphere.
+`Ray2` and `Ray3` normalize finite nonzero directions. The existing spatial
+`Ray::cast(Aabb, ...)` has inclusive boundary rules; physics shape raycasts use
+entering-contact rules consistent with the continuous physics solver.
+
+World `raycast`, `cast_shape` and `visit_overlaps` take a `QueryFilter`. Both
+collision masks must accept each other's layers. Triggers are excluded by
+default; opt in with `include_triggers: true`. Exclude the casting body's ID
+and any other identities through `excluded`. All body kinds are eligible.
+The first cast hit is the smallest travel fraction, with the lowest `BodyId`
+breaking equal-fraction ties. Overlap visits occur in ascending identity order,
+with exact narrowphase tests rather than bounding-box overlap.
+
+```rust
+use rayengine_core::prelude::*;
+let mut world = PhysicsWorld2D::new(4.0);
+// Insert target before wall: earliest geometry still wins.
+let target = world.insert(PhysicsBody2D::new(Vec2::new(10.0, 0.0), Shape2D::round(1.0)));
+let wall = world.insert(PhysicsBody2D::new(Vec2::new(5.0, 0.0),
+    Shape2D::box_shape(Vec2::new(0.1, 10.0))));
+let hit = world.cast_shape(Shape2D::round(0.25), Vec2::ZERO,
+    Vec2::new(100.0, 0.0), QueryFilter::default())?.unwrap();
+assert_eq!(hit.body, wall);
+assert!((hit.hit.distance - 4.7).abs() < 0.0001);
+world.remove(wall);
+let ray = Ray2::new(Vec2::ZERO, Vec2::X)?;
+assert_eq!(world.raycast(ray, 100.0, QueryFilter::default())?.unwrap().body, target);
+let mut overlaps = Vec::new();
+world.visit_overlaps(Shape2D::round(2.0), Vec2::new(10.0, 0.0),
+    QueryFilter::default(), |hit| overlaps.push(hit.body))?;
+assert_eq!(overlaps, vec![target]);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+A cast reports `fraction` in `[0, 1]`, `distance` in world units, `position`
+and `normal`. **Position is the cast's reference center at impact** (the ray
+point for a ray), not a shape surface contact point. The normal points from
+target toward caster. Initial positive overlaps report fraction/distance zero,
+the original center and a zero normal; use `overlap` for a separating normal.
+Touching at the start hits only with inward motion. Outward motion, parallel
+surface grazing and pure tangency miss. Entering contact at the end of travel
+is included. Zero travel reports only positive initial overlap. Overlap
+visitors require positive penetration, so touching is excluded.
+
+Queries return `QueryError` for invalid geometry or motion, including geometry
+edited through public fields. Centers and dimensions must be finite; shape
+sizes/radii must be positive. Ray limits must be finite and nonnegative;
+translations, their length and end positions must be finite. Overflowing
+bounds, relative coordinates or combined extents are invalid geometry.
+Excluded or filtered bodies are not validated. Eligible invalid bodies return
+an error even if an earlier valid hit was found. Overlap visitors validate all
+eligible geometry before calling the visitor, preventing partial results.
+
+World queries are **snapshot casts**: target positions stay fixed and velocities
+are ignored. They scan the current bodies directly in O(body count) time and
+see inserts, removals, position/shape/filter/trigger edits and completed steps
+immediately, without rebuilding an index. No query acceleration structure is
+introduced. For a relative-motion query against one moving target, call
+`caster_shape.cast(start, caster_delta - target_delta, target_shape, target_start)`.
+The returned fraction is the time fraction of the two motions. Its distance
+and position describe the relative path; reconstruct the caster's actual world
+center as `start + caster_delta * fraction`. The solver performs relative motion
+internally, but one snapshot world query does not predict moving-target impacts.
+
+Run the focused headless example with
+`cargo run -p rayengine-core --example collision_queries`. Projectile lifetime,
+damage, faction rules and decisions about trigger eligibility remain game-owned.

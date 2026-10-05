@@ -78,19 +78,22 @@ pub(super) fn overlap<const N: usize>(
             })
         }
         (Shape::Round(ra), Shape::Round(rb)) => {
-            let distance = dot(p, p).sqrt();
-            let depth = ra + rb - distance;
+            let distance = p.iter().map(|v| f64::from(*v).powi(2)).sum::<f64>().sqrt();
+            let depth = f64::from(ra) + f64::from(rb) - distance;
             if depth <= 0.0 {
                 return None;
             }
             let normal = if distance > 0.0 {
-                scale(p, 1.0 / distance)
+                p.map(|v| (f64::from(v) / distance) as f32)
             } else {
                 let mut n = [0.0; N];
                 n[0] = 1.0;
                 n
             };
-            Some(Contact { normal, depth })
+            Some(Contact {
+                normal,
+                depth: depth as f32,
+            })
         }
         (Shape::Round(r), Shape::Box(h)) => round_box(p, r, h),
         (Shape::Box(h), Shape::Round(r)) => round_box(scale(p, -1.0), r, h).map(|c| Contact {
@@ -102,12 +105,16 @@ pub(super) fn overlap<const N: usize>(
 fn round_box<const N: usize>(p: [f32; N], r: f32, h: [f32; N]) -> Option<Contact<N>> {
     let closest = std::array::from_fn(|i| p[i].clamp(-h[i], h[i]));
     let delta = sub(p, closest);
-    let distance = dot(delta, delta).sqrt();
+    let distance = delta
+        .iter()
+        .map(|v| f64::from(*v).powi(2))
+        .sum::<f64>()
+        .sqrt();
     if distance > 0.0 {
-        let depth = r - distance;
+        let depth = f64::from(r) - distance;
         return (depth > 0.0).then(|| Contact {
-            normal: scale(delta, 1.0 / distance),
-            depth,
+            normal: delta.map(|v| (f64::from(v) / distance) as f32),
+            depth: depth as f32,
         });
     }
     let axis = (0..N)
@@ -144,8 +151,8 @@ pub(super) fn sweep<const N: usize>(
                         return None;
                     }
                 } else {
-                    let t1 = f64::from(-h[i] - p[i]) / f64::from(delta[i]);
-                    let t2 = f64::from(h[i] - p[i]) / f64::from(delta[i]);
+                    let t1 = (-f64::from(h[i]) - f64::from(p[i])) / f64::from(delta[i]);
+                    let t2 = (f64::from(h[i]) - f64::from(p[i])) / f64::from(delta[i]);
                     let lo = t1.min(t2);
                     if lo >= enter {
                         enter = lo;
@@ -192,42 +199,59 @@ fn rounded_sweep<const N: usize>(
     cuts.dedup();
     for interval in cuts.windows(2) {
         let mid = (interval[0] + interval[1]) * 0.5;
-        let mut qa = 0.0;
-        let mut qb = 0.0;
-        let mut qc = -r * r;
-        for i in 0..N {
-            let at = p[i] + d[i] * mid;
-            if at.abs() > h[i] {
-                let offset = p[i] - h[i].copysign(at);
-                qa += d[i] * d[i];
-                qb += 2.0 * offset * d[i];
-                qc += offset * offset;
+        let active: [bool; N] = std::array::from_fn(|i| (p[i] + d[i] * mid).abs() > h[i]);
+        let offset: [f64; N] = std::array::from_fn(|i| {
+            if active[i] {
+                p[i] - h[i].copysign(p[i] + d[i] * mid)
+            } else {
+                0.0
             }
-        }
+        });
+        let qa: f64 = (0..N).filter(|&i| active[i]).map(|i| d[i] * d[i]).sum();
         if qa == 0.0 {
             continue;
         }
-        let disc = qb * qb - 4.0 * qa * qc;
-        if disc <= 0.0 {
-            continue;
-        } // Tangency has no inward velocity.
-        let root = disc.sqrt();
-        let q = -0.5 * (qb + root.copysign(qb));
-        let t = (q / qa).min(qc / q);
-        if t < interval[0] - 1e-10 || t > interval[1] + 1e-10 {
+        let qb: f64 = (0..N)
+            .filter(|&i| active[i])
+            .map(|i| 2.0 * offset[i] * d[i])
+            .sum();
+        let vertex = -qb / (2.0 * qa);
+        let at_vertex: [f64; N] = std::array::from_fn(|i| {
+            if active[i] {
+                offset[i] + d[i] * vertex
+            } else {
+                0.0
+            }
+        });
+        // Evaluate distance at the quadratic's vertex instead of subtracting
+        // qb² - 4*qa*qc. That subtraction loses small radii on distant casts.
+        let gap = r * r - at_vertex.iter().map(|v| v * v).sum::<f64>();
+        if gap <= 0.0 {
+            continue; // Tangency has no inward velocity.
+        }
+        let span = (gap / qa).sqrt();
+        let t = vertex - span;
+        if !(0.0..=1.0).contains(&t) || t < interval[0] - 1e-10 || t > interval[1] + 1e-10 {
             continue;
         }
-        let t = t.clamp(0.0, 1.0);
+        // Recover the normal near the vertex too, avoiding p + d*t cancellation.
         let normal64: [f64; N] = std::array::from_fn(|i| {
-            let at = p[i] + d[i] * t;
-            at - at.clamp(-h[i], h[i])
+            if active[i] {
+                at_vertex[i] - d[i] * span
+            } else {
+                0.0
+            }
         });
         let length = normal64.iter().map(|x| x * x).sum::<f64>().sqrt();
         if length == 0.0 {
             continue;
         }
         let normal = normal64.map(|x| (x / length) as f32);
-        if dot(normal, delta) < 0.0 {
+        if (0..N)
+            .map(|i| f64::from(normal[i]) * f64::from(delta[i]))
+            .sum::<f64>()
+            < 0.0
+        {
             return Some((t as f32, normal));
         }
     }

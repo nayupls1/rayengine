@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Exact CPU raycasts, translation casts and overlap visitors for 2D boxes/circles
+  and 3D boxes/spheres, with symmetric filters, exclusions, opt-in triggers and
+  deterministic first hits over current world bodies; checked docs and a headless example.
+
 ## 0.0.3
 
 - Opt-in cached music streams with looping, frame-clock fades/crossfades and
