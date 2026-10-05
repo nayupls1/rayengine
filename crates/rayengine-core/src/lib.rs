@@ -32,7 +32,9 @@ pub mod viewport;
 pub mod prelude {
     pub use crate::audio::{AudioBuses, AudioError, AudioSettings, BusId, BusSettings, GainFade};
     pub use crate::camera::{Camera2D, Camera3D};
-    pub use crate::collision::{Aabb2, Aabb3, Body2D, Body3D, Circle, Sphere};
+    pub use crate::collision::{
+        Aabb2, Aabb3, Body2D, Body3D, Circle, Sector2, SectorError, Sphere,
+    };
     pub use crate::events::Events;
     pub use crate::first_person::{
         FirstPersonActions, FirstPersonConfig, FirstPersonController, FirstPersonError,

@@ -63,6 +63,8 @@ pub mod guides {
     #[doc = include_str!("../examples/physics.rs")]
     #[doc = "```"]
     pub mod physics {}
+    #[doc = include_str!("../docs/directional_hits.md")]
+    pub mod directional_hits {}
     #[doc = include_str!("../docs/first_person.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/first_person.rs")]

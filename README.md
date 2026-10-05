@@ -116,6 +116,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Responsive viewports, cameras and UI](crates/rayengine/docs/responsive.md)
 - [Timing, input and character movement](crates/rayengine/docs/timing_input.md)
 - [Arcade physics, layers, triggers and moving platforms](crates/rayengine/docs/physics.md)
+- [Static directional hit geometry](crates/rayengine/docs/directional_hits.md)
 - [Reusable first-person controller](crates/rayengine/docs/first_person.md)
 - [Assets and ownership](crates/rayengine/docs/assets.md)
 - [Streamed music, buses and fades](crates/rayengine/docs/audio.md)
