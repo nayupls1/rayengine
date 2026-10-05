@@ -256,8 +256,14 @@ fn camera() -> Camera3D {
     }
 }
 
+fn config() -> Config {
+    let mut config = Config::new("rayengine / Build mode");
+    config.exit_key = None; // Escape cancels a move; close the window to exit.
+    config
+}
+
 fn main() -> Result<(), Error> {
-    App::new(Config::new("rayengine / Build mode"))
+    App::new(config())
         .with_options(RunOptions::from_env()?)
         .run(BuildMode::new())?;
     Ok(())
@@ -266,6 +272,11 @@ fn main() -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn escape_is_available_to_cancel_moves() {
+        assert_eq!(config().exit_key, None);
+    }
+
     #[test]
     fn collision_refresh_tracks_moves_removals_and_failed_edits() {
         let mut game = BuildMode::new();
