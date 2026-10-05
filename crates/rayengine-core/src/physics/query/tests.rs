@@ -474,6 +474,56 @@ macro_rules! scenarios {
                 }
             }
             #[test]
+            fn oblique_tangencies_have_no_entering_hit() {
+                let caster = $shape::round(2.0);
+                let target = $shape::round(3.0);
+                assert!(
+                    caster
+                        .cast(x(-1.0) + y(7.0), x(364.0) + y(-273.0), target, $v::ZERO)
+                        .unwrap()
+                        .is_none()
+                );
+                let box_shape = $shape::box_shape($v::splat(2.0));
+                // The same tangent path across the top-right rounded corner.
+                assert!(
+                    $shape::round(5.0)
+                        .cast(y(8.0), x(364.0) + y(-273.0), box_shape, $v::ZERO)
+                        .unwrap()
+                        .is_none()
+                );
+            }
+            #[test]
+            fn long_oblique_casts_use_the_earliest_actual_face_interval() {
+                let wall_shape = $shape::box_shape($v::splat(2.0));
+                let wall_center = y(1.2);
+                for travel in [100.0, 1e8, 1e9, 1e10] {
+                    let start = x(-travel) + y(-travel);
+                    let delta = x(2.0 * travel) + y(2.0 * travel);
+                    for (caster, target) in [(shape(true), wall_shape), (wall_shape, shape(true))] {
+                        let hit = caster
+                            .cast(start, delta, target, wall_center)
+                            .unwrap()
+                            .unwrap();
+                        near(hit.position.x, -0.8);
+                        near(hit.position.y, -0.8);
+                        assert_eq!(hit.normal, y(-1.0));
+                    }
+                    let mut world = $world::new(4.0);
+                    let wall = world.insert($body::new(wall_center, wall_shape));
+                    let target_coordinate = -0.79 + 1.01 / std::f32::consts::SQRT_2;
+                    world.insert($body::new(
+                        x(target_coordinate) + y(target_coordinate),
+                        $shape::round(0.01),
+                    ));
+                    let hit = world
+                        .cast_shape(shape(true), start, delta, QueryFilter::default())
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(hit.body, wall);
+                    assert_eq!(hit.hit.normal, y(-1.0));
+                }
+            }
+            #[test]
             fn large_and_small_geometry_does_not_overflow_distance_squares() {
                 for scale in [1e-25, 1e20] {
                     let round = $shape::round(scale);

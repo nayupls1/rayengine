@@ -249,13 +249,24 @@ fn rounded_sweep<const N: usize>(
                 0.0
             }
         });
-        // Evaluate distance at the quadratic's vertex instead of subtracting
-        // qb² - 4*qa*qc. That subtraction loses small radii on distant casts.
-        let gap = r * r - at_vertex.iter().map(|v| v * v).sum::<f64>();
-        if gap <= 0.0 {
+        // Gram's identity expresses the discriminant without subtracting
+        // large position squares or evaluating a rounded vertex distance:
+        // r²*|d|² - sum((offset_i*d_j - offset_j*d_i)²).
+        // It retains small radii on distant rays and exact oblique tangencies.
+        let mut perpendicular = 0.0;
+        for i in 0..N {
+            for j in i + 1..N {
+                if active[i] && active[j] {
+                    let cross = offset[i] * d[j] - offset[j] * d[i];
+                    perpendicular += cross * cross;
+                }
+            }
+        }
+        let discriminant = r * r * qa - perpendicular;
+        if discriminant <= 0.0 {
             continue; // Tangency has no inward velocity.
         }
-        let span = (gap / qa).sqrt();
+        let span = discriminant.sqrt() / qa;
         let mut t = vertex - span;
         if t > 1.0 {
             // Snap a rounded endpoint root only if the actual endpoint reaches
@@ -265,17 +276,35 @@ fn rounded_sweep<const N: usize>(
                 t = 1.0;
             }
         }
-        if !(0.0..=1.0).contains(&t) || t < interval[0] - 1e-10 || t > interval[1] + 1e-10 {
+        if !(0.0..=1.0).contains(&t) {
             continue;
         }
+        // Never extend a face equation into a different surface region. Only
+        // snap a root a few f64 ULPs outside its interval when the actual
+        // boundary reaches the rounded geometry. A fixed fraction tolerance
+        // spans entire unrelated faces on long casts.
+        let boundary = t.clamp(interval[0], interval[1]);
+        let snapped = boundary != t;
+        if snapped {
+            let tolerance = 4.0 * f64::EPSILON * t.abs().max(boundary.abs());
+            let offset = surface_offset(boundary);
+            if (t - boundary).abs() > tolerance || offset.iter().map(|v| v * v).sum::<f64>() > r * r
+            {
+                continue;
+            }
+            t = boundary;
+        }
         // Recover the normal near the vertex too, avoiding p + d*t cancellation.
-        let normal64: [f64; N] = std::array::from_fn(|i| {
+        let mut normal64: [f64; N] = std::array::from_fn(|i| {
             if active[i] {
                 at_vertex[i] - d[i] * span
             } else {
                 0.0
             }
         });
+        if snapped {
+            normal64 = surface_offset(t);
+        }
         let length = normal64.iter().map(|x| x * x).sum::<f64>().sqrt();
         if length == 0.0 {
             continue;
