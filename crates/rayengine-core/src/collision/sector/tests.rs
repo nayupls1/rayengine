@@ -152,6 +152,35 @@ fn wide_sector_includes_back_quadrants_but_excludes_its_notch() {
 }
 
 #[test]
+fn zero_angle_preserves_collinearity_for_non_axis_directions() {
+    for x in -100..=100 {
+        for y in -100..=100 {
+            let direction = Vec2::new(x as f32, y as f32);
+            if direction == Vec2::ZERO {
+                continue;
+            }
+            let area = Sector2::new(Vec2::ZERO, direction, 300.0, 0.0).unwrap();
+            assert!(area.contains(direction).unwrap(), "direction={direction}");
+            assert!(hit(area, direction, 1e-20), "direction={direction}");
+            assert!(area.contains(direction * 2.0).unwrap());
+            assert!(!area.contains(-direction).unwrap());
+            assert!(!hit(area, direction + direction.perp() * 0.01, 1e-20));
+        }
+    }
+    for scale in [f32::from_bits(1), 1e-30, 1e30] {
+        let direction = Vec2::new(3.0, 9.0) * scale;
+        let area = Sector2::new(Vec2::ZERO, direction, 20.0 * scale, 0.0).unwrap();
+        assert!(area.contains(direction).unwrap());
+        assert!(hit(area, direction, scale));
+    }
+    let origin = Vec2::new(100.0, -200.0);
+    let direction = Vec2::new(3.0, 9.0);
+    let area = Sector2::new(origin, direction, 20.0, 0.0).unwrap();
+    assert!(area.contains(origin + direction).unwrap());
+    assert!(hit(area, origin + direction, 1e-20));
+}
+
+#[test]
 fn full_disk_zero_angle_and_zero_range_are_closed() {
     let disk = sector(TAU);
     assert!(disk.contains(Vec2::new(-5.0, 0.0)).unwrap());

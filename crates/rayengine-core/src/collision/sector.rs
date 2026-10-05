@@ -67,6 +67,7 @@ impl std::error::Error for SectorError {}
 pub struct Sector2 {
     origin: Vec2,
     direction: DVec2,
+    direction_length: f64,
     range: f32,
     angle: f32,
     bounds: Aabb2,
@@ -119,7 +120,8 @@ impl Sector2 {
         }
         Ok(Self {
             origin,
-            direction: direction.as_dvec2().normalize(),
+            direction: direction.as_dvec2(),
+            direction_length: direction.as_dvec2().length(),
             range,
             angle,
             bounds: Aabb2 { min, max },
@@ -133,7 +135,7 @@ impl Sector2 {
 
     /// Normalized center direction (rounded to single precision).
     pub fn direction(self) -> Vec2 {
-        self.direction.as_vec2()
+        (self.direction / self.direction_length).as_vec2()
     }
 
     /// Maximum distance from the origin in world units.
@@ -204,7 +206,10 @@ impl Sector2 {
 
     fn local(self, point: Vec2) -> DVec2 {
         let offset = point.as_dvec2() - self.origin.as_dvec2();
+        // Cross before normalization preserves exact collinearity of finite
+        // f32 vectors, which is essential when the sector angle is zero.
         DVec2::new(self.direction.dot(offset), self.direction.perp_dot(offset))
+            / self.direction_length
     }
 
     fn contains_direction(self, local: DVec2) -> bool {
