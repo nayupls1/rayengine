@@ -76,7 +76,11 @@ cargo run --manifest-path ../my-game/Cargo.toml
 The CLI supports `new`, `new-plugin`, `templates`, `info`, `check`, `build`, `run`,
 `package`, `add`/`remove`, `watch`, `clean`, and `doctor`. Add
 `--json` for a versioned result, structured errors and preserved Cargo diagnostics.
-Scaffolds use the matching crates.io SDK version by default. Install the
+Scaffolds use the matching crates.io SDK version by default. For a checkout
+installation with persistent PATH setup, run `bash scripts/setup.sh` on
+Linux/macOS or `& .\scripts\setup.ps1` in Windows PowerShell. See the
+[CLI setup guide](docs/cli_setup.md) for activation, install locations and reversal.
+Install the
 published CLI with `cargo install rayengine-cli --version 0.0.3 --locked`
 and create a project with `rayengine new my-game --kind 2d`. Pass
 `--sdk-path /path/to/rayengine/crates/rayengine` for local engine development.
