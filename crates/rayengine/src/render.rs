@@ -808,7 +808,8 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         Ok(true)
     }
     /// Poses a skinned model, then overrides its meshes with a material.
-    /// Returns false for stale dependencies or invalid poses, lit normals or transforms.
+    /// Returns false for stale dependencies, invalid poses or invalid lit
+    /// normals/transforms; like `model_material`, unlit transforms are not checked.
     pub fn animated_model_material(
         &mut self,
         model: ModelId,
@@ -820,8 +821,9 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         self.try_animated_model_material_matrix(model, material, pose, transform.matrix(), tint)
             .unwrap_or(false)
     }
-    /// Checked animated material drawing with an affine world matrix. Lit
-    /// validation uses the bind-pose normals; skinned normals follow the pose.
+    /// Checked animated material drawing with an affine world matrix. Stale
+    /// model/clip/material handles return Ok(false). Lit materials validate the
+    /// matrix and bind-pose normals; skinned normals follow the pose.
     pub fn try_animated_model_material_matrix(
         &mut self,
         model: ModelId,
@@ -831,7 +833,8 @@ impl<D: RaylibDraw + RaylibDraw3D> Canvas3D<'_, D> {
         tint: Color,
     ) -> Result<bool, Error> {
         let pose = pose.into();
-        let Some(native_model) = self.models.model(model) else {
+        // Stale model/clip handles stay Ok(false) before lit validation can fail.
+        let Some((native_model, _)) = self.models.posed_model(model, pose)? else {
             return Ok(false);
         };
         let local = model_local(native_model);

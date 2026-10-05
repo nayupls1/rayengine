@@ -88,7 +88,10 @@ with the same count is accepted and poses the wrong joints.
 `ClipTiming::duration` spans the first keyframe to the last:
 `(keyframes - 1) / rate`. A 61-keyframe glTF clip lasts exactly one second.
 Looping clips wrap from the last keyframe back to the first, so author loops
-whose last pose matches the first. A one-keyframe clip is a static pose.
+whose last pose matches the first. Raylib samples glTF clips at whole 60 Hz
+steps and drops any trailing partial step, so keep glTF clip lengths whole
+multiples of 1/60 s (author at 30 or 60 fps). Otherwise the authored final pose
+is never sampled and loops hitch at the wrap. A one-keyframe clip is a static pose.
 
 `KeyframePlayer` follows the [sprite animation](crate::guides::sprites)
 conventions. Time is tracked in integer nanoseconds without drift.
@@ -115,9 +118,11 @@ animated draw. Cost scales with skinned vertices times animated draws, so keep
 crowd characters low-poly.
 
 `try_animated_model` and `try_animated_model_material_matrix` return
-`Ok(false)` for stale model or clip handles, and errors for incompatible clips,
-keyframes outside `0.0..=keyframes - 1` (including NaN), nonfinite transforms or
-zero rotations. The non-`try` variants return `false` for all of these.
+`Ok(false)` for stale model, clip or material handles, and errors for
+incompatible clips or keyframes outside `0.0..=keyframes - 1` (including NaN).
+`try_animated_model` also rejects nonfinite transforms and zero rotations. The
+material variant follows `model_material`: it validates the matrix and normals
+only for lit materials. The non-`try` variants return `false` instead of errors.
 Successful draws count `model_poses` in [diagnostics](crate::guides::diagnostics).
 
 A plain `Canvas3D::model` draw of a skinned model shows whatever pose was last

@@ -1,6 +1,6 @@
 use super::*;
 use crate::assets::{ModelAnimationsId, ModelClipId, ModelPose};
-use crate::material::MaterialDesc;
+use crate::material::{MaterialDesc, Shading};
 use rayengine_core::{
     camera::Camera3D as EngineCamera3D,
     glam::{Mat4, Quat, Vec3, Vec4},
@@ -56,6 +56,7 @@ fn native_animation_poses_shared_models_and_cleans_up() {
         walk: Option<ModelClipId>,
         swing: Option<ModelClipId>,
         material: Option<MaterialId>,
+        lit: Option<MaterialId>,
     }
     impl Game for Probe {
         fn init(&mut self, ctx: &mut InitContext<'_, '_>) -> Result<(), Error> {
@@ -171,6 +172,10 @@ fn native_animation_poses_shared_models_and_cleans_up() {
 
             self.material = Some(ctx.material(MaterialDesc {
                 tint: Color::new(40, 220, 90, 255),
+                ..MaterialDesc::default()
+            })?);
+            self.lit = Some(ctx.material(MaterialDesc {
+                shading: Shading::Lit,
                 ..MaterialDesc::default()
             })?);
             ctx.assets.unload_model(pendulum);
@@ -296,6 +301,31 @@ fn native_animation_poses_shared_models_and_cleans_up() {
                             Color::RED
                         )
                         .unwrap()
+                );
+                // A stale clip wins over lit validation of a degenerate matrix,
+                // which still errors once the clip is live.
+                let lit = self.lit.unwrap();
+                assert!(
+                    !canvas
+                        .try_animated_model_material_matrix(
+                            character,
+                            lit,
+                            stale,
+                            Mat4::ZERO,
+                            Color::RED
+                        )
+                        .unwrap()
+                );
+                assert!(
+                    canvas
+                        .try_animated_model_material_matrix(
+                            character,
+                            lit,
+                            rest,
+                            Mat4::ZERO,
+                            Color::RED
+                        )
+                        .is_err()
                 );
             });
             let counters = frame.draw_counters().unwrap();
