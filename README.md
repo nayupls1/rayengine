@@ -132,6 +132,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Versioned project manifests](crates/rayengine/docs/project_manifest.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
 - [Grid pathfinding](crates/rayengine/docs/pathfinding.md)
+- [Grid placement and build mode](crates/rayengine/docs/placement.md)
 - [Background work and upload budgets](crates/rayengine/docs/background_work.md)
 - [Interactive UI and input routing](crates/rayengine/docs/interactive_ui.md)
 - [Versioned saves and reliable file replacement](crates/rayengine/docs/saves.md)
