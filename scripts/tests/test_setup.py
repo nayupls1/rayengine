@@ -16,7 +16,7 @@ class SetupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='rayengine setup ')
         self.addCleanup(self.temp.cleanup)
-        self.base = Path(self.temp.name)
+        self.base = Path(self.temp.name).resolve()
         self.home = self.base / 'home with spaces'
         self.home.mkdir()
         self.tools = self.base / 'tools'
@@ -77,7 +77,7 @@ if not os.environ.get('MOCK_NO_BINARY'):
             args = ['bash', '--noprofile', '--norc', '-c', f'. "{startup}"; {command}']
         result = subprocess.run(args, env=env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('rayengine fixture', result.stdout)
+        self.assertIn('rayengine fixture', result.stdout, result.stdout + result.stderr)
         value = result.stdout.split('PATH_RESULT=', 1)[1].strip()
         self.assertEqual(value.split(':').count(str(self.root / 'bin')), 1, value)
         return value

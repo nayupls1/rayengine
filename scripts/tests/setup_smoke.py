@@ -15,7 +15,7 @@ def run(*args, env):
 
 
 with tempfile.TemporaryDirectory(prefix='rayengine real setup ') as temporary:
-    directory = Path(temporary)
+    directory = Path(temporary).resolve()
     home = directory / 'home with spaces'
     home.mkdir()
     root = directory / "cli's install root"
