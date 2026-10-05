@@ -23,17 +23,21 @@ try {
     if ($env:OS -ne 'Windows_NT') { throw 'Use bash scripts/setup.sh on Linux/macOS.' }
     Import-Module (Join-Path $PSScriptRoot 'setup-path.psm1') -Force
     $stateFile = Join-Path $env:LOCALAPPDATA 'rayengine\setup-path.json'
-    $owned = @()
-    if (Test-Path -LiteralPath $stateFile) {
-        $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
-        if ($state.version -ne 1) { throw "Unknown PATH state format in $stateFile." }
-        $owned = @($state.addedPaths)
-        foreach ($entry in $owned) {
-            if ($entry -isnot [string] -or [string]::IsNullOrEmpty($entry)) {
-                throw "Invalid PATH state in $stateFile; repair it before retrying."
+    function Read-PathOwnership([string] $File) {
+        $added = @()
+        if (Test-Path -LiteralPath $File) {
+            $state = Get-Content -LiteralPath $File -Raw | ConvertFrom-Json
+            if ($state.version -ne 1) { throw "Unknown PATH state format in $File." }
+            $added = @($state.addedPaths)
+            foreach ($entry in $added) {
+                if ($entry -isnot [string] -or [string]::IsNullOrEmpty($entry)) {
+                    throw "Invalid PATH state in $File; repair it before retrying."
+                }
             }
         }
+        return $added
     }
+    $owned = @(Read-PathOwnership $stateFile)
     $userPath = Get-UserPath
     if ($RemovePath) {
         $updated = Remove-PathEntries $userPath $owned
@@ -49,7 +53,9 @@ try {
         elseif ($env:CARGO_HOME) { $Root = $env:CARGO_HOME }
         else { $Root = Join-Path $env:USERPROFILE '.cargo' }
     }
-    $Root = [IO.Path]::GetFullPath($Root)
+    # Resolve against PowerShell's location; .NET CurrentDirectory may still
+    # point at the directory where this PowerShell process was launched.
+    $Root = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Root)
     if ($Root.IndexOfAny([char[]] ";`r`n") -ge 0) { throw 'Install root must not contain semicolons or newlines.' }
     foreach ($tool in @('rustc', 'cargo')) {
         if (-not (Get-Command $tool -CommandType Application -ErrorAction SilentlyContinue)) {
@@ -84,6 +90,9 @@ try {
     & $binary --help | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Installed CLI cannot run. No PATH changes were made.' }
 
+    # Cargo can take minutes; preserve PATH/state edits made during the build.
+    $userPath = Get-UserPath
+    $owned = @(Read-PathOwnership $stateFile)
     # Do not record an entry already owned by the user's or machine's config.
     $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     if (-not (Test-PathEntry $userPath $binDir) -and -not (Test-PathEntry $machinePath $binDir)) {

@@ -36,6 +36,9 @@ if sys.argv[1] == '--version':
     print('cargo 1.89.0'); sys.exit(0)
 pathlib.Path(os.environ['MOCK_LOG']).write_text(json.dumps(sys.argv[1:]))
 if os.environ.get('MOCK_FAIL'): sys.exit(17)
+if os.environ.get('MOCK_EDIT_CONFIG'):
+    with (pathlib.Path(os.environ['HOME']) / '.bashrc').open('a') as f:
+        f.write('export MY_NEW_SETTING=keep_me\\n')
 root = pathlib.Path(sys.argv[sys.argv.index('--root') + 1])
 binary = root / 'bin/rayengine'
 binary.parent.mkdir(parents=True, exist_ok=True)
@@ -209,6 +212,24 @@ if not os.environ.get('MOCK_NO_BINARY'):
         self.install(ok=False)
         self.assertEqual(rc.read_text(), original)
         self.assertFalse(self.log.exists())
+
+    def test_preserve_configuration_edits_during_install(self):
+        self.env['MOCK_EDIT_CONFIG'] = '1'
+        self.install()
+        rc = self.home / '.bashrc'
+        self.assertIn('export MY_NEW_SETTING=keep_me', rc.read_text())
+        self.setup('--remove-path')
+        self.assertEqual(rc.read_text(), 'export MY_NEW_SETTING=keep_me\n')
+
+    def test_resolved_root_must_be_representable_in_path(self):
+        physical = self.base / 'unsafe:physical'
+        physical.mkdir()
+        alias = self.base / 'safe alias'
+        alias.symlink_to(physical, target_is_directory=True)
+        result = self.setup('--root', str(alias), ok=False)
+        self.assertIn('Resolved install root', result.stderr)
+        self.assertFalse(self.log.exists())
+        self.assertFalse((self.home / '.bashrc').exists())
 
     def test_remove_path_requires_no_toolchain(self):
         self.install()

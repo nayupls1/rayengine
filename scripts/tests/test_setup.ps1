@@ -89,8 +89,12 @@ if "%1"=="--version" (echo cargo 1.89.0) else (exit /b 17)
     $firstPath = Get-UserPath
     $state = Join-Path $env:LOCALAPPDATA 'rayengine/setup-path.json'
     $firstState = Get-Content -LiteralPath $state -Raw
-    & $setup -DebugBuild -Root $root
-    Assert-Equal $LASTEXITCODE 0
+    # Set-Location does not update .NET's process CurrentDirectory.
+    Push-Location $temp
+    try {
+        & $setup -DebugBuild -Root "cli's install root"
+        Assert-Equal $LASTEXITCODE 0
+    } finally { Pop-Location }
     Assert-Equal (Get-UserPath) $firstPath
     Assert-Equal (Get-Content -LiteralPath $state -Raw) $firstState
     Assert-True (Test-Path -LiteralPath (Join-Path $root 'bin/rayengine.exe')) 'Installed binary missing'
@@ -117,6 +121,33 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $setup -RemovePath
     Assert-Equal (Get-UserPath) $baseline
 
+    # A PATH edit made during a lengthy Cargo build must survive setup.
+    $duringBuild = Join-Path $temp 'edit path during build.ps1'
+    @'
+$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+try {
+    $value = $key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    $key.SetValue('Path', "$value;D:\added during build", $key.GetValueKind('Path'))
+} finally { $key.Dispose() }
+'@ | Set-Content -LiteralPath $duringBuild -Encoding UTF8
+    $env:RAYENGINE_MOCK_POWERSHELL = $powershell
+    $env:RAYENGINE_MOCK_PATH_SCRIPT = $duringBuild
+    @'
+@echo off
+if "%1"=="--version" (echo cargo 1.89.0 & exit /b 0)
+"%RAYENGINE_MOCK_POWERSHELL%" -NoProfile -File "%RAYENGINE_MOCK_PATH_SCRIPT%"
+exit /b %errorlevel%
+'@ | Set-Content -LiteralPath (Join-Path $mockTools 'cargo.cmd') -Encoding ASCII
+    $env:Path = $mockTools
+    & $setup -Root $root -DebugBuild
+    Assert-Equal $LASTEXITCODE 0
+    $concurrentPath = "$baseline;D:\added during build"
+    Assert-Equal (Get-UserPath) (Add-PathEntry $concurrentPath (Join-Path $root 'bin'))
+    & $setup -RemovePath
+    Assert-Equal (Get-UserPath) $concurrentPath
+    $env:Path = $originalProcess
+    Set-UserPath $baseline
+
     # A preconfigured user entry is never claimed or removed by setup.
     Set-UserPath (Add-PathEntry $baseline (Join-Path $root 'bin'))
     $preconfigured = Get-UserPath
@@ -140,6 +171,6 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $env:Path = $originalProcess
     $env:LOCALAPPDATA = $originalLocalAppData
     $env:CARGO_INSTALL_ROOT = $originalInstallRoot
-    Remove-Item Env:RAYENGINE_EXPECTED_BINARY -ErrorAction SilentlyContinue
+    Remove-Item Env:RAYENGINE_EXPECTED_BINARY, Env:RAYENGINE_MOCK_POWERSHELL, Env:RAYENGINE_MOCK_PATH_SCRIPT -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $temp -Recurse -Force
 }

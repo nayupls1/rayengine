@@ -3,6 +3,12 @@
 set -euo pipefail
 
 fail() { printf 'rayengine setup: %s\n' "$*" >&2; exit 1; }
+shell_quote() {
+    # Keep replacement text in variables: Bash 3.2 parses quote literals in
+    # substitution expressions differently from current Bash.
+    local single_quote="'" escaped_quote="'\\''" value=$1
+    printf "'%s'" "${value//"$single_quote"/$escaped_quote}"
+}
 usage() {
     cat <<'HELP'
 Usage: bash scripts/setup.sh [--root DIR] [--shell bash|zsh|fish|sh] [--debug]
@@ -52,29 +58,32 @@ esac
 # a final newline. Use a sentinel when reading to preserve all trailing newlines.
 begin=$'\n# >>> rayengine CLI PATH >>>\n'
 end=$'# <<< rayengine CLI PATH <<<\n'
-originals=()
-cleaned=()
-for file in "${files[@]}"; do
-    content=''
-    if [[ -e $file ]]; then
-        [[ -f $file && -r $file && -w $file ]] || fail "Cannot edit $file; check its permissions."
-        content=$(cat -- "$file"; printf '\001')
-        content=${content%$'\001'}
-    elif [[ -L $file ]]; then
-        fail "Startup file is a broken symlink: $file. Repair it first."
-    fi
-    originals+=("$content")
-    if [[ $content == *'# >>> rayengine CLI PATH >>>'* ]]; then
-        [[ $content == *"$begin"* && $content == *"$end"* ]] || fail "Incomplete setup block in $file; repair its markers before retrying."
-        before=${content%%"$begin"*}
-        rest=${content#*"$begin"}
-        [[ $rest == *"$end"* ]] || fail "Incomplete setup block in $file."
-        after=${rest#*"$end"}
-        content=$before$after
-    fi
-    [[ $content != *'# >>> rayengine CLI PATH >>>'* && $content != *'# <<< rayengine CLI PATH <<<'* ]] || fail "Unexpected setup markers in $file; repair them before retrying."
-    cleaned+=("$content")
-done
+read_configs() {
+    originals=()
+    cleaned=()
+    for file in "${files[@]}"; do
+        content=''
+        if [[ -e $file ]]; then
+            [[ -f $file && -r $file && -w $file ]] || fail "Cannot edit $file; check its permissions."
+            content=$(cat -- "$file"; printf '\001')
+            content=${content%$'\001'}
+        elif [[ -L $file ]]; then
+            fail "Startup file is a broken symlink: $file. Repair it first."
+        fi
+        originals+=("$content")
+        if [[ $content == *'# >>> rayengine CLI PATH >>>'* ]]; then
+            [[ $content == *"$begin"* && $content == *"$end"* ]] || fail "Incomplete setup block in $file; repair its markers before retrying."
+            before=${content%%"$begin"*}
+            rest=${content#*"$begin"}
+            [[ $rest == *"$end"* ]] || fail "Incomplete setup block in $file."
+            after=${rest#*"$end"}
+            content=$before$after
+        fi
+        [[ $content != *'# >>> rayengine CLI PATH >>>'* && $content != *'# <<< rayengine CLI PATH <<<'* ]] || fail "Unexpected setup markers in $file; repair them before retrying."
+        cleaned+=("$content")
+    done
+}
+read_configs
 
 if ! $remove_path; then
     [[ -n $install_root ]] || fail 'Install root cannot be empty.'
@@ -91,6 +100,7 @@ if ! $remove_path; then
     cargo --version >/dev/null || fail 'Cargo failed. Repair/select your Rust toolchain with rustup and retry.'
     mkdir -p -- "$install_root" || fail "Cannot create install root $install_root; choose a writable --root."
     install_root=$(cd -- "$install_root" && pwd -P)
+    [[ $install_root != *:* && $install_root != *$'\n'* && $install_root != *$'\r'* ]] || fail 'Resolved install root must not contain colons or newlines.'
     bin_dir=$install_root/bin
     repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     args=(install --locked --path "$repo_root/crates/rayengine-cli" --root "$install_root" --bin rayengine)
@@ -105,7 +115,7 @@ if ! $remove_path; then
     [[ -x $bin_dir/rayengine ]] || fail "Cargo succeeded but $bin_dir/rayengine is missing or not executable. No PATH changes were made."
     "$bin_dir/rayengine" --help >/dev/null || fail 'Installed CLI cannot run. No PATH changes were made.'
     # Single-quote literal paths, including quotes, $, backticks and spaces.
-    quoted="'${bin_dir//\'/\'\\\'\'}'"
+    quoted=$(shell_quote "$bin_dir")
     if [[ $shell_name == fish ]]; then
         # Fish single quotes escape backslashes and single quotes differently.
         fish_path=${bin_dir//\\/\\\\}
@@ -116,6 +126,8 @@ if ! $remove_path; then
     fi
 fi
 
+# Cargo can take minutes; preserve edits made while it was building.
+if ! $remove_path; then read_configs; fi
 for (( i=0; i<${#files[@]}; i++ )); do
     file=${files[i]}
     replacement=${cleaned[i]}
@@ -141,6 +153,6 @@ else
     fi
     printf 'Then open a NEW terminal and run: rayengine --help\n'
     printf 'If another installation wins command lookup, inspect it with: %s\n' 'command -v rayengine'
-    root_quoted="'${install_root//\'/\'\\\'\'}'"
+    root_quoted=$(shell_quote "$install_root")
     printf 'Uninstall the binary: cargo uninstall rayengine-cli --root %s\n' "$root_quoted"
 fi
