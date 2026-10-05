@@ -60,16 +60,19 @@ try {
     $mockTools = Join-Path $temp 'mock tools'
     New-Item -ItemType Directory -Path $mockTools | Out-Null
     $env:Path = $mockTools
-    function Assert-SetupFailure([string] $ExpectedMessage) {
+    function Assert-SetupFailure([string] $ExpectedMessage, [string] $TestRoot) {
         $stdout = Join-Path $temp 'failure.stdout'
         $stderr = Join-Path $temp 'failure.stderr'
-        $process = Start-Process -FilePath $powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $setup + '"'), '-DebugBuild') -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $setup + '"'), '-DebugBuild')
+        if ($TestRoot) { $arguments += @('-Root', ('"' + $TestRoot + '"')) }
+        $process = Start-Process -FilePath $powershell -ArgumentList $arguments -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
         Assert-True ($process.ExitCode -ne 0) 'Expected setup failure'
         $message = (Get-Content -LiteralPath $stdout -Raw) + (Get-Content -LiteralPath $stderr -Raw)
         Assert-True ($message -like "*$ExpectedMessage*") "Missing error hint: $message"
         Assert-Equal (Get-UserPath) $baseline
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'rayengine/setup-path.json'))) 'Failed install changed ownership'
     }
+    Assert-SetupFailure 'percent signs' (Join-Path $temp '%USERPROFILE% literal')
     Assert-SetupFailure 'Missing rustc'
     '@echo rustc 1.88.0 (fixture)' | Set-Content -LiteralPath (Join-Path $mockTools 'rustc.cmd') -Encoding ASCII
     '@echo cargo 1.89.0 (fixture)' | Set-Content -LiteralPath (Join-Path $mockTools 'cargo.cmd') -Encoding ASCII

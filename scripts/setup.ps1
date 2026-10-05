@@ -56,7 +56,9 @@ try {
     # Resolve against PowerShell's location; .NET CurrentDirectory may still
     # point at the directory where this PowerShell process was launched.
     $Root = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Root)
-    if ($Root.IndexOfAny([char[]] ";`r`n") -ge 0) { throw 'Install root must not contain semicolons or newlines.' }
+    if ($Root.IndexOfAny([char[]] ";%`r`n") -ge 0) {
+        throw 'Install root must not contain semicolons, percent signs or newlines; Windows expands percent-variable references in persistent PATH.'
+    }
     foreach ($tool in @('rustc', 'cargo')) {
         if (-not (Get-Command $tool -CommandType Application -ErrorAction SilentlyContinue)) {
             throw "Missing $tool. Install Rust 1.89+ from https://rustup.rs, reopen the terminal, and retry."

@@ -99,8 +99,9 @@ Comparison ignores casing, trailing separators and equivalent environment
 variable expansions. Machine PATH is never changed. Added entries are recorded
 in `%LOCALAPPDATA%\rayengine\setup-path.json` for reversal; entries that were
 already configured are never claimed by setup. A new root adds a new entry and
-retains previous installations until you remove them. Semicolons and newlines in
-Windows install roots are rejected.
+retains previous installations until you remove them. Semicolons, percent signs and newlines in
+Windows install roots are rejected. Percent-variable references in a literal
+root would expand to a different directory in persistent PATH.
 
 ## Installation location and updates
 
