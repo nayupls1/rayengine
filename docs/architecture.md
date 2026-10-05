@@ -7,8 +7,9 @@ are optional targets; browser and mobile are outside the current scope.
 
 - `rayengine-core`: CPU-only entities/components, transforms and hierarchy,
   fixed simulation timing, tweens/easing/screen shake, action input, viewport
-  math, cameras, collision/physics, grid pathfinding, UI layout, validated CPU mesh data, and versioned save containers. No window, audio device, C toolchain,
-  or GPU required.
+  math, cameras, collision/physics, grid pathfinding and layered navigation with
+  traffic, UI layout, validated CPU mesh data, and versioned save containers. No
+  window, audio device, C toolchain, or GPU required.
 - `rayengine`: raylib runtime, rendering and asset ownership. One shared
   lifecycle for 2D and 3D. Rendering stays on raylib's owning thread.
 - `rayengine-cli`: scaffold, inspect, check, build, run, watch and package Cargo

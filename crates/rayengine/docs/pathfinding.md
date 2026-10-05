@@ -216,8 +216,9 @@ expand few cells, while mazes may expand most of the grid. A distance field
 always visits every reachable cell. Buffers grow to the largest grid seen
 and are reused: one 16-byte node per cell for A*, one `f32` per cell for a
 field, plus the open queue. Grids must have fewer than `u32::MAX` cells.
-Searches do not consider other agents, dynamic obstacles or body clearance;
-avoidance and replanning frequency remain game logic.
+These searches do not consider other agents or body clearance wider than a
+cell; [floors, links and traffic](crate::guides::navigation) adds layered
+routes, clearance, edit tracking and a traffic coordinator for small groups.
 
 The `pathfinding_astar`, `pathfinding_smooth` and `pathfinding_field`
 Criterion workloads cover 64², 256² and 512² maps. See

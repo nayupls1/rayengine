@@ -1,5 +1,7 @@
 //! Grid navigation: A* paths, line-of-sight smoothing, path following and
-//! distance fields over caller-owned 2D grids.
+//! distance fields over caller-owned 2D grids, plus layered routes joined by
+//! links ([`NavFinder`], [`NavTopology`]) and cell-by-cell [`Traffic`] for
+//! small groups of agents.
 //!
 //! Searches read cells through [`NavGrid`], so tilemaps, voxel layers and game
 //! arrays can be searched in place without copying. [`PathFinder`] and
@@ -14,12 +16,18 @@
 mod astar;
 mod field;
 mod follow;
+mod route;
 mod smooth;
+mod traffic;
 
 pub use astar::{PathFinder, PathStatus};
 pub use field::DistanceField;
 pub use follow::PathFollower;
+pub use route::{
+    ClearanceGrid, LinkId, NavFinder, NavLink, NavOptions, NavPoint, NavStep, NavTopology, Route,
+};
 pub use smooth::{line_of_sight, smooth_path};
+pub use traffic::{AgentId, AgentState, Traffic, TrafficEvent, TrafficOptions};
 
 use crate::collision::Aabb2;
 use glam::{IVec2, UVec2, Vec2};
@@ -258,6 +266,10 @@ pub enum PathError {
     NoSearch,
     /// The grid size changed while a search was pending.
     GridResized,
+    /// A route start, goal or link endpoint lies outside the layers.
+    InvalidPoint(NavPoint),
+    /// The [`NavTopology`] revision changed while a search was pending.
+    TopologyChanged,
 }
 
 impl fmt::Display for PathError {
@@ -269,6 +281,10 @@ impl fmt::Display for PathError {
             Self::GridTooLarge(size) => write!(f, "grid {size} has too many cells"),
             Self::NoSearch => write!(f, "no path search is pending"),
             Self::GridResized => write!(f, "grid size changed during a pending search"),
+            Self::InvalidPoint(point) => {
+                write!(f, "cell {} is outside layer {}", point.cell, point.layer)
+            }
+            Self::TopologyChanged => write!(f, "navigation changed during a pending search"),
         }
     }
 }
@@ -433,5 +449,7 @@ pub(crate) fn check_bounds(size: UVec2, cell: UVec2) -> Result<(), PathError> {
     }
 }
 
+#[cfg(test)]
+mod navigation_tests;
 #[cfg(test)]
 mod tests;

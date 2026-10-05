@@ -4,7 +4,8 @@ Display-independent game primitives for [rayengine](https://crates.io/crates/ray
 Includes entities/components, transforms, fixed timing, action input, cameras,
 viewports, UI interaction, character collision, arcade physics (2D/3D shapes,
 layers, triggers and moving platforms), spatial queries, grid pathfinding,
-tweens, easing, screen shake, background jobs and saves. No raylib, native
+layered routes with links and traffic, tweens, easing, screen shake,
+background jobs and saves. No raylib, native
 graphics libraries or display are required.
 
 ```toml

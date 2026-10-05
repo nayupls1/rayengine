@@ -17,6 +17,7 @@ Start with [the quickstart](https://docs.rs/rayengine/latest/rayengine/guides/qu
 [materials and shaders](https://docs.rs/rayengine/latest/rayengine/guides/materials/index.html),
 [spatial queries](https://docs.rs/rayengine/latest/rayengine/guides/spatial_queries/index.html),
 [grid pathfinding](https://docs.rs/rayengine/latest/rayengine/guides/pathfinding/index.html),
+[floors, links and traffic](https://docs.rs/rayengine/latest/rayengine/guides/navigation/index.html),
 [background work](https://docs.rs/rayengine/latest/rayengine/guides/background_work/index.html),
 [interactive UI and input routing](https://docs.rs/rayengine/latest/rayengine/guides/interactive_ui/index.html),
 [versioned saves](https://docs.rs/rayengine/latest/rayengine/guides/saves/index.html),
