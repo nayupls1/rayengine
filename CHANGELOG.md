@@ -6,6 +6,11 @@
   nested drawing/hit-test clipping, wheel routing and stable offscreen focus;
   checked guide and native catalog/action-inspector example with controller input.
 
+- Optional CPU-only `rayengine-actions` library with bounded FIFO agent queues,
+  lifecycle cleanup hooks, interruption and stable resource reservation tokens.
+  Includes a two-worker interaction example, player cancellation and save/load
+  ownership guidance.
+
 - Exact CPU raycasts, translation casts and overlap visitors for 2D boxes/circles
   and 3D boxes/spheres, with symmetric filters, exclusions, opt-in triggers and
   deterministic first hits over current world bodies; checked docs and a headless example.

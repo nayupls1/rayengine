@@ -1,0 +1,13 @@
+[package]
+name = "rayengine-actions"
+publish = false
+description = "CPU agent action queues and action-owned resource reservations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+
+[lints]
+workspace = true

@@ -5,6 +5,7 @@ pub use rayengine_core::first_person;
 pub use rayengine_core::manifest;
 pub use rayengine_core::pathfinding;
 pub use rayengine_core::physics;
+pub use rayengine_core::placement;
 pub use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 pub use rayengine_core::save;
 pub use rayengine_core::sprite;
@@ -112,6 +113,11 @@ pub mod guides {
     #[doc = include_str!("../examples/pathfinding.rs")]
     #[doc = "```"]
     pub mod pathfinding {}
+    #[doc = include_str!("../docs/placement.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/placement.rs")]
+    #[doc = "```"]
+    pub mod placement {}
     #[doc = include_str!("../docs/background_work.md")]
     pub mod background_work {}
     #[doc = include_str!("../docs/interactive_ui.md")]

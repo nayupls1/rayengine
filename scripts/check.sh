@@ -11,4 +11,5 @@ cargo test --locked --workspace --features rayengine-voxel/render,rayengine-mine
 cargo test --locked -p rayengine --example physics
 cargo test --locked -p rayengine --example simulation
 cargo test --locked -p rayengine --example catalog
+cargo test --locked -p rayengine --example placement
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --features rayengine-voxel/render,rayengine-minecraft/render,rayengine-particles/render,rayengine-tilemap/render
