@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reusable UI list/grid layout, retained scroll offsets and scrollbar geometry,
+  nested drawing/hit-test clipping, wheel routing and stable offscreen focus;
+  checked guide and native catalog/action-inspector example with controller input.
+
 - Optional CPU-only `rayengine-actions` library with bounded FIFO agent queues,
   lifecycle cleanup hooks, interruption and stable resource reservation tokens.
   Includes a two-worker interaction example, player cancellation and save/load

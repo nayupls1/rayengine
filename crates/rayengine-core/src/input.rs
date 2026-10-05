@@ -37,6 +37,7 @@ pub struct Input {
     states: Vec<State>,
     axes: Vec<f32>,
     pointer_delta: Vec2,
+    scroll_delta: Vec2,
     reset_pending: bool,
 }
 
@@ -51,6 +52,7 @@ impl Input {
             blocked,
             blocked_axes: &[],
             block_motion,
+            block_scroll: false,
         }
     }
     /// Preallocates action slots to avoid allocation during input sampling.
@@ -59,6 +61,7 @@ impl Input {
             states: vec![State::default(); actions],
             axes: Vec::new(),
             pointer_delta: Vec2::ZERO,
+            scroll_delta: Vec2::ZERO,
             reset_pending: false,
         }
     }
@@ -142,6 +145,18 @@ impl Input {
         self.pointer_delta
     }
 
+    /// Accumulates wheel displacement across render frames. Positive Y means up.
+    /// Panics for nonfinite displacement.
+    pub fn add_scroll_delta(&mut self, delta: Vec2) {
+        assert!(delta.is_finite());
+        self.scroll_delta += delta;
+    }
+
+    /// Wheel displacement since the preceding consumed tick.
+    pub fn scroll_delta(&self) -> Vec2 {
+        self.scroll_delta
+    }
+
     /// Whether focus loss/reset occurred since the previous consumed tick.
     /// Retained through paused render frames so UI capture can be cancelled
     /// even if the window regains focus before simulation resumes.
@@ -149,13 +164,14 @@ impl Input {
         self.reset_pending
     }
 
-    /// Clears transitions and pointer motion after one fixed update, preserving held actions.
+    /// Clears transitions, pointer motion and wheel displacement after one fixed update.
     pub fn consume_edges(&mut self) {
         for state in &mut self.states {
             state.pressed = false;
             state.released = false;
         }
         self.pointer_delta = Vec2::ZERO;
+        self.scroll_delta = Vec2::ZERO;
         self.reset_pending = false;
     }
 
@@ -167,6 +183,7 @@ impl Input {
             state.down = false;
         }
         self.pointer_delta = Vec2::ZERO;
+        self.scroll_delta = Vec2::ZERO;
         self.axes.fill(0.0);
     }
 }
@@ -178,9 +195,25 @@ pub struct InputView<'a> {
     blocked: &'a [Action],
     blocked_axes: &'a [Axis],
     block_motion: bool,
+    block_scroll: bool,
 }
 
 impl<'a> InputView<'a> {
+    /// Masks wheel displacement independently of relative pointer motion.
+    pub fn with_blocked_scroll(mut self, blocked: bool) -> Self {
+        self.block_scroll = blocked;
+        self
+    }
+
+    /// Wheel displacement, or zero when masked by UI ownership.
+    pub fn scroll_delta(&self) -> Vec2 {
+        if self.block_scroll {
+            Vec2::ZERO
+        } else {
+            self.input.scroll_delta()
+        }
+    }
+
     /// Adds explicit analog masks to this gameplay view. Masked values are
     /// neutral; raw input stays readable by UI and held values resume unmasked.
     pub fn with_blocked_axes(mut self, blocked: &'a [Axis]) -> Self {
@@ -229,6 +262,32 @@ impl<'a> InputView<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wheel_accumulates_routes_consumes_once_and_resets_on_focus_loss() {
+        let mut input = Input::default();
+        input.add_scroll_delta(Vec2::new(1.0, -2.0));
+        input.add_scroll_delta(Vec2::new(-0.5, -1.0));
+        assert_eq!(input.scroll_delta(), Vec2::new(0.5, -3.0));
+        assert_eq!(
+            input.routed(&[], false).scroll_delta(),
+            input.scroll_delta()
+        );
+        assert_eq!(
+            input
+                .routed(&[], false)
+                .with_blocked_scroll(true)
+                .scroll_delta(),
+            Vec2::ZERO
+        );
+        input.consume_edges();
+        assert_eq!(input.scroll_delta(), Vec2::ZERO);
+        input.consume_edges();
+        assert_eq!(input.scroll_delta(), Vec2::ZERO);
+        input.add_scroll_delta(Vec2::ONE);
+        input.release_all();
+        assert_eq!(input.scroll_delta(), Vec2::ZERO);
+    }
 
     #[test]
     fn analog_values_persist_across_ticks_route_and_reset_to_neutral() {

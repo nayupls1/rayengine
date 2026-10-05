@@ -17,7 +17,7 @@ use rayengine_core::{
     mesh::MeshData,
     sprite::{SpriteRegion, SpriteTransform},
     transform::Transform3D,
-    ui::UiResponse,
+    ui::{UiClip, UiResponse},
     viewport::Viewport,
 };
 use raylib::prelude::*;
@@ -290,8 +290,9 @@ impl Frame<'_, '_> {
         draw(&mut UiCanvas {
             raw: &mut raw,
             scale,
+            clip: None,
             logical_size: self.viewport.logical_size,
-            font,
+            font: &font,
             fonts: &mut self.assets.fonts,
             thread: self.thread,
             textures: &UiTextures {
@@ -745,7 +746,8 @@ pub struct UiCanvas<'draw, D: RaylibDraw> {
     /// Current content dimensions in UI units.
     pub logical_size: Vec2,
     scale: Vec2,
-    font: WeakFont,
+    clip: Option<UiClip>,
+    font: &'draw WeakFont,
     fonts: &'draw mut crate::fonts::FontAssets,
     thread: &'draw RaylibThread,
     textures: &'draw dyn TextureSource,
@@ -791,6 +793,45 @@ impl Default for UiButtonStyle {
 }
 
 impl<D: RaylibDraw> UiCanvas<'_, D> {
+    /// Clips every drawing primitive (including raw draws) to logical bounds.
+    /// Nested scopes intersect and restore their parent clip. Use the same
+    /// effective `UiClip` on hit regions. Pixel centers determine raster coverage.
+    pub fn clipped(
+        &mut self,
+        clip: UiClip,
+        draw: impl FnOnce(&mut UiCanvas<'_, raylib::prelude::RaylibScissorMode<'_, D>>),
+    ) {
+        let target = UiClip::new(Aabb2 {
+            min: Vec2::ZERO,
+            max: self.logical_size,
+        });
+        let clip = clip
+            .intersect(self.clip.unwrap_or(target))
+            .intersect(target);
+        let (x, y, width, height) = clip.scissor(self.scale);
+        {
+            let mut raw = self.raw.begin_scissor_mode(x, y, width, height);
+            draw(&mut UiCanvas {
+                raw: &mut raw,
+                counters: self.counters,
+                logical_size: self.logical_size,
+                scale: self.scale,
+                clip: Some(clip),
+                font: self.font,
+                fonts: self.fonts,
+                thread: self.thread,
+                textures: self.textures,
+            });
+        }
+        if let Some(parent) = self.clip {
+            let (x, y, width, height) = parent.scissor(self.scale);
+            // Raylib's scissor guards disable rather than restore. Re-enable the
+            // enclosing scope's clip; its still-live guard owns the eventual end.
+            // The guard contains only a borrow (no allocation/native resource).
+            std::mem::forget(self.raw.begin_scissor_mode(x, y, width, height));
+        }
+    }
+
     /// Native target pixels per logical UI unit. Use for advanced raw text drawing
     /// and choosing font atlas rasterization size; independent of world quality.
     pub fn pixel_scale(&self) -> Vec2 {
@@ -859,7 +900,7 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
                 .measure_text(label, style.font_size, style.spacing);
             count!(self.counters, text, 1);
             self.raw.draw_text_ex(
-                &self.font,
+                self.font,
                 label,
                 v2((bounds.center() - Vec2::new(measured.x, measured.y) * 0.5) * self.scale),
                 style.font_size * self.scale.y,
@@ -934,7 +975,7 @@ impl<D: RaylibDraw> UiCanvas<'_, D> {
     pub fn text(&mut self, text: &str, position: Vec2, size: f32, color: Color) {
         count!(self.counters, text, 1);
         self.raw.draw_text_ex(
-            &self.font,
+            self.font,
             text,
             v2(position * self.scale),
             size * self.scale.y,

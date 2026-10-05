@@ -124,6 +124,9 @@ pub mod guides {
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/menu.rs")]
     #[doc = "```"]
+    #[doc = "\n\n## Complete catalog and inspector example\n\n```no_run"]
+    #[doc = include_str!("../examples/catalog.rs")]
+    #[doc = "```"]
     pub mod interactive_ui {}
     #[doc = include_str!("../docs/saves.md")]
     #[doc = "\n\n```no_run"]

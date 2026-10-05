@@ -79,7 +79,8 @@ pub mod prelude {
         TweenMode, Tweenable,
     };
     pub use crate::ui::{
-        UiActions, UiButton, UiCapture, UiId, UiInput, UiRect, UiRegion, UiResponse, UiState,
+        UiActions, UiButton, UiCapture, UiClip, UiId, UiInput, UiLayout, UiRect, UiRegion,
+        UiResponse, UiScrollState, UiState,
     };
     pub use crate::viewport::{ScaleMode, Viewport};
     pub use glam::{IVec2, Quat, UVec2, Vec2, Vec3, Vec4};
