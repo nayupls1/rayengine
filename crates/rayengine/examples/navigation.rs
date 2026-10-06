@@ -193,15 +193,14 @@ impl House {
     fn step(&mut self) {
         for resident in &mut self.residents {
             let state = self.traffic.state(resident.id);
-            // Furniture can wall off an errand; an unreachable resident would
-            // stand in the way, so it moves on to the next one.
-            if state == Some(AgentState::Unreachable) {
+            // Furniture can wall off an errand or jam a hallway; a resident
+            // that cannot get there would stand in the way, so it moves on to
+            // the next one.
+            let gave_up = matches!(state, Some(AgentState::Unreachable | AgentState::Stuck));
+            if gave_up {
                 resident.rest = 0;
             }
-            if matches!(
-                state,
-                Some(AgentState::Idle | AgentState::Arrived | AgentState::Unreachable)
-            ) {
+            if gave_up || matches!(state, Some(AgentState::Idle | AgentState::Arrived)) {
                 if resident.rest > 0 {
                     resident.rest -= 1;
                 } else {

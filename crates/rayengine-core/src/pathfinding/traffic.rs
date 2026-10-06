@@ -2,7 +2,7 @@ use super::route::{
     ClearanceGrid, LinkId, NavFinder, NavOptions, NavPoint, NavStep, NavTopology, Route,
 };
 use super::{NavGrid, Neighborhood, PathError, PathStatus, corner_open, offset};
-use glam::{UVec2, Vec2};
+use glam::Vec2;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Handle to an agent in [`Traffic`]. Removing the agent invalidates it.
@@ -110,7 +110,8 @@ pub enum TrafficEvent {
         to: AgentId,
     },
     /// The agent made no progress for [`TrafficOptions::give_up`] ticks.
-    /// Reported once until it progresses again or gets a new goal.
+    /// Reported once until it progresses again, gets a new goal or is
+    /// rerouted by an edit.
     Stuck(AgentId),
 }
 
@@ -270,8 +271,8 @@ pub struct Traffic {
     order: Vec<u32>,
     added: u64,
     passing: HashSet<NavPoint>,
-    visited: HashMap<UVec2, UVec2>,
-    queue: VecDeque<UVec2>,
+    visited: HashMap<NavPoint, NavStep>,
+    queue: VecDeque<NavPoint>,
     chain: Vec<u32>,
 }
 
@@ -955,10 +956,10 @@ impl Traffic {
         false
     }
 
-    /// Routes the agent at `index` to the nearest free cell on its layer that
-    /// is off `other`'s remaining route, visiting at most
-    /// `(2 × yield_radius + 1)²` cells: every cell within `yield_radius` steps
-    /// in the open, and further back along a hallway.
+    /// Routes the agent at `index` to the nearest free cell, on any layer
+    /// its enabled links reach, that is off `other`'s remaining route,
+    /// visiting at most `(2 × yield_radius + 1)²` cells: every cell within
+    /// `yield_radius` steps in the open, and further back along a hallway.
     fn find_escape<G: NavGrid, T>(
         &mut self,
         index: u32,
@@ -967,11 +968,10 @@ impl Traffic {
         topology: &NavTopology<T>,
     ) -> bool {
         let agent = &self.agents[index as usize];
-        let start = agent.position;
-        let Some(layer) = layers.get(start.layer as usize) else {
+        let (start, clearance) = (agent.position, agent.clearance);
+        if layers.get(start.layer as usize).is_none() {
             return false;
-        };
-        let grid = ClearanceGrid::new(layer, agent.clearance);
+        }
         let neighborhood = self.options.neighborhood;
         let rule = neighborhood.corner_rule();
         self.passing.clear();
@@ -983,50 +983,92 @@ impl Traffic {
         );
         self.visited.clear();
         self.queue.clear();
-        self.visited.insert(start.cell, start.cell);
-        self.queue.push_back(start.cell);
+        let first = NavStep {
+            point: start,
+            link: None,
+        };
+        self.visited.insert(start, first);
+        self.queue.push_back(start);
         let side = 2 * u64::from(self.options.yield_radius) + 1;
         let cap = usize::try_from(side.saturating_mul(side)).unwrap_or(usize::MAX);
         let mut found = None;
-        while let Some(cell) = self.queue.pop_front() {
-            if cell != start.cell && !self.passing.contains(&NavPoint::new(start.layer, cell)) {
-                found = Some(cell);
+        while let Some(here) = self.queue.pop_front() {
+            if here != start && !self.passing.contains(&here) {
+                found = Some(here);
                 break;
             }
+            let grid = ClearanceGrid::new(&layers[here.layer as usize], clearance);
             for &step in neighborhood.steps() {
                 if self.visited.len() >= cap {
                     break;
                 }
-                let Some(next) = offset(grid.size(), cell, step) else {
+                let Some(cell) = offset(grid.size(), here.cell, step) else {
                     continue;
                 };
-                let point = NavPoint::new(start.layer, next);
+                let next = NavPoint::new(here.layer, cell);
                 if self.visited.contains_key(&next)
-                    || self.occupied.contains_key(&point)
-                    || !grid.walkable(next)
-                    || !corner_open(&grid, cell, step, rule)
+                    || self.occupied.contains_key(&next)
+                    || !grid.walkable(cell)
+                    || !corner_open(&grid, here.cell, step, rule)
                 {
                     continue;
                 }
-                self.visited.insert(next, cell);
+                self.visited.insert(
+                    next,
+                    NavStep {
+                        point: here,
+                        link: None,
+                    },
+                );
+                self.queue.push_back(next);
+            }
+            for &(slot, backwards) in topology.outgoing(here) {
+                if self.visited.len() >= cap {
+                    break;
+                }
+                let (id, link) = topology.slot(slot);
+                let next = if backwards { link.from } else { link.to };
+                if !link.enabled
+                    || self.visited.contains_key(&next)
+                    || self.occupied.contains_key(&next)
+                {
+                    continue;
+                }
+                let Some(layer) = layers.get(next.layer as usize) else {
+                    continue;
+                };
+                let grid = ClearanceGrid::new(layer, clearance);
+                if !next.cell.cmplt(grid.size()).all() || !grid.walkable(next.cell) {
+                    continue;
+                }
+                self.visited.insert(
+                    next,
+                    NavStep {
+                        point: here,
+                        link: Some(id),
+                    },
+                );
                 self.queue.push_back(next);
             }
         }
-        let Some(mut cell) = found else {
+        let Some(mut point) = found else {
             return false;
         };
         let agent = &mut self.agents[index as usize];
         agent.route.clear();
         let steps = agent.route.steps_mut();
+        // Each visited cell records the cell before it and the link taken
+        // from there.
         loop {
+            let from = self.visited[&point];
             steps.push(NavStep {
-                point: NavPoint::new(start.layer, cell),
-                link: None,
+                point,
+                link: from.link,
             });
-            if cell == start.cell {
+            if point == start {
                 break;
             }
-            cell = self.visited[&cell];
+            point = from.point;
         }
         steps.reverse();
         agent.route.set_revision(topology.revision());

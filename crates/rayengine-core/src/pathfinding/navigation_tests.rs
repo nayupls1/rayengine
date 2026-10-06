@@ -1117,3 +1117,38 @@ fn adding_an_agent_on_a_held_cell_panics() {
     traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
     traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
 }
+
+#[test]
+fn agents_meeting_past_stairs_step_back_down_them() {
+    // The upstairs hallway has no side cell: the agent that came up the
+    // stairs makes way by going back down into the room.
+    let layers = [
+        CostGrid::new(cell(5, 3), 1.0),
+        CostGrid::new(cell(5, 1), 1.0),
+    ];
+    let mut topology = NavTopology::new();
+    let stairs = topology.add(NavLink::new(at(0, 2, 0), at(1, 0, 0), 2.0, ()));
+    for (up_priority, down_priority) in [(0, 1), (1, 0), (0, 0)] {
+        let mut traffic = Traffic::new(TrafficOptions {
+            neighborhood: Neighborhood::Four,
+            ..TrafficOptions::default()
+        });
+        let up = traffic.add(at(0, 2, 1), Vec2::ZERO, up_priority);
+        let down = traffic.add(at(1, 4, 0), Vec2::ZERO, down_priority);
+        traffic.set_goal(up, Some(at(1, 4, 0)));
+        traffic.set_goal(down, Some(at(0, 0, 2)));
+        let mut log = Vec::new();
+        run_traffic(&mut traffic, &layers, &topology, 100, &mut log);
+        assert_eq!(traffic.state(up), Some(AgentState::Arrived));
+        assert_eq!(traffic.state(down), Some(AgentState::Arrived));
+        assert!(
+            !log.iter()
+                .any(|event| matches!(event, TrafficEvent::Stuck(_)))
+        );
+        assert!(log.iter().any(|event| matches!(
+            event,
+            TrafficEvent::Moved { agent, link: Some(id), to, .. }
+                if *agent == up && *id == stairs && to.layer == 0
+        )));
+    }
+}
