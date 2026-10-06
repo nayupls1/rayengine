@@ -200,6 +200,7 @@ fn native_diagnostics_counts_resources_replacements_and_json_schema() {
             primitives_3d: 12,
             meshes: 10,
             models: 6,
+            model_poses: 0,
             textures: 2,
             ui_primitives: 6,
             text: 3,

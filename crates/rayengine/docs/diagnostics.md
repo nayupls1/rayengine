@@ -56,7 +56,8 @@ Use frozen state/input for reproducible native rendering workloads.
 
 `draws` counts successful SDK submission requests and passes. Mesh counts
 include the constituent meshes of imported models. Button fill/text/focus
-outline count separately. Failed/stale resource requests contribute zero.
+outline count separately. `model_poses` counts animated model draws, each of
+which also counts as a model. Failed/stale resource requests contribute zero.
 The runner's presentation blit is excluded. These are not physical OpenGL draw
 calls: raylib batches primitives. Calls through `canvas.raw` are unobservable;
 `Frame::with_raylib` counts a raw pass, not its internal submissions.
@@ -69,11 +70,13 @@ Successful replacement counts one live resource. Transient upload overlap or
 assets created and unloaded between samples are not high-water measurements.
 Counts cover standalone textures, models, sounds, generated meshes, materials,
 custom shaders and the SDK material shader, plus custom font handles and atlases.
+`model_animations`, `model_clips` and `model_animation_bytes` count live clip
+sets, their clips and keyframe transform payloads.
 `font_bytes` counts RGBA atlas payloads separately from standalone `texture_bytes`.
 Logical texture bytes include mips;
 generated geometry includes fallback UVs; model geometry covers standard
 vertex/attribute/index arrays. Bytes exclude driver allocation padding, audio,
-shader storage, imported model textures/bones/animations, default raylib assets,
+shader storage, imported model textures/bones, animated vertex copies, default raylib assets,
 game-owned raw resources, CPU container capacities and the runner's target.
 Render-target dimensions are recorded in settings. This is not total VRAM usage.
 `Assets::resource_counts` is available separately and scans retained asset slots

@@ -92,6 +92,11 @@ pub mod guides {
     #[doc = include_str!("../examples/sprites.rs")]
     #[doc = "```"]
     pub mod sprites {}
+    #[doc = include_str!("../docs/skeletal_animation.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/character.rs")]
+    #[doc = "```"]
+    pub mod skeletal_animation {}
     #[doc = include_str!("../docs/tweens.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/tweens.rs")]
@@ -143,7 +148,10 @@ pub mod guides {
 
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
-    pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
+    pub use crate::assets::{
+        MaterialId, MeshId, ModelAnimationsId, ModelAnimator, ModelClipId, ModelClipInfo, ModelId,
+        ModelPose, ShaderId, SoundId, TextureId,
+    };
     pub use crate::audio::{AudioMixer, MusicId, MusicOptions, MusicStatus, SoundOptions};
     pub use crate::fonts::{
         FontId, FontOptions, FontRasterization, FontSampling, TextMetrics, TextStyle,
