@@ -971,3 +971,60 @@ fn agents_meeting_deep_in_a_long_corridor_take_turns() {
         assert_eq!(traffic.state(east), Some(AgentState::Arrived));
     }
 }
+
+#[test]
+fn agents_shuffling_in_a_jam_report_stuck() {
+    // Two floors joined by stairs at both ends of their bottom hallways, with
+    // furniture narrowing the way: four agents crowd the upstairs hallway.
+    let mut ground = parse(&[
+        "################",
+        "#......#.......#",
+        "#......#.......#",
+        "#......#.......#",
+        "#......#.......#",
+        "####.######.####",
+        "#..............#",
+        "################",
+    ]);
+    ground.set(cell(1, 2), None);
+    ground.set(cell(5, 1), None);
+    let mut upstairs = parse(&[
+        "################",
+        "#.....#........#",
+        "#.....#........#",
+        "#.....#........#",
+        "#..............#",
+        "####.#####.#####",
+        "#..............#",
+        "################",
+    ]);
+    upstairs.set(cell(4, 6), None);
+    let layers = [ground, upstairs];
+    let mut topology = NavTopology::new();
+    for x in [1, 14] {
+        topology.add(NavLink::new(at(0, x, 6), at(1, x, 6), 4.0, ()));
+    }
+    let mut traffic = Traffic::new(TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    });
+    let agents = [
+        (at(1, 14, 6), at(1, 3, 2), 0),
+        (at(1, 13, 6), at(0, 12, 1), -3),
+        (at(1, 12, 6), at(0, 13, 3), -1),
+        (at(1, 9, 6), at(0, 4, 1), -2),
+    ]
+    .map(|(start, goal, priority)| {
+        let id = traffic.add(start, Vec2::ZERO, priority);
+        traffic.set_goal(id, Some(goal));
+        id
+    });
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 1000, &mut log);
+    // Agents that never get through are reported, however they move.
+    for id in agents {
+        if traffic.state(id) != Some(AgentState::Arrived) {
+            assert!(log.contains(&TrafficEvent::Stuck(id)), "{id:?}");
+        }
+    }
+}

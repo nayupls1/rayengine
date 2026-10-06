@@ -30,8 +30,10 @@ pub struct TrafficOptions {
     /// Detours an agent may plan per goal; past this, a blocked agent tries
     /// one more every `give_up` ticks. Default: `2`.
     pub max_detours: u32,
-    /// Ticks an agent stays blocked before it is reported
-    /// [`Stuck`](AgentState::Stuck). Default: `40`.
+    /// Ticks without progress before an agent is reported
+    /// [`Stuck`](AgentState::Stuck). Progress is a step onto a cell the agent
+    /// has not stood on since its goal was set; steps back while yielding,
+    /// holds and planning are not counted against it. Default: `40`.
     pub give_up: u32,
     /// Reach of the search for a cell to step aside into when yielding: it
     /// visits at most `(2 × yield_radius + 1)²` cells, covering every cell
@@ -73,8 +75,9 @@ pub enum AgentState {
     Arrived,
     /// No route exists; the search is retried after the next navigation edit.
     Unreachable,
-    /// Blocked for [`TrafficOptions::give_up`] ticks. The agent keeps
-    /// waiting and moves on if the way clears; give it another goal to stop.
+    /// No progress for [`TrafficOptions::give_up`] ticks, whether waiting or
+    /// stepping back and forth. The agent keeps trying and moves on if the
+    /// way clears; give it another goal to stop.
     Stuck,
 }
 
@@ -106,7 +109,8 @@ pub enum TrafficEvent {
         /// Agent it makes room for.
         to: AgentId,
     },
-    /// The agent has been blocked for [`TrafficOptions::give_up`] ticks.
+    /// The agent made no progress for [`TrafficOptions::give_up`] ticks.
+    /// Reported once until it progresses again or gets a new goal.
     Stuck(AgentId),
 }
 
@@ -117,10 +121,19 @@ enum Plan {
     Detour,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Moved {
+    Still,
+    Held,
+    // Onto a cell it had not stood on since its goal was set.
+    Ahead,
+    // Back onto a cell it had stood on before.
+    Back,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Yield {
     to: AgentId,
-    ticks: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -143,8 +156,13 @@ struct Agent {
     hold: u32,
     yielding: Option<Yield>,
     cannot_yield: bool,
-    // Whether `Stuck` was reported since the agent last moved.
+    // Cells stood on since the goal was set; reaching a new one is progress.
+    trail: HashSet<NavPoint>,
+    // Ticks without progress, and whether `Stuck` was reported for them.
+    stalled: u32,
     reported: bool,
+    // What the agent did this tick.
+    moved: Moved,
     // Revision at which the goal was last found unreachable.
     failed: u64,
 }
@@ -180,6 +198,13 @@ impl Agent {
         self.detours = 0;
         self.yielding = None;
         self.cannot_yield = false;
+    }
+
+    /// Starts counting progress afresh from the current cell.
+    fn restart_progress(&mut self) {
+        self.trail.clear();
+        self.trail.insert(self.position);
+        self.stalled = 0;
         self.reported = false;
     }
 }
@@ -198,8 +223,8 @@ impl Agent {
 /// When neither has room, agents queued behind them step aside first. An
 /// agent waiting [`patience`](TrafficOptions::patience) ticks plans a
 /// bounded detour around the other agents, and after
-/// [`give_up`](TrafficOptions::give_up) ticks it reports
-/// [`AgentState::Stuck`] while still waiting; see the
+/// [`give_up`](TrafficOptions::give_up) ticks without progress it reports
+/// [`AgentState::Stuck`] while still trying; see the
 /// [navigation guide](https://docs.rs/rayengine/latest/rayengine/guides/navigation/index.html)
 /// for the full rules.
 ///
@@ -306,7 +331,10 @@ impl Traffic {
                 hold: 0,
                 yielding: None,
                 cannot_yield: false,
+                trail: HashSet::new(),
+                stalled: 0,
                 reported: false,
+                moved: Moved::Still,
                 failed: 0,
             });
             (self.agents.len() - 1) as u32
@@ -321,6 +349,7 @@ impl Traffic {
         agent.goal = None;
         agent.hold = 0;
         agent.reset();
+        agent.restart_progress();
         AgentId {
             index,
             generation: agent.generation,
@@ -357,6 +386,7 @@ impl Traffic {
         let agent = &mut self.agents[index as usize];
         agent.goal = goal;
         agent.reset();
+        agent.restart_progress();
         true
     }
 
@@ -621,13 +651,15 @@ impl Traffic {
         for position in 0..self.order.len() {
             let index = self.order[position];
             let agent = &mut self.agents[index as usize];
+            agent.moved = Moved::Still;
             if agent.hold > 0 {
                 agent.hold -= 1;
+                agent.moved = Moved::Held;
                 continue;
             }
             let Some(next) = agent.next_step() else {
                 if agent.yielding.is_some() {
-                    self.wait_aside(index, layers, topology, events);
+                    self.wait_aside(index, layers, topology);
                 }
                 continue;
             };
@@ -637,6 +669,10 @@ impl Traffic {
                 }
                 _ => self.step(index, next, events),
             }
+        }
+        for position in 0..self.order.len() {
+            let index = self.order[position];
+            self.track_progress(index, events);
         }
     }
 
@@ -654,7 +690,11 @@ impl Traffic {
         agent.at += 1;
         agent.blocked = 0;
         agent.cannot_yield = false;
-        agent.reported = false;
+        agent.moved = if agent.trail.insert(next.point) {
+            Moved::Ahead
+        } else {
+            Moved::Back
+        };
         events.push(TrafficEvent::Moved {
             agent: id,
             from,
@@ -690,13 +730,7 @@ impl Traffic {
     }
 
     /// Waits at the side cell until the agent it yields to has passed it.
-    fn wait_aside<G: NavGrid, T>(
-        &mut self,
-        index: u32,
-        layers: &[G],
-        topology: &NavTopology<T>,
-        events: &mut Vec<TrafficEvent>,
-    ) {
+    fn wait_aside<G: NavGrid, T>(&mut self, index: u32, layers: &[G], topology: &NavTopology<T>) {
         let agent = &self.agents[index as usize];
         let Some(yielding) = agent.yielding else {
             return;
@@ -718,8 +752,6 @@ impl Traffic {
                     .iter()
                     .any(|own| own.point == step.point)
             });
-        let give_up = self.options.give_up;
-        let id = self.id(index);
         let agent = &mut self.agents[index as usize];
         if !in_way {
             agent.yielding = None;
@@ -729,22 +761,12 @@ impl Traffic {
             agent.state = AgentState::Planning;
             return;
         }
-        let ticks = yielding.ticks + 1;
-        agent.yielding = Some(Yield { ticks, ..yielding });
         // The other agent is jammed with no room to step aside, perhaps for
         // want of this cell: move further aside.
         if let Some(to) = self.index(yielding.to)
             && self.agents[to as usize].cannot_yield
         {
             self.find_escape(index, to, layers, topology);
-        }
-        let agent = &mut self.agents[index as usize];
-        if ticks >= give_up {
-            agent.state = AgentState::Stuck;
-            if !agent.reported {
-                agent.reported = true;
-                events.push(TrafficEvent::Stuck(id));
-            }
         }
     }
 
@@ -784,7 +806,7 @@ impl Traffic {
                 self.drop_detour(far);
                 let (id, to) = (self.id(index), self.id(far));
                 let agent = &mut self.agents[index as usize];
-                agent.yielding = Some(Yield { to, ticks: 0 });
+                agent.yielding = Some(Yield { to });
                 agent.state = AgentState::Yielding;
                 agent.blocked = 0;
                 events.push(TrafficEvent::Yielding { agent: id, to });
@@ -830,14 +852,38 @@ impl Traffic {
             agent.detours += 1;
             agent.plan = Plan::Detour;
         }
-        if agent.blocked >= options.give_up {
+        agent.state = AgentState::Waiting;
+    }
+
+    /// Counts ticks without progress and reports `Stuck` once they reach
+    /// `give_up`. Steps back while yielding, holds, planning and standing on
+    /// the goal do not count.
+    fn track_progress(&mut self, index: u32, events: &mut Vec<TrafficEvent>) {
+        let give_up = self.options.give_up;
+        let id = self.id(index);
+        let agent = &mut self.agents[index as usize];
+        let moved = std::mem::replace(&mut agent.moved, Moved::Still);
+        let waiting = matches!(
+            agent.state,
+            AgentState::Moving | AgentState::Waiting | AgentState::Yielding | AgentState::Stuck
+        );
+        match moved {
+            Moved::Ahead => {
+                agent.stalled = 0;
+                agent.reported = false;
+                return;
+            }
+            Moved::Held => return,
+            Moved::Back if agent.yielding.is_some() => return,
+            Moved::Back | Moved::Still if !waiting => return,
+            Moved::Back | Moved::Still => agent.stalled += 1,
+        }
+        if agent.stalled >= give_up {
             agent.state = AgentState::Stuck;
             if !agent.reported {
                 agent.reported = true;
                 events.push(TrafficEvent::Stuck(id));
             }
-        } else {
-            agent.state = AgentState::Waiting;
         }
     }
 
