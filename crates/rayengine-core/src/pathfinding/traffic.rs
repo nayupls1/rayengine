@@ -26,7 +26,8 @@ pub struct TrafficOptions {
     /// Ticks an agent waits behind another before planning a detour around
     /// the agents in its way. Default: `3`.
     pub patience: u32,
-    /// Detours an agent may plan per goal. Default: `2`.
+    /// Detours an agent may plan per goal; past this, a blocked agent tries
+    /// one more every `give_up` ticks. Default: `2`.
     pub max_detours: u32,
     /// Ticks an agent stays blocked before it is reported
     /// [`Stuck`](AgentState::Stuck). Default: `40`.
@@ -188,7 +189,8 @@ impl Agent {
 /// its next cell is taken it waits; two agents meeting head-on in a corridor
 /// resolve it by the lower-priority one stepping aside into the nearest cell
 /// off the other's route, then waiting there until the other has passed.
-/// An agent waiting [`patience`](TrafficOptions::patience) ticks plans a
+/// When neither has room, agents queued behind them step aside first. An
+/// agent waiting [`patience`](TrafficOptions::patience) ticks plans a
 /// bounded detour around the other agents, and after
 /// [`give_up`](TrafficOptions::give_up) ticks it reports
 /// [`AgentState::Stuck`] while still waiting; see the
@@ -233,6 +235,7 @@ pub struct Traffic {
     passing: HashSet<NavPoint>,
     visited: HashMap<UVec2, UVec2>,
     queue: VecDeque<(UVec2, u32)>,
+    chain: Vec<u32>,
 }
 
 impl Traffic {
@@ -259,6 +262,7 @@ impl Traffic {
             passing: HashSet::new(),
             visited: HashMap::new(),
             queue: VecDeque::new(),
+            chain: Vec::new(),
         }
     }
 
@@ -616,7 +620,7 @@ impl Traffic {
             }
             let Some(next) = agent.next_step() else {
                 if agent.yielding.is_some() {
-                    self.wait_aside(index, events);
+                    self.wait_aside(index, layers, topology, events);
                 }
                 continue;
             };
@@ -678,17 +682,27 @@ impl Traffic {
     }
 
     /// Waits at the side cell until the agent it yields to has passed it.
-    fn wait_aside(&mut self, index: u32, events: &mut Vec<TrafficEvent>) {
+    fn wait_aside<G: NavGrid, T>(
+        &mut self,
+        index: u32,
+        layers: &[G],
+        topology: &NavTopology<T>,
+        events: &mut Vec<TrafficEvent>,
+    ) {
         let agent = &self.agents[index as usize];
         let Some(yielding) = agent.yielding else {
             return;
         };
         let passing = self.agent(yielding.to).map_or(&[][..], Agent::remaining);
-        // Its route changed to run through the side cell: stop waiting here.
-        let blocking = passing
-            .get(1)
-            .is_some_and(|step| step.point == agent.position);
+        // Stop waiting here once the other agent is not going anywhere (it
+        // arrived, or waits aside itself) or waits on this one, directly or
+        // through others (its route now runs through the side cell, or a
+        // third agent queues behind this one).
+        let blocking = self
+            .index(yielding.to)
+            .is_some_and(|to| self.waits_on(to, index));
         let in_way = !blocking
+            && passing.len() > 1
             && passing.iter().any(|step| {
                 agent
                     .route
@@ -709,6 +723,14 @@ impl Traffic {
         }
         let ticks = yielding.ticks + 1;
         agent.yielding = Some(Yield { ticks, ..yielding });
+        // The other agent is jammed with no room to step aside, perhaps for
+        // want of this cell: move further aside.
+        if let Some(to) = self.index(yielding.to)
+            && self.agents[to as usize].cannot_yield
+        {
+            self.find_escape(index, to, layers, topology);
+        }
+        let agent = &mut self.agents[index as usize];
         if ticks >= give_up && agent.state != AgentState::Stuck {
             agent.state = AgentState::Stuck;
             events.push(TrafficEvent::Stuck(id));
@@ -724,20 +746,32 @@ impl Traffic {
         events: &mut Vec<TrafficEvent>,
     ) {
         let options = self.options;
+        // Something stands on the way aside: yield to it if needed, step
+        // aside elsewhere, or stop yielding and plan again.
+        let stale = self.agents[index as usize].yielding.take();
         let (me, them) = (&self.agents[index as usize], &self.agents[other as usize]);
         let head_on = them
             .next_step()
             .is_some_and(|step| step.point == me.position);
         let lower = me.rank() > them.rank();
-        let should_yield =
-            me.yielding.is_none() && head_on && ((lower && !me.cannot_yield) || them.cannot_yield);
-        if should_yield {
-            if self.find_escape(index, other, layers, topology) {
+        let should_yield = head_on && ((lower && !me.cannot_yield) || them.cannot_yield);
+        // The blocker is caught in a jam it has no room to step out of: make
+        // room by stepping off the route of the agent at the far end.
+        let jammed = !head_on && them.cannot_yield;
+        let far = if should_yield {
+            Some(other)
+        } else if jammed {
+            self.jam_end(other)
+        } else {
+            None
+        };
+        if let Some(far) = far {
+            if far != index && self.find_escape(index, far, layers, topology) {
                 // Queued detours would replace the escape route, or send the
                 // other agent around instead of through the room just made.
                 self.drop_detour(index);
-                self.drop_detour(other);
-                let (id, to) = (self.id(index), self.id(other));
+                self.drop_detour(far);
+                let (id, to) = (self.id(index), self.id(far));
                 let agent = &mut self.agents[index as usize];
                 agent.yielding = Some(Yield { to, ticks: 0 });
                 agent.state = AgentState::Yielding;
@@ -747,6 +781,24 @@ impl Traffic {
             }
             self.agents[index as usize].cannot_yield = true;
         }
+        if let Some(stale) = stale {
+            let agent = &mut self.agents[index as usize];
+            agent.blocked += 1;
+            if let Some(to) = self.index(stale.to)
+                && self.find_escape(index, to, layers, topology)
+            {
+                let agent = &mut self.agents[index as usize];
+                agent.yielding = Some(stale);
+                agent.state = AgentState::Yielding;
+            } else {
+                let agent = &mut self.agents[index as usize];
+                agent.route.clear();
+                agent.at = 0;
+                agent.plan = Plan::Fresh;
+                agent.state = AgentState::Planning;
+            }
+            return;
+        }
         let id = self.id(index);
         // An agent stepping aside for this one is about to clear the way.
         let making_room = self.agents[other as usize]
@@ -754,11 +806,12 @@ impl Traffic {
             .is_some_and(|yielding| yielding.to == id);
         let agent = &mut self.agents[index as usize];
         agent.blocked += 1;
-        if agent.yielding.is_none()
-            && !making_room
+        if !making_room
             && agent.plan == Plan::None
             && agent.blocked >= options.patience
-            && agent.detours < options.max_detours
+            // Past the cap, retry once every `give_up` ticks in case a jam
+            // has opened up elsewhere.
+            && (agent.detours < options.max_detours || agent.blocked.is_multiple_of(options.give_up))
         {
             agent.detours += 1;
             agent.plan = Plan::Detour;
@@ -768,11 +821,44 @@ impl Traffic {
                 agent.state = AgentState::Stuck;
                 events.push(TrafficEvent::Stuck(id));
             }
-        } else if agent.yielding.is_some() {
-            agent.state = AgentState::Yielding;
         } else {
             agent.state = AgentState::Waiting;
         }
+    }
+
+    /// The far end of a jam: follows the agents holding each next cell from
+    /// `from` until they wait on one already passed, and returns the last
+    /// agent before that. `None` if the chain ends at a free or final cell.
+    fn jam_end(&mut self, from: u32) -> Option<u32> {
+        self.chain.clear();
+        self.chain.push(from);
+        let mut current = from;
+        loop {
+            let next = self.agents[current as usize].next_step()?;
+            let holder = self.occupied.get(&next.point).copied()?;
+            if self.chain.contains(&holder) {
+                return (current != from).then_some(current);
+            }
+            self.chain.push(holder);
+            current = holder;
+        }
+    }
+
+    /// Whether the agent at `from` waits on `target`: follows the agents
+    /// holding each next cell, at most once around all agents.
+    fn waits_on(&self, from: u32, target: u32) -> bool {
+        let mut current = from;
+        for _ in 0..self.agents.len() {
+            let Some(next) = self.agents[current as usize].next_step() else {
+                return false;
+            };
+            match self.occupied.get(&next.point).copied() {
+                Some(holder) if holder == target => return true,
+                Some(holder) if holder != current => current = holder,
+                _ => return false,
+            }
+        }
+        false
     }
 
     /// Routes the agent at `index` to the nearest free cell on its layer that

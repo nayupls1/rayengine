@@ -818,3 +818,79 @@ fn priority_ties_go_to_the_agent_added_first() {
     assert_eq!(traffic.position(early), Some(at(0, 2, 0)));
     assert_eq!(traffic.position(late), Some(at(0, 1, 0)));
 }
+
+#[test]
+fn a_blocked_way_aside_is_replaced() {
+    let layers = [parse(&[
+        "..########", //
+        "..........",
+        "..########",
+    ])];
+    let topology = NavTopology::<()>::new();
+    let mut traffic = Traffic::new(TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    });
+    let high = traffic.add(at(0, 6, 1), Vec2::ZERO, 5);
+    let low = traffic.add(at(0, 5, 1), Vec2::ZERO, 0);
+    let third = traffic.add(at(0, 0, 0), Vec2::ZERO, 9);
+    traffic.set_goal(high, Some(at(0, 0, 1)));
+    traffic.set_goal(low, Some(at(0, 9, 1)));
+    let mut events = Vec::new();
+    let mut sent = false;
+    for _ in 0..60 {
+        traffic.tick(&layers, &topology, &mut events).unwrap();
+        // While `low` backs out of the hallway, a third agent takes the cell
+        // it was heading for.
+        if !sent
+            && events
+                .iter()
+                .any(|event| matches!(event, TrafficEvent::Yielding { .. }))
+        {
+            traffic.set_goal(third, Some(at(0, 1, 2)));
+            sent = true;
+        }
+    }
+    assert!(sent);
+    assert_eq!(traffic.position(third), Some(at(0, 1, 2)));
+    assert_eq!(traffic.state(high), Some(AgentState::Arrived));
+    assert_eq!(traffic.state(low), Some(AgentState::Arrived));
+}
+
+#[test]
+fn agents_behind_a_jam_make_room() {
+    // A hallway with a dead end to the west and a branch north. `west` and
+    // `north` meet head-on with no room to step aside: `north` has the dead
+    // end behind it, `west` has `last` queued behind it.
+    let layers = [parse(&[
+        "###.###", //
+        "###.###", "###.###", ".......",
+    ])];
+    let topology = NavTopology::<()>::new();
+    let mut traffic = Traffic::new(TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    });
+    let west = traffic.add(at(0, 2, 3), Vec2::ZERO, 2);
+    let north = traffic.add(at(0, 1, 3), Vec2::ZERO, 1);
+    let last = traffic.add(at(0, 3, 3), Vec2::ZERO, 0);
+    traffic.set_goal(west, Some(at(0, 0, 3)));
+    traffic.set_goal(north, Some(at(0, 3, 0)));
+    traffic.set_goal(last, Some(at(0, 1, 3)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 40, &mut log);
+    for agent in [west, north, last] {
+        assert_eq!(traffic.state(agent), Some(AgentState::Arrived));
+    }
+    // `last` stepped aside first, off the route of `north`.
+    let first = log
+        .iter()
+        .find(|event| matches!(event, TrafficEvent::Yielding { .. }));
+    assert_eq!(
+        first,
+        Some(&TrafficEvent::Yielding {
+            agent: last,
+            to: north
+        })
+    );
+}

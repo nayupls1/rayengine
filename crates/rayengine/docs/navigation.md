@@ -131,8 +131,8 @@ opening animation.
 by `GridLayout::clearance(body.half_size)`. Every cell a route enters, link
 exits included, must fit a box of that size centered on the cell, inside the
 grid: half sizes below `0.5` change nothing, up to `1.5` need the 3×3 block
-around the cell open, and so on. A `0.6` wide sofa-carrier therefore cannot
-pass a one-cell door that a person can. The same rule is available for
+around the cell open, and so on. A sofa-carrier with half size `0.6` (1.2
+cells wide) therefore cannot pass a one-cell door that a person can. The same rule is available for
 single-grid searches by wrapping a grid in `ClearanceGrid`:
 
 ```rust
@@ -215,9 +215,11 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 | Situation | What happens |
 | --- | --- |
 | Next cell held by an agent moving away | Wait (`Waiting`); move once it is free. |
-| Head-on: the blocker's next cell is this agent's cell | The lower-priority agent searches up to `yield_radius` steps on its layer, through free cells, for the nearest cell off the other's remaining route, walks there (`Yielding`), waits until the other's route no longer crosses the cells it backed through, then plans again. Both drop queued detours, and the other does not plan new ones while it is being made room for. If the other's route changes to run through the side cell, the yielding agent stops waiting and plans again. |
+| Head-on: the blocker's next cell is this agent's cell | The lower-priority agent searches up to `yield_radius` steps on its layer, through free cells, for the nearest cell off the other's remaining route, walks there (`Yielding`), waits until the other's route no longer crosses the cells it backed through, then plans again. Both drop queued detours, and the other does not plan new ones while it is being made room for. The yielding agent also stops waiting and plans again once the other stops going anywhere or waits on it, directly or through a queue of agents. |
 | Head-on, and the lower-priority agent has nowhere to go | The higher-priority agent tries to step aside instead. |
-| Blocked for `patience` ticks | Plan a detour treating cells held by other agents as walls, at most `max_detours` times per goal. A failed detour keeps the current route and the agent keeps waiting. |
+| Head-on, and neither has room | An agent queued behind them steps aside off the route of the agent at the far end, making room. An agent already waiting aside for one of them moves further aside. |
+| The way aside gets blocked by another agent | Search a new way aside; with none, stop yielding and plan again. |
+| Blocked for `patience` ticks | Plan a detour treating cells held by other agents as walls, at most `max_detours` times per goal, then once every `give_up` ticks while still blocked. A failed detour keeps the current route and the agent keeps waiting. |
 | Blocked (or waiting aside) for `give_up` ticks | Report `Stuck` once. The agent keeps its cell and keeps waiting, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
 | No route at all | `Unreachable` once; retried after the next topology edit. |
 | A route broken by an edit | `Rerouted`, then planned again from the current cell. |
@@ -225,16 +227,22 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 Agents standing on their goal do not move out of the way: a resident parked
 in a one-cell hallway blocks it until given another goal. Two agents facing
 each other in a sealed dead end both report `Stuck` and wait face to face,
-which is the expected outcome rather than an endless shuffle. Agents occupy
+which is the expected outcome rather than an endless shuffle. These rules
+resolve two agents meeting, and most meetings of a few more, but they are
+local: when three or more agents crowd a long one-cell hallway, a jam that
+needs several of them to back far out can remain, with agents waiting or
+stepping back and forth until `Stuck`. Wider hallways, passing bays or giving
+a stuck agent another goal resolve it. Agents occupy
 one cell each regardless of clearance; clearance keeps them off walls, not off
 each other.
 
 ### Bounded and deterministic work
 
 Per tick, planning expands at most `plan_budget` nodes, each yield search
-visits at most `(2 × yield_radius + 1)²` cells, route checks after an edit
-cost one step check per remaining step (each reading up to `(2r + 1)²`
-cells with clearance), and detours are capped per goal.
+visits at most `(2 × yield_radius + 1)²` cells, jam checks follow a chain of
+at most all agents, route checks after an edit cost one step check per
+remaining step (each reading up to `(2r + 1)²` cells with clearance), and
+detours are capped per goal, then limited to one per `give_up` blocked ticks.
 Agents, links and events are processed in a fixed order, so the same layers,
 topology, agents and calls produce the same moves on every run.
 
