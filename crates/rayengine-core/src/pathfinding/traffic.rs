@@ -12,8 +12,9 @@ pub struct AgentId {
     generation: u32,
 }
 
-/// [`Traffic`] settings. Every limit is per call to [`Traffic::tick`], so a
-/// tick's work stays bounded however crowded or blocked the map is.
+/// [`Traffic`] settings. `plan_budget` and `yield_radius` bound the work of
+/// each call to [`Traffic::tick`] however crowded or blocked the map is;
+/// `patience` and `give_up` count ticks, and `max_detours` counts per goal.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrafficOptions {
     /// Allowed grid moves and diagonal corner rule.
@@ -408,7 +409,7 @@ impl Traffic {
     /// [`NavTopology::mark_changed`] after editing grid cells; routes broken
     /// by an edit are planned again. Errors when an agent's position, goal or
     /// a link endpoint lies outside the layers, or a cell cost is invalid;
-    /// that agent then becomes idle.
+    /// that agent then becomes idle, and no agent moves during that tick.
     pub fn tick<G: NavGrid, T>(
         &mut self,
         layers: &[G],
