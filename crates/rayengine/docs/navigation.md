@@ -220,7 +220,7 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 | Head-on, and neither has room | An agent queued behind them steps aside off the route of the agent at the far end, making room. An agent already waiting aside for one of them moves further aside. |
 | The way aside gets blocked by another agent | Search a new way aside; with none, stop yielding and plan again. |
 | Blocked for `patience` ticks | Plan a detour treating cells held by other agents as walls, at most `max_detours` times per goal, then once every `give_up` ticks while still blocked; none while another agent stands on the goal itself. A failed detour keeps the current route and the agent keeps waiting. |
-| No progress for `give_up` ticks | Progress is a step onto a cell the agent has not stood on since its goal was set; waiting, waiting aside and stepping forward again over old cells count against it, while steps back when yielding, holds and planning do not. Report `Stuck` once, until the agent progresses or gets a new goal. The agent keeps trying, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
+| No progress for `give_up` ticks | Progress is a step onto a cell the agent has not stood on since its goal was set or an edit rerouted it; waiting, waiting aside and stepping forward again over old cells count against it, while steps back when yielding, the walk back over them afterwards (once per stretch without progress), holds and planning do not. Report `Stuck` once, until the agent progresses or gets a new goal. The agent keeps trying, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
 | No route at all | `Unreachable` once; retried after the next topology edit. |
 | A route broken by an edit | `Rerouted`, then planned again from the current cell. |
 
@@ -248,7 +248,8 @@ visits at most `(2 × yield_radius + 1)²` cells, jam checks follow a chain of
 at most all agents, route checks after an edit cost one step check per
 remaining step (each reading up to `(2r + 1)²` cells with clearance), and
 detours are capped per goal, then limited to one per `give_up` blocked ticks.
-Progress tracking remembers each cell an agent stands on until its next goal.
+Progress tracking remembers each cell an agent stands on until its next goal
+or reroute.
 Agents, links and events are processed in a fixed order, so the same layers,
 topology, agents and calls produce the same moves on every run.
 

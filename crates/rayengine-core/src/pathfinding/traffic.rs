@@ -161,6 +161,10 @@ struct Agent {
     // Ticks without progress, and whether `Stuck` was reported for them.
     stalled: u32,
     reported: bool,
+    // Steps back taken while yielding, which the walk back may retrace
+    // without counting, and whether that walk has begun.
+    retreat: u32,
+    retraced: bool,
     // What the agent did this tick.
     moved: Moved,
     // Revision at which the goal was last found unreachable.
@@ -206,6 +210,8 @@ impl Agent {
         self.trail.insert(self.position);
         self.stalled = 0;
         self.reported = false;
+        self.retreat = 0;
+        self.retraced = false;
     }
 }
 
@@ -307,11 +313,19 @@ impl Traffic {
     /// `clearance` is its half size in cell units (see
     /// [`NavOptions::clearance`]). Higher `priority` moves first and keeps
     /// going when meeting another agent head-on; ties go to the agent added
-    /// first. Panics for a clearance that is not finite and non-negative.
+    /// first. Panics for a clearance that is not finite and non-negative, or
+    /// when another agent holds `position`.
     pub fn add(&mut self, position: NavPoint, clearance: Vec2, priority: i32) -> AgentId {
         assert!(
             clearance.is_finite() && clearance.min_element() >= 0.0,
             "invalid clearance"
+        );
+        assert!(
+            !self
+                .agents
+                .iter()
+                .any(|agent| agent.live && agent.position == position),
+            "cell already held by an agent"
         );
         let index = self.free.pop().unwrap_or_else(|| {
             self.agents.push(Agent {
@@ -334,6 +348,8 @@ impl Traffic {
                 trail: HashSet::new(),
                 stalled: 0,
                 reported: false,
+                retreat: 0,
+                retraced: false,
                 moved: Moved::Still,
                 failed: 0,
             });
@@ -508,6 +524,7 @@ impl Traffic {
             {
                 let detours = agent.detours;
                 agent.reset();
+                agent.restart_progress();
                 agent.detours = detours;
                 events.push(TrafficEvent::Rerouted(self.id(index as u32)));
             }
@@ -857,7 +874,8 @@ impl Traffic {
 
     /// Counts ticks without progress and reports `Stuck` once they reach
     /// `give_up`. Steps back while yielding, holds, planning and standing on
-    /// the goal do not count.
+    /// the goal do not count, nor does walking back over the way aside once
+    /// per stretch without progress.
     fn track_progress(&mut self, index: u32, events: &mut Vec<TrafficEvent>) {
         let give_up = self.options.give_up;
         let id = self.id(index);
@@ -871,10 +889,25 @@ impl Traffic {
             Moved::Ahead => {
                 agent.stalled = 0;
                 agent.reported = false;
+                // A new cell aside leaves the walk back to retrace.
+                if agent.yielding.is_none() {
+                    agent.retreat = 0;
+                    agent.retraced = false;
+                }
                 return;
             }
             Moved::Held => return,
-            Moved::Back if agent.yielding.is_some() => return,
+            Moved::Back if agent.yielding.is_some() => {
+                if !agent.retraced {
+                    agent.retreat += 1;
+                }
+                return;
+            }
+            Moved::Back if agent.retreat > 0 => {
+                agent.retreat -= 1;
+                agent.retraced = true;
+                return;
+            }
             Moved::Back | Moved::Still if !waiting => return,
             Moved::Back | Moved::Still => agent.stalled += 1,
         }
@@ -953,7 +986,7 @@ impl Traffic {
         self.visited.insert(start.cell, start.cell);
         self.queue.push_back(start.cell);
         let side = 2 * u64::from(self.options.yield_radius) + 1;
-        let cap = usize::try_from(side * side).unwrap_or(usize::MAX);
+        let cap = usize::try_from(side.saturating_mul(side)).unwrap_or(usize::MAX);
         let mut found = None;
         while let Some(cell) = self.queue.pop_front() {
             if cell != start.cell && !self.passing.contains(&NavPoint::new(start.layer, cell)) {

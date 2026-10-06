@@ -1028,3 +1028,92 @@ fn agents_shuffling_in_a_jam_report_stuck() {
         }
     }
 }
+
+#[test]
+fn walking_back_after_a_long_yield_or_a_reroute_is_not_stuck() {
+    // Meetings deep in hallways longer than `give_up`: the agent stepping
+    // aside retreats all the way to its room and walks the same cells back.
+    let options = TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    };
+    for length in [80, 160] {
+        let wall = format!("....{}....", "#".repeat(length));
+        let open = ".".repeat(length + 8);
+        let layers = [parse(&[&wall, &open, &wall])];
+        let topology = NavTopology::<()>::new();
+        let end = length as u32 + 7;
+        let mut traffic = Traffic::new(options);
+        let west = traffic.add(at(0, 0, 1), Vec2::ZERO, 1);
+        let east = traffic.add(at(0, end, 1), Vec2::ZERO, 0);
+        traffic.set_goal(west, Some(at(0, end, 1)));
+        traffic.set_goal(east, Some(at(0, 0, 1)));
+        let mut log = Vec::new();
+        run_traffic(&mut traffic, &layers, &topology, 400, &mut log);
+        assert_eq!(traffic.state(west), Some(AgentState::Arrived));
+        assert_eq!(traffic.state(east), Some(AgentState::Arrived));
+        assert!(log.contains(&TrafficEvent::Yielding {
+            agent: east,
+            to: west
+        }));
+        assert!(
+            !log.iter()
+                .any(|event| matches!(event, TrafficEvent::Stuck(_))),
+            "{length}"
+        );
+    }
+
+    // Two hallways joined at the west end; the lone agent walks the lower
+    // one until an edit blocks it and opens the upper one, sending it back.
+    let open = ".".repeat(62);
+    let wall = format!(".{}.", "#".repeat(60));
+    let mut layers = vec![parse(&[&open, &wall, &open])];
+    layers[0].set(cell(55, 0), None);
+    let mut topology = NavTopology::<()>::new();
+    let mut traffic = Traffic::new(options);
+    let agent = traffic.add(at(0, 0, 2), Vec2::ZERO, 0);
+    traffic.set_goal(agent, Some(at(0, 61, 1)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 55, &mut log);
+    layers[0].set(cell(58, 2), None);
+    layers[0].set(cell(55, 0), Some(1.0));
+    topology.mark_changed();
+    run_traffic(&mut traffic, &layers, &topology, 200, &mut log);
+    assert!(log.contains(&TrafficEvent::Rerouted(agent)));
+    assert_eq!(traffic.state(agent), Some(AgentState::Arrived));
+    assert!(
+        !log.iter()
+            .any(|event| matches!(event, TrafficEvent::Stuck(_)))
+    );
+}
+
+#[test]
+fn a_huge_yield_radius_does_not_overflow() {
+    let layers = [parse(&[
+        "....#######....",
+        "...............",
+        "....#######....",
+    ])];
+    let topology = NavTopology::<()>::new();
+    let mut traffic = Traffic::new(TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        yield_radius: u32::MAX,
+        ..TrafficOptions::default()
+    });
+    let west = traffic.add(at(0, 0, 1), Vec2::ZERO, 0);
+    let east = traffic.add(at(0, 14, 1), Vec2::ZERO, 0);
+    traffic.set_goal(west, Some(at(0, 14, 1)));
+    traffic.set_goal(east, Some(at(0, 0, 1)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 60, &mut log);
+    assert_eq!(traffic.state(west), Some(AgentState::Arrived));
+    assert_eq!(traffic.state(east), Some(AgentState::Arrived));
+}
+
+#[test]
+#[should_panic(expected = "cell already held")]
+fn adding_an_agent_on_a_held_cell_panics() {
+    let mut traffic = Traffic::new(TrafficOptions::default());
+    traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
+    traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
+}
