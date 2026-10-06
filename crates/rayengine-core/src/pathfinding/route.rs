@@ -490,7 +490,8 @@ impl Route {
     /// cell. A valid route is marked current, so later calls are free until
     /// the next edit. The step at `from` itself, where the agent stands, is
     /// not checked. Costs are not compared: a valid route may no longer be
-    /// the cheapest one.
+    /// the cheapest one. An empty route, such as after an `Unreachable`
+    /// search, or a `from` past the last step is never valid: plan again.
     pub fn revalidate<G: NavGrid, T>(
         &mut self,
         layers: &[G],
@@ -498,6 +499,9 @@ impl Route {
         from: usize,
         options: &NavOptions,
     ) -> bool {
+        if from >= self.steps.len() {
+            return false;
+        }
         if self.is_current(topology) {
             return true;
         }

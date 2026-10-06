@@ -33,8 +33,10 @@ pub struct TrafficOptions {
     /// Ticks an agent stays blocked before it is reported
     /// [`Stuck`](AgentState::Stuck). Default: `40`.
     pub give_up: u32,
-    /// Grid steps searched for a cell to step aside into when yielding.
-    /// Default: `6`.
+    /// Reach of the search for a cell to step aside into when yielding: it
+    /// visits at most `(2 × yield_radius + 1)²` cells, covering every cell
+    /// within `yield_radius` steps in the open and reaching further back
+    /// along hallways. Default: `6`.
     pub yield_radius: u32,
 }
 
@@ -238,7 +240,7 @@ pub struct Traffic {
     added: u64,
     passing: HashSet<NavPoint>,
     visited: HashMap<UVec2, UVec2>,
-    queue: VecDeque<(UVec2, u32)>,
+    queue: VecDeque<UVec2>,
     chain: Vec<u32>,
 }
 
@@ -875,7 +877,9 @@ impl Traffic {
     }
 
     /// Routes the agent at `index` to the nearest free cell on its layer that
-    /// is off `other`'s remaining route, within the yield radius.
+    /// is off `other`'s remaining route, visiting at most
+    /// `(2 × yield_radius + 1)²` cells: every cell within `yield_radius` steps
+    /// in the open, and further back along a hallway.
     fn find_escape<G: NavGrid, T>(
         &mut self,
         index: u32,
@@ -901,17 +905,19 @@ impl Traffic {
         self.visited.clear();
         self.queue.clear();
         self.visited.insert(start.cell, start.cell);
-        self.queue.push_back((start.cell, 0));
+        self.queue.push_back(start.cell);
+        let side = 2 * u64::from(self.options.yield_radius) + 1;
+        let cap = usize::try_from(side * side).unwrap_or(usize::MAX);
         let mut found = None;
-        while let Some((cell, depth)) = self.queue.pop_front() {
+        while let Some(cell) = self.queue.pop_front() {
             if cell != start.cell && !self.passing.contains(&NavPoint::new(start.layer, cell)) {
                 found = Some(cell);
                 break;
             }
-            if depth == self.options.yield_radius {
-                continue;
-            }
             for &step in neighborhood.steps() {
+                if self.visited.len() >= cap {
+                    break;
+                }
                 let Some(next) = offset(grid.size(), cell, step) else {
                     continue;
                 };
@@ -924,7 +930,7 @@ impl Traffic {
                     continue;
                 }
                 self.visited.insert(next, cell);
-                self.queue.push_back((next, depth + 1));
+                self.queue.push_back(next);
             }
         }
         let Some(mut cell) = found else {

@@ -215,7 +215,7 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 | Situation | What happens |
 | --- | --- |
 | Next cell held by an agent moving away | Wait (`Waiting`); move once it is free. |
-| Head-on: the blocker's next cell is this agent's cell | The lower-priority agent searches up to `yield_radius` steps on its layer, through free cells, for the nearest cell off the other's remaining route, walks there (`Yielding`), waits until the other's route no longer crosses the cells it backed through, then plans again. Both drop queued detours, and the other does not plan new ones while it is being made room for. The yielding agent also stops waiting and plans again once the other stops going anywhere or waits on it, directly or through a queue of agents. |
+| Head-on: the blocker's next cell is this agent's cell | The lower-priority agent searches its layer through free cells, visiting at most `(2 × yield_radius + 1)²` cells (every cell within `yield_radius` steps in the open, and further back along a hallway), for the nearest cell off the other's remaining route, walks there (`Yielding`), waits until the other's route no longer crosses the cells it backed through, then plans again. Both drop queued detours, and the other does not plan new ones while it is being made room for. The yielding agent also stops waiting and plans again once the other stops going anywhere or waits on it, directly or through a queue of agents. |
 | Head-on, and the lower-priority agent has nowhere to go | The higher-priority agent tries to step aside instead. |
 | Head-on, and neither has room | An agent queued behind them steps aside off the route of the agent at the far end, making room. An agent already waiting aside for one of them moves further aside. |
 | The way aside gets blocked by another agent | Search a new way aside; with none, stop yielding and plan again. |
@@ -227,7 +227,11 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 Agents standing on their goal do not move out of the way: a resident parked
 in a one-cell hallway blocks it until given another goal. Two agents facing
 each other in a sealed dead end both report `Stuck` and wait face to face,
-which is the expected outcome rather than an endless shuffle. These rules
+which is the expected outcome rather than an endless shuffle. Elsewhere,
+two agents meeting in a one-cell hallway get past each other as long as a
+side cell lies within the yield search behind one of them: up to
+`(2 × yield_radius + 1)² − 1` cells back along a one-cell hallway, 168 by
+default. These rules
 resolve two agents meeting, and most meetings of a few more, but they are
 local: when three or more agents crowd a long one-cell hallway, a jam that
 needs several of them to back far out can remain, with agents waiting or

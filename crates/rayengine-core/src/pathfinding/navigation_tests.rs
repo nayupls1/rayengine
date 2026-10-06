@@ -413,6 +413,10 @@ fn furniture_invalidates_only_routes_it_blocks() {
     topology.mark_changed();
     assert!(walked.revalidate(&layers, &topology, 2, &options));
     assert!(walked.is_current(&topology));
+    // A step index past the end, or an empty route, needs a new search.
+    assert!(!walked.revalidate(&layers, &topology, 4, &options));
+    walked.clear();
+    assert!(!walked.revalidate(&layers, &topology, 0, &options));
 }
 
 #[test]
@@ -920,4 +924,50 @@ fn stuck_is_reported_once_while_the_goal_is_taken() {
     traffic.set_goal(parked, Some(at(0, 5, 1)));
     run_traffic(&mut traffic, &layers, &topology, 10, &mut log);
     assert_eq!(traffic.state(walker), Some(AgentState::Arrived));
+}
+
+#[test]
+fn agents_meeting_deep_in_a_long_corridor_take_turns() {
+    // The meeting point is far more than `yield_radius` steps from any room,
+    // so the agent stepping aside walks all the way back.
+    let wall = format!("....{}....", "#".repeat(24));
+    let open = ".".repeat(32);
+    let layers = [parse(&[&wall, &open, &wall])];
+    let topology = NavTopology::<()>::new();
+    let options = TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    };
+    let end = 31;
+    for (west_priority, east_priority) in [(0, 0), (1, 0), (0, 1)] {
+        let mut traffic = Traffic::new(options);
+        let west = traffic.add(at(0, 0, 1), Vec2::ZERO, west_priority);
+        let east = traffic.add(at(0, end, 1), Vec2::ZERO, east_priority);
+        traffic.set_goal(west, Some(at(0, end, 1)));
+        traffic.set_goal(east, Some(at(0, 0, 1)));
+        let mut log = Vec::new();
+        run_traffic(&mut traffic, &layers, &topology, 200, &mut log);
+        assert_eq!(traffic.state(west), Some(AgentState::Arrived));
+        assert_eq!(traffic.state(east), Some(AgentState::Arrived));
+        assert!(
+            !log.iter()
+                .any(|event| matches!(event, TrafficEvent::Stuck(_)))
+        );
+    }
+
+    // With a room behind only one of them, that one steps back into it,
+    // whatever the priorities.
+    let wall = format!("{}....", "#".repeat(28));
+    let layers = [parse(&[&wall, &open, &wall])];
+    for (west_priority, east_priority) in [(0, 1), (1, 0)] {
+        let mut traffic = Traffic::new(options);
+        let west = traffic.add(at(0, 2, 1), Vec2::ZERO, west_priority);
+        let east = traffic.add(at(0, end, 1), Vec2::ZERO, east_priority);
+        traffic.set_goal(west, Some(at(0, end, 1)));
+        traffic.set_goal(east, Some(at(0, 0, 1)));
+        let mut log = Vec::new();
+        run_traffic(&mut traffic, &layers, &topology, 200, &mut log);
+        assert_eq!(traffic.state(west), Some(AgentState::Arrived));
+        assert_eq!(traffic.state(east), Some(AgentState::Arrived));
+    }
 }
