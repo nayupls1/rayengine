@@ -32,8 +32,10 @@ pub struct TrafficOptions {
     pub max_detours: u32,
     /// Ticks without progress before an agent is reported
     /// [`Stuck`](AgentState::Stuck). Progress is a step onto a cell the agent
-    /// has not stood on since its goal was set; steps back while yielding,
-    /// holds and planning are not counted against it. Default: `40`.
+    /// has not stood on since its goal was set or an edit rerouted it; steps
+    /// back while yielding and the walk back afterwards, steps of a detour
+    /// back over old cells, holds and planning are not counted against it.
+    /// Default: `40`.
     pub give_up: u32,
     /// Reach of the search for a cell to step aside into when yielding: it
     /// visits at most `(2 × yield_radius + 1)²` cells, covering every cell
@@ -464,6 +466,8 @@ impl Traffic {
     /// by an edit are planned again. Errors when an agent's position, goal or
     /// a link endpoint lies outside the layers, or a cell cost is invalid;
     /// that agent then becomes idle, and no agent moves during that tick.
+    /// Events and state changes from earlier in the tick, such as reroutes
+    /// and finished searches, are kept, so read `events` on error as well.
     pub fn tick<G: NavGrid, T>(
         &mut self,
         layers: &[G],
