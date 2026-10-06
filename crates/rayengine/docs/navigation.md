@@ -219,8 +219,8 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 | Head-on, and the lower-priority agent has nowhere to go | The higher-priority agent tries to step aside instead. |
 | Head-on, and neither has room | An agent queued behind them steps aside off the route of the agent at the far end, making room. An agent already waiting aside for one of them moves further aside. |
 | The way aside gets blocked by another agent | Search a new way aside; with none, stop yielding and plan again. |
-| Blocked for `patience` ticks | Plan a detour treating cells held by other agents as walls, at most `max_detours` times per goal, then once every `give_up` ticks while still blocked. A failed detour keeps the current route and the agent keeps waiting. |
-| Blocked (or waiting aside) for `give_up` ticks | Report `Stuck` once. The agent keeps its cell and keeps waiting, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
+| Blocked for `patience` ticks | Plan a detour treating cells held by other agents as walls, at most `max_detours` times per goal, then once every `give_up` ticks while still blocked; none while another agent stands on the goal itself. A failed detour keeps the current route and the agent keeps waiting. |
+| Blocked (or waiting aside) for `give_up` ticks | Report `Stuck` once, until the agent moves or gets a new goal. The agent keeps its cell and keeps waiting, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
 | No route at all | `Unreachable` once; retried after the next topology edit. |
 | A route broken by an edit | `Rerouted`, then planned again from the current cell. |
 

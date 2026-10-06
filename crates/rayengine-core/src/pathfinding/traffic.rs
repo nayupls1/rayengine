@@ -140,6 +140,8 @@ struct Agent {
     hold: u32,
     yielding: Option<Yield>,
     cannot_yield: bool,
+    // Whether `Stuck` was reported since the agent last moved.
+    reported: bool,
     // Revision at which the goal was last found unreachable.
     failed: u64,
 }
@@ -175,6 +177,7 @@ impl Agent {
         self.detours = 0;
         self.yielding = None;
         self.cannot_yield = false;
+        self.reported = false;
     }
 }
 
@@ -300,6 +303,7 @@ impl Traffic {
                 hold: 0,
                 yielding: None,
                 cannot_yield: false,
+                reported: false,
                 failed: 0,
             });
             (self.agents.len() - 1) as u32
@@ -647,6 +651,7 @@ impl Traffic {
         agent.at += 1;
         agent.blocked = 0;
         agent.cannot_yield = false;
+        agent.reported = false;
         events.push(TrafficEvent::Moved {
             agent: id,
             from,
@@ -731,9 +736,12 @@ impl Traffic {
             self.find_escape(index, to, layers, topology);
         }
         let agent = &mut self.agents[index as usize];
-        if ticks >= give_up && agent.state != AgentState::Stuck {
+        if ticks >= give_up {
             agent.state = AgentState::Stuck;
-            events.push(TrafficEvent::Stuck(id));
+            if !agent.reported {
+                agent.reported = true;
+                events.push(TrafficEvent::Stuck(id));
+            }
         }
     }
 
@@ -806,7 +814,10 @@ impl Traffic {
             .is_some_and(|yielding| yielding.to == id);
         let agent = &mut self.agents[index as usize];
         agent.blocked += 1;
+        // No detour helps while another agent stands on the goal itself.
+        let on_goal = agent.next_step().map(|step| step.point) == agent.goal;
         if !making_room
+            && !on_goal
             && agent.plan == Plan::None
             && agent.blocked >= options.patience
             // Past the cap, retry once every `give_up` ticks in case a jam
@@ -817,8 +828,9 @@ impl Traffic {
             agent.plan = Plan::Detour;
         }
         if agent.blocked >= options.give_up {
-            if agent.state != AgentState::Stuck {
-                agent.state = AgentState::Stuck;
+            agent.state = AgentState::Stuck;
+            if !agent.reported {
+                agent.reported = true;
                 events.push(TrafficEvent::Stuck(id));
             }
         } else {

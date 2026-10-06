@@ -894,3 +894,30 @@ fn agents_behind_a_jam_make_room() {
         })
     );
 }
+
+#[test]
+fn stuck_is_reported_once_while_the_goal_is_taken() {
+    let layers = [parse(&[
+        "......", //
+        "#####.",
+    ])];
+    let topology = NavTopology::<()>::new();
+    let mut traffic = Traffic::new(TrafficOptions::default());
+    let parked = traffic.add(at(0, 5, 0), Vec2::ZERO, 0);
+    let walker = traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
+    traffic.set_goal(walker, Some(at(0, 5, 0)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 200, &mut log);
+    assert_eq!(traffic.position(walker), Some(at(0, 4, 0)));
+    assert_eq!(traffic.state(walker), Some(AgentState::Stuck));
+    let stuck = log
+        .iter()
+        .filter(|event| matches!(event, TrafficEvent::Stuck(_)))
+        .count();
+    assert_eq!(stuck, 1);
+
+    // Once the goal frees up, the walker moves on and arrives.
+    traffic.set_goal(parked, Some(at(0, 5, 1)));
+    run_traffic(&mut traffic, &layers, &topology, 10, &mut log);
+    assert_eq!(traffic.state(walker), Some(AgentState::Arrived));
+}
