@@ -17,6 +17,7 @@ pub mod manifest;
 pub mod mesh;
 pub mod pathfinding;
 pub mod physics;
+pub mod placement;
 pub mod quality;
 pub mod save;
 pub mod scene;
@@ -54,6 +55,10 @@ pub mod prelude {
         QueryError, QueryFilter, Shape2D, Shape3D, StepReport, TriggerEvent, TriggerPhase,
         UniformGrid2D, UniformGrid3D, WorldCastHit2D, WorldCastHit3D,
     };
+    pub use crate::placement::{
+        Footprint, PlacedObject, PlacementChange, PlacementError, PlacementGrid, PlacementId,
+        PlacementNav, PlacementPose, QuarterTurn,
+    };
     pub use crate::quality::{AntiAliasing, RenderPlan, RenderQuality};
     pub use crate::scene::Scene;
     pub use crate::skeletal::{
@@ -78,7 +83,8 @@ pub mod prelude {
         TweenMode, Tweenable,
     };
     pub use crate::ui::{
-        UiActions, UiButton, UiCapture, UiId, UiInput, UiRect, UiRegion, UiResponse, UiState,
+        UiActions, UiButton, UiCapture, UiClip, UiId, UiInput, UiLayout, UiRect, UiRegion,
+        UiResponse, UiScrollState, UiState,
     };
     pub use crate::viewport::{ScaleMode, Viewport};
     pub use glam::{IVec2, Quat, UVec2, Vec2, Vec3, Vec4};

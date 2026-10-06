@@ -1,0 +1,47 @@
+name: CLI setup
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install test shells (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y zsh fish
+      - name: Install test shells (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fish
+      - name: Shell config regression tests
+        run: python3 scripts/tests/test_setup.py
+      - name: Install checkout, invoke in fresh shells and reverse setup
+        run: python3 scripts/tests/setup_smoke.py
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Windows PowerShell PATH tests and checkout smoke
+        shell: powershell
+        run: ./scripts/tests/test_setup.ps1 -Smoke
+      - name: PowerShell 7 PATH tests
+        shell: pwsh
+        run: ./scripts/tests/test_setup.ps1

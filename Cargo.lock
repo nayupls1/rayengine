@@ -700,6 +700,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayengine-actions"
+version = "0.0.3"
+
+[[package]]
 name = "rayengine-beacons"
 version = "0.0.3"
 dependencies = [

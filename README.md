@@ -76,7 +76,11 @@ cargo run --manifest-path ../my-game/Cargo.toml
 The CLI supports `new`, `new-plugin`, `templates`, `info`, `check`, `build`, `run`,
 `package`, `add`/`remove`, `watch`, `clean`, and `doctor`. Add
 `--json` for a versioned result, structured errors and preserved Cargo diagnostics.
-Scaffolds use the matching crates.io SDK version by default. Install the
+Scaffolds use the matching crates.io SDK version by default. For a checkout
+installation with persistent PATH setup, run `bash scripts/setup.sh` on
+Linux/macOS or `& .\scripts\setup.ps1` in Windows PowerShell. See the
+[CLI setup guide](docs/cli_setup.md) for activation, install locations and reversal.
+Install the
 published CLI with `cargo install rayengine-cli --version 0.0.3 --locked`
 and create a project with `rayengine new my-game --kind 2d`. Pass
 `--sdk-path /path/to/rayengine/crates/rayengine` for local engine development.
@@ -130,9 +134,11 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Basic lighting](crates/rayengine/docs/lighting.md)
 - [Layered tilemaps, level format and collision](plugins/tilemap/README.md)
 - [Particle effects plugin](plugins/particles/README.md)
+- [Agent action queues and reservations](plugins/actions/README.md)
 - [Versioned project manifests](crates/rayengine/docs/project_manifest.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
 - [Grid pathfinding](crates/rayengine/docs/pathfinding.md)
+- [Grid placement and build mode](crates/rayengine/docs/placement.md)
 - [Background work and upload budgets](crates/rayengine/docs/background_work.md)
 - [Interactive UI and input routing](crates/rayengine/docs/interactive_ui.md)
 - [Versioned saves and reliable file replacement](crates/rayengine/docs/saves.md)
@@ -166,6 +172,13 @@ See [controls, save behavior and Linux packaging](examples/games/README.md).
 
 In the state stack example, Enter starts a session. Escape pauses with the world visible; Enter/Escape
 resumes, and T while paused returns to title and releases session resources.
+
+Try the catalog grid and action inspector with wheel scrolling, clipped panes,
+scrollbar/header dragging and keyboard/controller focus:
+
+```sh
+cargo run -p rayengine --example catalog
+```
 
 Try the draggable menu, keyboard focus, and dynamic cursor capture example:
 

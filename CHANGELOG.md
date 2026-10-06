@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Reusable UI list/grid layout, retained scroll offsets and scrollbar geometry,
+  nested drawing/hit-test clipping, wheel routing and stable offscreen focus;
+  checked guide and native catalog/action-inspector example with controller input.
+
+- Optional CPU-only `rayengine-actions` library with bounded FIFO agent queues,
+  lifecycle cleanup hooks, interruption and stable resource reservation tokens.
+  Includes a two-worker interaction example, player cancellation and save/load
+  ownership guidance.
+
 - Skeletal 3D character animation: SDK-owned glTF/GLB, M3D and IQM clip sets
   with explicit keyframe rates, load-time skin/clip validation, bone-count
   compatibility checks, and a guard for glTF root joints that crash raylib's loader.

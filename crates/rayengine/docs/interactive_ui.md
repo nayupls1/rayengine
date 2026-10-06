@@ -121,3 +121,87 @@ for the existing baseline/export workflow.
 
 The source is `crates/rayengine/examples/menu.rs`. Rustdoc includes and checks
 that same source below, so the runnable game and HTML documentation stay in sync.
+
+## Catalog layout and scroll state
+
+Run `cargo run -p rayengine --example catalog` for an object catalog and action
+inspector over a 3D world. Escape/controller Start opens and closes it;
+Tab/Up/Down or controller D-pad Up/Down traverses stable item IDs, and
+Enter/Space/controller A activates. Wheel over either pane scrolls that pane.
+Drag the header to move the window, a gap to pan content, or a scrollbar thumb
+to scroll. Backspace/controller B cancels focus/capture. Object selection and
+actions belong to the example game; prices, categories and inventory rules
+remain game-owned.
+
+`UiLayout::list` and `UiLayout::grid` produce uniform content-local item bounds
+and a content extent. `UiScrollState` retains a nonnegative offset in UI units.
+Call `configure(viewport.size(), layout.content_size(count))` on each layout or
+resize; it clamps the offset when content shrinks or the viewport grows.
+`item_bounds` applies the viewport origin and scroll offset once. Use those same
+translated bounds for regions and drawing:
+
+```rust
+use rayengine::prelude::*;
+let viewport = UiRect::top_left(Vec2::splat(16.0), Vec2::new(260.0, 180.0))
+    .resolve(Vec2::new(960.0, 540.0));
+let layout = UiLayout::grid(2, Vec2::new(120.0, 44.0), Vec2::splat(8.0));
+let mut scroll = UiScrollState::default();
+scroll.configure(viewport.size(), layout.content_size(30));
+scroll.scroll_by(Vec2::new(0.0, 40.0));
+let mut region = UiRegion::new(UiId(100), scroll.item_bounds(viewport, layout.item(0)));
+region.clip = Some(UiClip::new(viewport));
+```
+
+Submit all enabled focusable item IDs, including fully clipped items. Scrolling
+and clipping affect pointer hits, not focus eligibility. On a keyboard/controller
+focus change, `reveal(layout.item(index))` brings that item into view. Call reveal
+on navigation changes rather than every tick, so manual scrolling does not snap
+back to a focused item. Filtering/removing an item clears its focus as usual;
+reordering retains the same game-owned ID. A grid uses row-major traversal through
+`UiState`'s existing next/previous actions; game bindings choose navigation keys.
+
+Create a nonfocusable background surface for each pane and set its
+`scroll_target = Some(surface.id)`. Assign the same target to its item regions
+and scrollbar thumb. The **topmost hovered region** explicitly routes its wheel
+displacement to that ID's `UiResponse::scroll`; an overlay with no target blocks
+wheel propagation. Set targets only to submitted, enabled surfaces. Multiply
+wheel input by a negative game-chosen UI-unit step, then call `scroll_by`. For
+content dragging use `-response.drag_delta`. `vertical_thumb` and
+`drag_vertical_thumb` share geometry for a game-owned vertical scrollbar track.
+Pointer capture persists outside a clip until release/cancel.
+
+Wheel input uses `Input::scroll_delta`: positive Y means up. The native runner
+accumulates both axes across render frames; `consume_edges` clears wheel input
+once per fixed tick, and focus loss/reset discards it. `UiInput::from_actions`
+includes this displacement. Gameplay can independently mask it with
+`InputView::with_blocked_scroll(true)`. As with clicks and navigation, raw input
+remains available to the UI. Keep opening/closing ticks masked; the catalog's CPU
+example tests exercise this policy, including dragging and inspector activation.
+
+## Drawing and hit-test clipping
+
+`UiClip` has half-open logical bounds: minimum edges are included, maximum edges
+excluded. UI hit regions also use this convention so adjacent buttons do not
+share an edge. Invalid/empty clips reject every hit. Intersect nested clips with
+`UiClip::intersect` when assigning regions; drawing scopes automatically
+intersect nested clips and restore the parent's scissor after each child:
+
+```no_run
+use rayengine::prelude::*;
+fn draw_catalog(frame: &mut Frame<'_, '_>, viewport: Aabb2, bounds: Aabb2) {
+    frame.ui(|canvas| {
+        canvas.clipped(UiClip::new(viewport), |canvas| {
+            canvas.rectangle(bounds, Color::SKYBLUE);
+            canvas.text("Clipped label", bounds.min, 18.0, Color::WHITE);
+        });
+    });
+}
+```
+
+The scope clips rectangles, labels, icons, custom fonts, render targets and raw
+raylib draws. Pass the same effective clip to every corresponding region. The
+canvas also intersects with the logical target bounds. Raster coverage includes
+a target pixel exactly when its center is inside the logical clip; this specifies
+fractional/DPI edge rounding without enlarging logical hit bounds. Scissors use
+the actual UI render target's pixel scale, including native quality-mode layers.
+Advanced raw drawing must preserve the scope's scissor state.

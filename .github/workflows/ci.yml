@@ -18,7 +18,11 @@ jobs:
         with:
           toolchain: '1.98.1'
       - name: CPU-only primitives require no raylib toolchain
-        run: cargo test --locked -p rayengine-core -p rayengine-voxel -p rayengine-minecraft -p rayengine-particles -p rayengine-tilemap
+        run: cargo test --locked -p rayengine-core -p rayengine-voxel -p rayengine-minecraft -p rayengine-particles -p rayengine-tilemap -p rayengine-actions
+      - name: Headless agent interaction and player cancellation
+        run: |
+          cargo run --locked -p rayengine-actions --example interaction
+          cargo run --locked -p rayengine-actions --example interaction -- --cancel
       - name: Headless voxel examples
         run: |
           cargo run --locked -p rayengine-voxel --example query

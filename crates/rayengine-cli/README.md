@@ -1,7 +1,10 @@
 # rayengine-cli
 
 Project scaffolding and Cargo tools for rayengine games. The installed binary
-is named `rayengine`.
+is named `rayengine`. For local checkout development, run `bash scripts/setup.sh`
+on Linux/macOS or `& .\scripts\setup.ps1` on Windows to install it and persist
+its user PATH. See the [checkout CLI setup guide](https://github.com/nayupls1/rayengine/blob/master/docs/cli_setup.md)
+for activation, custom install roots, fresh-terminal verification and removal.
 
 ```sh
 cargo install rayengine-cli --version 0.0.3 --locked
