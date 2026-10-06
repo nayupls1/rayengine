@@ -1152,3 +1152,66 @@ fn agents_meeting_past_stairs_step_back_down_them() {
         )));
     }
 }
+
+#[test]
+fn agents_do_not_cross_diagonally_in_one_tick() {
+    let layers = [CostGrid::new(cell(4, 4), 1.0)];
+    let topology = NavTopology::<()>::new();
+    let mut traffic = Traffic::new(TrafficOptions::default());
+    let a = traffic.add(at(0, 1, 1), Vec2::ZERO, 0);
+    let b = traffic.add(at(0, 2, 1), Vec2::ZERO, 0);
+    traffic.set_goal(a, Some(at(0, 2, 2)));
+    traffic.set_goal(b, Some(at(0, 1, 2)));
+    let mut events = Vec::new();
+    for _ in 0..10 {
+        traffic.tick(&layers, &topology, &mut events).unwrap();
+        let moves: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                TrafficEvent::Moved { from, to, .. } => Some((*from, *to)),
+                _ => None,
+            })
+            .collect();
+        for &(from, to) in &moves {
+            let other = (at(0, from.cell.x, to.cell.y), at(0, to.cell.x, from.cell.y));
+            assert!(
+                from.cell.x == to.cell.x
+                    || from.cell.y == to.cell.y
+                    || !moves.contains(&other) && !moves.contains(&(other.1, other.0)),
+                "{moves:?}"
+            );
+        }
+    }
+    assert_eq!(traffic.state(a), Some(AgentState::Arrived));
+    assert_eq!(traffic.state(b), Some(AgentState::Arrived));
+}
+
+#[test]
+fn walking_back_along_a_detour_is_not_stuck() {
+    // A ring hallway; a parked agent blocks the near end of the goal, so the
+    // detour runs back along the way the agent came.
+    let mut rows = vec![".".repeat(60); 5];
+    for row in &mut rows[1..4] {
+        *row = format!(".{}.", "#".repeat(58));
+    }
+    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let layers = [parse(&rows)];
+    let topology = NavTopology::<()>::new();
+    for neighborhood in [Neighborhood::Four, TrafficOptions::default().neighborhood] {
+        let mut traffic = Traffic::new(TrafficOptions {
+            neighborhood,
+            ..TrafficOptions::default()
+        });
+        let agent = traffic.add(at(0, 0, 2), Vec2::ZERO, 0);
+        traffic.add(at(0, 59, 0), Vec2::ZERO, 0);
+        traffic.set_goal(agent, Some(at(0, 59, 2)));
+        let mut log = Vec::new();
+        run_traffic(&mut traffic, &layers, &topology, 300, &mut log);
+        assert_eq!(traffic.state(agent), Some(AgentState::Arrived));
+        assert!(
+            !log.iter()
+                .any(|event| matches!(event, TrafficEvent::Stuck(_))),
+            "{neighborhood:?}"
+        );
+    }
+}

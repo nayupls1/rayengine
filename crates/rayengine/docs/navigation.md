@@ -167,8 +167,9 @@ so wide agents cost more per expanded cell.
    agents; a long search continues on the next tick.
 3. Moves agents in priority order (higher `priority` first, then the agent
    added first), each at most one step. An agent only enters a cell no other
-   agent holds, so agents never overlap or push into each other; a cell freed
-   earlier in the tick may be entered by the agent behind.
+   agent holds, and waits a tick rather than cross a diagonal another agent
+   crossed this tick, so agents never overlap or push into each other; a cell
+   freed earlier in the tick may be entered by the agent behind.
 
 Add agents with `add(position, clearance, priority)` and send them with
 `set_goal`. The game animates bodies between the cells in
@@ -220,7 +221,7 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 | Head-on, and neither has room | An agent queued behind them steps aside off the route of the agent at the far end, making room. An agent already waiting aside for one of them moves further aside. |
 | The way aside gets blocked by another agent | Search a new way aside; with none, stop yielding and plan again. |
 | Blocked for `patience` ticks | Plan a detour treating cells held by other agents as walls, at most `max_detours` times per goal, then once every `give_up` ticks while still blocked; none while another agent stands on the goal itself. A failed detour keeps the current route and the agent keeps waiting. |
-| No progress for `give_up` ticks | Progress is a step onto a cell the agent has not stood on since its goal was set or an edit rerouted it; waiting, waiting aside and stepping forward again over old cells count against it, while steps back when yielding, the walk back over them afterwards (once per stretch without progress), holds and planning do not. Report `Stuck` once, until the agent progresses, gets a new goal or is rerouted by an edit. The agent keeps trying, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
+| No progress for `give_up` ticks | Progress is a step onto a cell the agent has not stood on since its goal was set or an edit rerouted it; waiting, waiting aside and stepping forward again over old cells count against it, while steps back when yielding, the walk back over them afterwards (once per stretch without progress), steps of a detour back over old cells, holds and planning do not. Report `Stuck` once, until the agent progresses, gets a new goal or is rerouted by an edit. The agent keeps trying, so it moves on if the way clears; give it another goal, or move the blocker, to resolve it. |
 | No route at all | `Unreachable` once; retried after the next topology edit. |
 | A route broken by an edit | `Rerouted`, then planned again from the current cell. |
 

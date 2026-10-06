@@ -2,7 +2,7 @@ use super::route::{
     ClearanceGrid, LinkId, NavFinder, NavOptions, NavPoint, NavStep, NavTopology, Route,
 };
 use super::{NavGrid, Neighborhood, PathError, PathStatus, corner_open, offset};
-use glam::Vec2;
+use glam::{UVec2, Vec2};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Handle to an agent in [`Traffic`]. Removing the agent invalidates it.
@@ -163,7 +163,8 @@ struct Agent {
     stalled: u32,
     reported: bool,
     // Steps back taken while yielding, which the walk back may retrace
-    // without counting, and whether that walk has begun.
+    // without counting, and whether that walk has begun; a detour adds the
+    // cells it leads back over.
     retreat: u32,
     retraced: bool,
     // What the agent did this tick.
@@ -221,7 +222,8 @@ impl Agent {
 ///
 /// Each [`tick`](Self::tick) plans routes within a shared search budget, then
 /// lets every agent advance at most one step, in priority order. An agent only
-/// enters a cell no other agent holds, so agents never share a cell or push.
+/// enters a cell no other agent holds, and never crosses a diagonal another
+/// agent crossed the same tick, so agents never share a cell or push.
 /// Cells are held one per agent whatever its clearance, which keeps agents
 /// off walls but not off each other. When
 /// its next cell is taken it waits; two agents meeting head-on in a corridor
@@ -274,6 +276,8 @@ pub struct Traffic {
     visited: HashMap<NavPoint, NavStep>,
     queue: VecDeque<NavPoint>,
     chain: Vec<u32>,
+    // Diagonal moves made this tick, as `(from, to)`.
+    diagonals: HashSet<(NavPoint, NavPoint)>,
 }
 
 impl Traffic {
@@ -301,6 +305,7 @@ impl Traffic {
             visited: HashMap::new(),
             queue: VecDeque::new(),
             chain: Vec::new(),
+            diagonals: HashSet::new(),
         }
     }
 
@@ -613,6 +618,19 @@ impl Traffic {
                 Ok(PathStatus::Found { .. }) => {
                     std::mem::swap(&mut agent.route, &mut self.scratch);
                     agent.at = 0;
+                    // A detour may lead back the way the agent came; walking
+                    // there is not a lack of progress.
+                    if detour {
+                        let trail = &agent.trail;
+                        let back = agent
+                            .route
+                            .steps()
+                            .iter()
+                            .skip(1)
+                            .filter(|step| trail.contains(&step.point))
+                            .count();
+                        agent.retreat += back as u32;
+                    }
                     if agent.route.steps().len() == 1 {
                         agent.route.clear();
                         agent.state = AgentState::Arrived;
@@ -666,6 +684,7 @@ impl Traffic {
         let agents = &self.agents;
         self.order
             .sort_by_key(|&index| agents[index as usize].rank());
+        self.diagonals.clear();
         for position in 0..self.order.len() {
             let index = self.order[position];
             let agent = &mut self.agents[index as usize];
@@ -681,6 +700,14 @@ impl Traffic {
                 }
                 continue;
             };
+            // Bodies moving across the same diagonal would pass through each
+            // other: wait a tick for the other to move on.
+            if let Some((from, to)) = diagonal(agent.position, next)
+                && (self.diagonals.contains(&(from, to)) || self.diagonals.contains(&(to, from)))
+            {
+                agent.state = AgentState::Waiting;
+                continue;
+            }
             match self.occupied.get(&next.point).copied() {
                 Some(other) if other != index => {
                     self.blocked(index, other, layers, topology, events);
@@ -704,6 +731,9 @@ impl Traffic {
             self.occupied.remove(&from);
         }
         self.occupied.insert(next.point, index);
+        if diagonal(from, next).is_some() {
+            self.diagonals.insert((from, next.point));
+        }
         agent.position = next.point;
         agent.at += 1;
         agent.blocked = 0;
@@ -876,7 +906,7 @@ impl Traffic {
     /// Counts ticks without progress and reports `Stuck` once they reach
     /// `give_up`. Steps back while yielding, holds, planning and standing on
     /// the goal do not count, nor does walking back over the way aside once
-    /// per stretch without progress.
+    /// per stretch without progress, or back along a detour.
     fn track_progress(&mut self, index: u32, events: &mut Vec<TrafficEvent>) {
         let give_up = self.options.give_up;
         let id = self.id(index);
@@ -1075,4 +1105,20 @@ impl Traffic {
         agent.at = 0;
         true
     }
+}
+
+/// For a diagonal grid move, the other diagonal of the cells it passes
+/// between, as `(from, to)`.
+fn diagonal(from: NavPoint, next: NavStep) -> Option<(NavPoint, NavPoint)> {
+    let to = next.point;
+    (next.link.is_none()
+        && from.layer == to.layer
+        && from.cell.x != to.cell.x
+        && from.cell.y != to.cell.y)
+        .then(|| {
+            (
+                NavPoint::new(from.layer, UVec2::new(from.cell.x, to.cell.y)),
+                NavPoint::new(from.layer, UVec2::new(to.cell.x, from.cell.y)),
+            )
+        })
 }
