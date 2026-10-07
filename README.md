@@ -138,6 +138,7 @@ Guides are plain Markdown included in rustdoc, with checked Rust examples:
 - [Versioned project manifests](crates/rayengine/docs/project_manifest.md)
 - [Spatial queries](crates/rayengine/docs/spatial_queries.md)
 - [Grid pathfinding](crates/rayengine/docs/pathfinding.md)
+- [Floors, links and traffic](crates/rayengine/docs/navigation.md)
 - [Grid placement and build mode](crates/rayengine/docs/placement.md)
 - [Background work and upload budgets](crates/rayengine/docs/background_work.md)
 - [Interactive UI and input routing](crates/rayengine/docs/interactive_ui.md)
@@ -218,6 +219,11 @@ Watch agents navigate around walls with grid A*, path smoothing and a shared
 distance field: `cargo run -p rayengine --example pathfinding`. Click to move
 the target; R resets. See [grid pathfinding](crates/rayengine/docs/pathfinding.md).
 
+Watch residents run errands across a two-floor house with stairs links, a
+closable door and shared one-cell hallways: `cargo run -p rayengine --example navigation`.
+Click to place or remove furniture; D toggles the door. See
+[floors, links and traffic](crates/rayengine/docs/navigation.md).
+
 Benchmark snapshots include samples, revision, toolchain and machine metadata.
 The CPU suite measures primitives and gameplay simulation; the opt-in native
 suite measures draw submission wall time, including driver stalls. Neither is a
@@ -229,7 +235,8 @@ Physics stays small and predictable: axis-aligned boxes, circles/spheres,
 continuous translation, mass-weighted separation, layers, triggers and moving
 platforms. The independent swept character helpers remain available. Rendering
 includes geometric drawing, textures and model access.
-The game owns optional voxel streaming. Navigation is limited to grid pathfinding.
+The game owns optional voxel streaming. Navigation is limited to grids: layered
+floors joined by links, and cell-by-cell traffic for small groups.
 There is no rigid-body solver, advanced lighting, navigation mesh, networking or editor.
 Linux is the tested target; Windows/macOS are
 optional, and browser/mobile are outside the current scope.

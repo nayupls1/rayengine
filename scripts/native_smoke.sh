@@ -57,6 +57,8 @@ cargo run -p rayengine "${features[@]}" --example simulation -- --hidden --frame
 cargo run -p rayengine "${features[@]}" --example simulation -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/simulation-portrait.png"
 cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 1280x720 --screenshot "artifacts/smoke/$backend/pathfinding-wide.png"
 cargo run -p rayengine "${features[@]}" --example pathfinding -- --hidden --frames 60 --size 800x1000 --screenshot "artifacts/smoke/$backend/pathfinding-portrait.png"
+cargo run -p rayengine "${features[@]}" --example navigation -- --hidden --frames 120 --size 1280x720 --screenshot "artifacts/smoke/$backend/navigation-wide.png"
+cargo run -p rayengine "${features[@]}" --example navigation -- --hidden --frames 120 --size 800x1000 --screenshot "artifacts/smoke/$backend/navigation-portrait.png"
 cargo run -p rayengine "${features[@]}" --example placement -- --hidden --frames 30 --size 1280x720 --screenshot "artifacts/smoke/$backend/placement-wide.png"
 cargo run -p rayengine "${features[@]}" --example placement -- --hidden --frames 30 --size 800x1000 --screenshot "artifacts/smoke/$backend/placement-portrait.png"
 cargo run -p rayengine "${features[@]}" --example physics -- --hidden --frames 120 --size 1280x720 --screenshot "artifacts/smoke/$backend/physics-wide.png"

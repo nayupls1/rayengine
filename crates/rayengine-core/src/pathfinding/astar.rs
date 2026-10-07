@@ -96,10 +96,7 @@ struct Search {
 /// ```
 #[derive(Clone, Debug, Default)]
 pub struct PathFinder {
-    nodes: Vec<Node>,
-    open: BinaryHeap<Open>,
-    stamp: u32,
-    expanded: u64,
+    core: Core,
     search: Option<Search>,
 }
 
@@ -111,10 +108,7 @@ impl PathFinder {
 
     /// Allocates buffers for grids up to `size` ahead of the first search.
     pub fn reserve(&mut self, size: UVec2) -> Result<(), PathError> {
-        let count = cell_count(size)?;
-        if self.nodes.len() < count {
-            self.nodes.resize(count, Node::default());
-        }
+        self.core.reserve(cell_count(size)?);
         Ok(())
     }
 
@@ -138,7 +132,7 @@ impl PathFinder {
         path: &mut Vec<UVec2>,
     ) -> Result<PathStatus, PathError> {
         self.search = None;
-        self.expanded = 0;
+        self.core.expanded = 0;
         path.clear();
         options.validate()?;
         let size = grid.size();
@@ -153,24 +147,12 @@ impl PathFinder {
             return Ok(PathStatus::Unreachable);
         }
 
-        self.stamp = self.stamp.wrapping_add(1);
-        if self.stamp == 0 {
-            // Stamps wrapped: old nodes could look current, so forget them all.
-            self.nodes.fill(Node::default());
-            self.stamp = 1;
-        }
-        self.open.clear();
-        let start_index = index(size, start);
-        self.nodes[start_index] = Node {
-            stamp: self.stamp,
-            closed: false,
-            g: 0.0,
-            parent: u32::MAX,
-        };
-        self.push(start_index as u32, 0.0, heuristic(start, goal, options));
+        let start_index = index(size, start) as u32;
+        self.core
+            .begin(start_index, heuristic(start, goal, options));
         self.search = Some(Search {
             size,
-            start: start_index as u32,
+            start: start_index,
             goal,
             options: *options,
         });
@@ -213,51 +195,164 @@ impl PathFinder {
 
     /// Cells expanded by the current or most recent search, across resumes.
     pub fn expanded(&self) -> u64 {
-        self.expanded
+        self.core.expanded
     }
 
     /// Buffer capacities and addresses, to check reuse without allocation.
     #[cfg(test)]
     pub(super) fn buffers(&self) -> (usize, *const u8, usize) {
-        (
-            self.nodes.capacity(),
-            self.nodes.as_ptr().cast(),
-            self.open.capacity(),
-        )
+        self.core.buffers()
     }
 
     #[cfg(test)]
     pub(super) fn set_stamp(&mut self, stamp: u32) {
-        self.stamp = stamp;
-    }
-
-    fn push(&mut self, index: u32, g: f32, h: f32) {
-        self.open.push(Open { f: g + h, g, index });
+        self.core.stamp = stamp;
     }
 
     fn run<G: NavGrid + ?Sized>(
         &mut self,
         grid: &G,
-        mut budget: Option<u32>,
+        budget: Option<u32>,
         path: &mut Vec<UVec2>,
     ) -> Result<PathStatus, PathError> {
         let Some(search) = self.search else {
             return Err(PathError::NoSearch);
         };
-        let Search {
-            size,
-            goal,
-            options,
-            ..
-        } = search;
-        let goal_index = index(size, goal) as u32;
-        let rule = options.neighborhood.corner_rule();
+        let goal = index(search.size, search.goal) as u32;
+        let mut graph = GridGraph {
+            grid,
+            size: search.size,
+            goal: search.goal,
+            options: search.options,
+        };
+        let status = self.core.run(&mut graph, goal, budget);
+        if !matches!(status, Ok(PathStatus::Pending)) {
+            self.search = None;
+        }
+        if let Ok(PathStatus::Found { .. }) = status {
+            self.core.trace(search.start, goal, |node| {
+                path.push(cell_of(search.size, node as usize))
+            });
+            path.reverse();
+        }
+        status
+    }
+}
+
+/// One grid's moves for the shared search core.
+struct GridGraph<'a, G: ?Sized> {
+    grid: &'a G,
+    size: UVec2,
+    goal: UVec2,
+    options: PathOptions,
+}
+
+impl<G: NavGrid + ?Sized> Graph for GridGraph<'_, G> {
+    fn expand(&mut self, node: u32, relax: &mut Relax<'_>) -> Result<(), PathError> {
+        let cell = cell_of(self.size, node as usize);
+        grid_moves(
+            self.grid,
+            cell,
+            0,
+            &self.options,
+            relax,
+            |next| heuristic(next, self.goal, &self.options),
+            |_| {},
+        )
+    }
+}
+
+/// Offers every legal grid move out of `cell` to `relax`, calling `improved`
+/// with each node whose best route it became. Node indices are the cell index
+/// plus `base`, so several grids can share one search.
+pub(super) fn grid_moves<G: NavGrid + ?Sized>(
+    grid: &G,
+    cell: UVec2,
+    base: u32,
+    options: &PathOptions,
+    relax: &mut Relax<'_>,
+    heuristic: impl Fn(UVec2) -> f32,
+    mut improved: impl FnMut(u32),
+) -> Result<(), PathError> {
+    let size = grid.size();
+    let rule = options.neighborhood.corner_rule();
+    for &step in options.neighborhood.steps() {
+        let Some(next) = offset(size, cell, step) else {
+            continue;
+        };
+        let node = base + index(size, next) as u32;
+        if relax.closed(node) || !corner_open(grid, cell, step, rule) {
+            continue;
+        }
+        let Some(cost) = checked_cost(grid, next, options.min_cost)? else {
+            continue;
+        };
+        if relax.offer(node, cost * step_length(step), heuristic(next)) {
+            improved(node);
+        }
+    }
+    Ok(())
+}
+
+/// A graph searched by [`Core`]: nodes are dense indices.
+pub(super) trait Graph {
+    /// Offers each move out of `node` through [`Relax::offer`].
+    fn expand(&mut self, node: u32, relax: &mut Relax<'_>) -> Result<(), PathError>;
+}
+
+/// Resumable A* over dense node indices, shared by grid and layered searches.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Core {
+    nodes: Vec<Node>,
+    open: BinaryHeap<Open>,
+    stamp: u32,
+    pub(super) expanded: u64,
+}
+
+impl Core {
+    pub(super) fn reserve(&mut self, count: usize) {
+        if self.nodes.len() < count {
+            self.nodes.resize(count, Node::default());
+        }
+    }
+
+    /// Starts a search at `start`, forgetting earlier searches. Call
+    /// [`reserve`](Self::reserve) for the node count first.
+    pub(super) fn begin(&mut self, start: u32, heuristic: f32) {
+        self.expanded = 0;
+        self.stamp = self.stamp.wrapping_add(1);
+        if self.stamp == 0 {
+            // Stamps wrapped: old nodes could look current, so forget them all.
+            self.nodes.fill(Node::default());
+            self.stamp = 1;
+        }
+        self.open.clear();
+        self.nodes[start as usize] = Node {
+            stamp: self.stamp,
+            closed: false,
+            g: 0.0,
+            parent: u32::MAX,
+        };
+        self.open.push(Open {
+            f: heuristic,
+            g: 0.0,
+            index: start,
+        });
+    }
+
+    /// Expands at most `budget` nodes. `Found` leaves the path for
+    /// [`trace`](Self::trace).
+    pub(super) fn run(
+        &mut self,
+        graph: &mut impl Graph,
+        goal: u32,
+        mut budget: Option<u32>,
+    ) -> Result<PathStatus, PathError> {
         loop {
             if budget == Some(0) {
                 return Ok(PathStatus::Pending);
             }
             let Some(open) = self.open.pop() else {
-                self.search = None;
                 return Ok(PathStatus::Unreachable);
             };
             let node = &mut self.nodes[open.index as usize];
@@ -270,63 +365,87 @@ impl PathFinder {
             if let Some(remaining) = &mut budget {
                 *remaining -= 1;
             }
-            if open.index == goal_index {
-                self.reconstruct(size, search.start, goal_index, path);
-                self.search = None;
+            if open.index == goal {
                 return Ok(PathStatus::Found { cost: open.g });
             }
-            let cell = cell_of(size, open.index as usize);
-            for &step in options.neighborhood.steps() {
-                let Some(next) = offset(size, cell, step) else {
-                    continue;
-                };
-                let next_index = index(size, next);
-                let known = self.nodes[next_index];
-                let current = known.stamp == self.stamp;
-                if current && known.closed {
-                    continue;
-                }
-                if !corner_open(grid, cell, step, rule) {
-                    continue;
-                }
-                let cost = match checked_cost(grid, next, options.min_cost) {
-                    Ok(Some(cost)) => cost,
-                    Ok(None) => continue,
-                    Err(error) => {
-                        self.search = None;
-                        return Err(error);
-                    }
-                };
-                let g = open.g + cost * step_length(step);
-                if !current || g < known.g {
-                    self.nodes[next_index] = Node {
-                        stamp: self.stamp,
-                        closed: false,
-                        g,
-                        parent: open.index,
-                    };
-                    self.push(next_index as u32, g, heuristic(next, goal, &options));
-                }
-            }
+            graph.expand(
+                open.index,
+                &mut Relax {
+                    nodes: &mut self.nodes,
+                    open: &mut self.open,
+                    stamp: self.stamp,
+                    from: open.index,
+                    g: open.g,
+                },
+            )?;
         }
     }
 
-    fn reconstruct(&self, size: UVec2, start: u32, goal: u32, path: &mut Vec<UVec2>) {
+    /// Visits the found path's nodes from `goal` back to `start`.
+    pub(super) fn trace(&self, start: u32, goal: u32, mut visit: impl FnMut(u32)) {
         let mut current = goal;
         loop {
-            path.push(cell_of(size, current as usize));
+            visit(current);
             if current == start {
                 break;
             }
             current = self.nodes[current as usize].parent;
         }
-        path.reverse();
+    }
+
+    #[cfg(test)]
+    fn buffers(&self) -> (usize, *const u8, usize) {
+        (
+            self.nodes.capacity(),
+            self.nodes.as_ptr().cast(),
+            self.open.capacity(),
+        )
+    }
+}
+
+/// Records moves out of the node being expanded.
+pub(super) struct Relax<'a> {
+    nodes: &'a mut [Node],
+    open: &'a mut BinaryHeap<Open>,
+    stamp: u32,
+    from: u32,
+    g: f32,
+}
+
+impl Relax<'_> {
+    /// Whether `node` is already final; skip computing its cost.
+    pub(super) fn closed(&self, node: u32) -> bool {
+        let known = self.nodes[node as usize];
+        known.stamp == self.stamp && known.closed
+    }
+
+    /// Offers a move to `node` costing `cost`, with `heuristic` the remaining
+    /// lower bound. Returns whether it became the node's best route.
+    pub(super) fn offer(&mut self, node: u32, cost: f32, heuristic: f32) -> bool {
+        let known = self.nodes[node as usize];
+        let current = known.stamp == self.stamp;
+        let g = self.g + cost;
+        if current && (known.closed || g >= known.g) {
+            return false;
+        }
+        self.nodes[node as usize] = Node {
+            stamp: self.stamp,
+            closed: false,
+            g,
+            parent: self.from,
+        };
+        self.open.push(Open {
+            f: g + heuristic,
+            g,
+            index: node,
+        });
+        true
     }
 }
 
 /// Lower bound of the remaining cost: Manhattan or octile distance scaled by
 /// the cheapest possible cell.
-fn heuristic(cell: UVec2, goal: UVec2, options: &PathOptions) -> f32 {
+pub(super) fn heuristic(cell: UVec2, goal: UVec2, options: &PathOptions) -> f32 {
     let delta = (cell.as_ivec2() - goal.as_ivec2()).abs().as_vec2();
     let distance = match options.neighborhood {
         Neighborhood::Four => delta.x + delta.y,

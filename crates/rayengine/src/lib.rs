@@ -118,6 +118,11 @@ pub mod guides {
     #[doc = include_str!("../examples/pathfinding.rs")]
     #[doc = "```"]
     pub mod pathfinding {}
+    #[doc = include_str!("../docs/navigation.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/navigation.rs")]
+    #[doc = "```"]
+    pub mod navigation {}
     #[doc = include_str!("../docs/placement.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/placement.rs")]

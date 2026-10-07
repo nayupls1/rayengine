@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Layered navigation in the core: `NavFinder` searches several grid layers
+  joined by caller-owned `NavTopology` links (stairs, doors, ladders) with
+  enabled state, traversal cost and a game-owned tag; routes name each link
+  they traverse.
+- Topology revisions: link edits and `mark_changed` after grid edits cancel
+  pending searches with `PathError::TopologyChanged`, and `Route::revalidate`
+  rechecks active routes only after edits.
+- Agent clearance on every route cell and link exit, also for single-grid
+  searches through `ClearanceGrid`.
+- `Traffic` moves small groups one cell per tick with one agent per cell,
+  priority-ordered moves, head-on yielding, bounded detours, `Stuck` reports
+  and a shared per-tick planning budget; deterministic for identical inputs.
+- Checked floors, links and traffic guide, CPU tests for closed doors,
+  furniture edits, inter-floor routes, narrow openings and corridor meetings,
+  and a two-floor house example.
+
 - Reusable UI list/grid layout, retained scroll offsets and scrollbar geometry,
   nested drawing/hit-test clipping, wheel routing and stable offscreen focus;
   checked guide and native catalog/action-inspector example with controller input.

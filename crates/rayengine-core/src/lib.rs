@@ -46,8 +46,10 @@ pub mod prelude {
     pub use crate::jobs::{Cancellation, Completion, JobHandle, JobId, JobOutcome, JobPool};
     pub use crate::mesh::{MeshData, MeshError, MeshInfo};
     pub use crate::pathfinding::{
-        CostGrid, DiagonalRule, DistanceField, GridFn, GridLayout, NavGrid, Neighborhood,
-        PathError, PathFinder, PathFollower, PathOptions, PathStatus,
+        AgentId, AgentState, ClearanceGrid, CostGrid, DiagonalRule, DistanceField, GridFn,
+        GridLayout, LinkId, NavFinder, NavGrid, NavLink, NavOptions, NavPoint, NavStep,
+        NavTopology, Neighborhood, PathError, PathFinder, PathFollower, PathOptions, PathStatus,
+        Route, Traffic, TrafficEvent, TrafficOptions,
     };
     pub use crate::physics::{
         BodyId, BodyKind, CastHit2D, CastHit3D, CollisionFilter, OverlapHit2D, OverlapHit3D,
