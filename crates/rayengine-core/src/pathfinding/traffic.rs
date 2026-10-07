@@ -1031,7 +1031,7 @@ impl Traffic {
     }
 
     /// Finds a way aside for the agent at `index` off `other`'s route,
-    /// preferring one that does not pass `other`'s goal; with `past_goal`,
+    /// preferring one that does not pass or leave `other`'s goal; with `past_goal`,
     /// falls back to one that does.
     fn escape<G: NavGrid, T>(
         &mut self,
@@ -1067,6 +1067,10 @@ impl Traffic {
         let rule = neighborhood.corner_rule();
         // Past the other agent's goal may lie a pocket it closes on arriving.
         let sealed = self.agents[other as usize].goal.filter(|_| !past_goal);
+        // Standing on it, every way aside lies past it.
+        if sealed == Some(start) {
+            return false;
+        }
         self.passing.clear();
         self.passing.extend(
             self.agents[other as usize]

@@ -1313,6 +1313,28 @@ fn agents_do_not_yield_past_the_others_goal() {
 }
 
 #[test]
+fn agents_on_the_others_goal_let_it_step_aside_first() {
+    // Stepping off the other's goal into the alcove would shut it in.
+    let layers = [parse(&[
+        "......", //
+        ".#....",
+    ])];
+    let topology = NavTopology::new();
+    let mut traffic = Traffic::new(TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    });
+    let a = traffic.add(at(0, 1, 0), Vec2::ZERO, 0);
+    let b = traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
+    traffic.set_goal(a, Some(at(0, 0, 0)));
+    traffic.set_goal(b, Some(at(0, 5, 1)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 40, &mut log);
+    assert_eq!(traffic.state(a), Some(AgentState::Arrived));
+    assert_eq!(traffic.state(b), Some(AgentState::Arrived));
+}
+
+#[test]
 fn agents_do_not_cross_diagonally_in_one_tick() {
     let layers = [CostGrid::new(cell(4, 4), 1.0)];
     let topology = NavTopology::<()>::new();
