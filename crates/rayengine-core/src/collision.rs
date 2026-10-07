@@ -7,6 +7,9 @@
 
 use glam::{Vec2, Vec3};
 
+mod sector;
+pub use sector::{Sector2, SectorError};
+
 macro_rules! aabb {
     ($name:ident, $vector:ident, $description:literal) => {
         #[doc = $description]

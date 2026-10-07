@@ -51,6 +51,40 @@ fn damage_respects_grace_dash_and_death() {
     assert_eq!(r.hp, 0);
 }
 #[test]
+fn sword_hits_circle_edges_and_respects_cooldown() {
+    for (boss, offset, expected_hit) in [
+        (false, Vec2::new(60.0, 0.0), true),
+        (false, Vec2::new(68.0, 0.0), false),
+        (false, Vec2::new(-4.0, 40.0), true),
+        (false, Vec2::new(-20.0, 30.0), false),
+        (true, Vec2::new(70.0, 0.0), true),
+        (true, Vec2::new(81.0, 0.0), false),
+    ] {
+        let mut r = room(0);
+        let origin = Vec2::new(400.0, 208.0);
+        r.world.body_mut(r.player).unwrap().position = origin;
+        let enemy = &mut r.enemies[0];
+        enemy.boss = boss;
+        let body = r.world.body_mut(enemy.body).unwrap();
+        body.position = origin + offset;
+        body.shape = Shape2D::round(if boss { 13.0 } else { 10.0 });
+        let hp = enemy.hp;
+        let controls = Controls {
+            aim: Vec2::X,
+            attack: true,
+            ..Default::default()
+        };
+        tick(&mut r, controls);
+        let expected_hp = hp - u8::from(expected_hit);
+        assert_eq!(r.enemies[0].hp, expected_hp, "boss={boss}, offset={offset}");
+        tick(&mut r, controls);
+        assert_eq!(
+            r.enemies[0].hp, expected_hp,
+            "cooldown must prevent another hit"
+        );
+    }
+}
+#[test]
 fn walls_block_sword_and_movement() {
     let mut r = room(1);
     let enemy = r.enemies[0].body;

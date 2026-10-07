@@ -5,6 +5,12 @@ Each `fixed_update` receives the same `context.tick.dt`. A frame can have zero,
 one or several updates. Catch-up is bounded (eight updates by default); excess
 whole simulation time is discarded and reported in `RunReport::dropped_time`.
 
+For a paused or accelerated world with responsive menus, use an optional
+game-owned [`SimulationClock`](rayengine_core::time::SimulationClock). Its fixed
+simulation timestep, interpolation and discarded time are separate from the
+host updates. See the [simulation timeline guide](crate::guides::simulation) and
+run `cargo run -p rayengine --example simulation`.
+
 Move with units per second, never units per rendered frame:
 
 ```rust

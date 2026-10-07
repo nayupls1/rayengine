@@ -5,6 +5,7 @@ pub use rayengine_core::first_person;
 pub use rayengine_core::manifest;
 pub use rayengine_core::pathfinding;
 pub use rayengine_core::physics;
+pub use rayengine_core::placement;
 pub use rayengine_core::quality::{AntiAliasing, RenderPlan, RenderQuality};
 pub use rayengine_core::save;
 pub use rayengine_core::sprite;
@@ -58,11 +59,18 @@ pub mod guides {
     #[doc = include_str!("../examples/controls.rs")]
     #[doc = "```"]
     pub mod timing_input {}
+    #[doc = include_str!("../docs/simulation.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/simulation.rs")]
+    #[doc = "```"]
+    pub mod simulation {}
     #[doc = include_str!("../docs/physics.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/physics.rs")]
     #[doc = "```"]
     pub mod physics {}
+    #[doc = include_str!("../docs/directional_hits.md")]
+    pub mod directional_hits {}
     #[doc = include_str!("../docs/first_person.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/first_person.rs")]
@@ -84,6 +92,11 @@ pub mod guides {
     #[doc = include_str!("../examples/sprites.rs")]
     #[doc = "```"]
     pub mod sprites {}
+    #[doc = include_str!("../docs/skeletal_animation.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/character.rs")]
+    #[doc = "```"]
+    pub mod skeletal_animation {}
     #[doc = include_str!("../docs/tweens.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/tweens.rs")]
@@ -110,11 +123,19 @@ pub mod guides {
     #[doc = include_str!("../examples/navigation.rs")]
     #[doc = "```"]
     pub mod navigation {}
+    #[doc = include_str!("../docs/placement.md")]
+    #[doc = "\n\n```no_run"]
+    #[doc = include_str!("../examples/placement.rs")]
+    #[doc = "```"]
+    pub mod placement {}
     #[doc = include_str!("../docs/background_work.md")]
     pub mod background_work {}
     #[doc = include_str!("../docs/interactive_ui.md")]
     #[doc = "\n\n```no_run"]
     #[doc = include_str!("../examples/menu.rs")]
+    #[doc = "```"]
+    #[doc = "\n\n## Complete catalog and inspector example\n\n```no_run"]
+    #[doc = include_str!("../examples/catalog.rs")]
     #[doc = "```"]
     pub mod interactive_ui {}
     #[doc = include_str!("../docs/saves.md")]
@@ -132,7 +153,10 @@ pub mod guides {
 
 /// Common imports for a game using the prescribed lifecycle.
 pub mod prelude {
-    pub use crate::assets::{MaterialId, MeshId, ModelId, ShaderId, SoundId, TextureId};
+    pub use crate::assets::{
+        MaterialId, MeshId, ModelAnimationsId, ModelAnimator, ModelClipId, ModelClipInfo, ModelId,
+        ModelPose, ShaderId, SoundId, TextureId,
+    };
     pub use crate::audio::{AudioMixer, MusicId, MusicOptions, MusicStatus, SoundOptions};
     pub use crate::fonts::{
         FontId, FontOptions, FontRasterization, FontSampling, TextMetrics, TextStyle,

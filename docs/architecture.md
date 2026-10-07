@@ -6,10 +6,11 @@ are optional targets; browser and mobile are outside the current scope.
 ## Crate boundaries
 
 - `rayengine-core`: CPU-only entities/components, transforms and hierarchy,
-  fixed simulation timing, tweens/easing/screen shake, action input, viewport
-  math, cameras, collision/physics, grid pathfinding and layered navigation with
-  traffic, UI layout, validated CPU mesh data, and versioned save containers. No
-  window, audio device, C toolchain, or GPU required.
+  fixed simulation timing, tweens/easing/screen shake, skeletal keyframe timing,
+  action input, viewport math, cameras, collision/physics, grid pathfinding and
+  layered navigation with traffic, UI layout, validated CPU mesh data, and
+  versioned save containers. No window, audio device, C toolchain, or GPU
+  required.
 - `rayengine`: raylib runtime, rendering and asset ownership. One shared
   lifecycle for 2D and 3D. Rendering stays on raylib's owning thread.
 - `rayengine-cli`: scaffold, inspect, check, build, run, watch and package Cargo
@@ -46,6 +47,18 @@ pixels while UI uses logical units. Pixel art can select integer scaling.
 Simulation has a fixed timestep and bounded catch-up. Input edges survive
 render frames without an update and are consumed once by a fixed update.
 Games can interpolate between simulation states during rendering.
+
+Skeletal clips are SDK-owned native sets checked against model skeletons at
+load and draw time. Game-owned `KeyframePlayer` cursors advance with simulation
+time; each animated draw applies its pose to the shared model immediately before
+submission, so instances share one model. Clip selection and character AI stay
+in game code.
+
+An optional game-owned `SimulationClock` adds pause and speed controls without
+changing input/menu updates or presentation. It preserves fixed simulation dt,
+bounds work per advance, reports discarded whole ticks, and retains fractional
+time. Game code routes physics, timers, animation and events through its ticks,
+and queues player-command edges once across accelerated or zero-step updates.
 
 Optional `Plugin<State>` hooks borrow explicit shared state and the same public
 init/update/frame contexts as games. Games own instances, action IDs, dependencies,

@@ -438,17 +438,26 @@ impl Room {
         if controls.attack && self.attack_cooldown == 0.0 && self.dash_time == 0.0 {
             self.attack_cooldown = 0.32;
             self.swing = 0.22;
+            // One static query when the attack starts. The visible rotating
+            // sword is an animation, not a continuous collision sweep.
+            let angle = 2.0 * 0.1_f32.acos();
+            let strike = Sector2::new(self.previous, self.facing, 57.0, angle).unwrap();
+            let boss_strike = Sector2::new(self.previous, self.facing, 67.0, angle).unwrap();
             let hits: Vec<usize> = self
                 .enemies
                 .iter()
                 .enumerate()
                 .filter_map(|(i, e)| {
-                    let p = self.world.body(e.body).unwrap().position;
-                    let d = p - self.previous;
+                    let body = self.world.body(e.body).unwrap();
+                    let Shape2D::Circle { radius } = body.shape else {
+                        unreachable!("dungeon enemies use circular bodies");
+                    };
+                    let area = if e.boss { boss_strike } else { strike };
                     (e.hp > 0
-                        && d.length() < if e.boss { 67.0 } else { 57.0 }
-                        && (d.length() < 18.0 || d.normalize().dot(self.facing) > 0.1)
-                        && self.line_clear(self.previous, p))
+                        && area
+                            .intersects_circle(&Circle::new(body.position, radius))
+                            .unwrap()
+                        && self.line_clear(self.previous, body.position))
                     .then_some(i)
                 })
                 .collect();

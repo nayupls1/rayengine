@@ -441,6 +441,20 @@ impl InitContext<'_, '_> {
         self.assets
             .load_model(self.raylib, self.thread, path.as_ref())
     }
+    /// Loads/caches every skeletal clip in a glTF/GLB, IQM or M3D file by
+    /// canonical path and rate. The rate states how the backend sampled the
+    /// file: [`KeyframeRate::GLTF`](crate::core::skeletal::KeyframeRate::GLTF),
+    /// [`KeyframeRate::M3D`](crate::core::skeletal::KeyframeRate::M3D), or the
+    /// authored rate for IQM. Fails if the file has no clips or if any clip is
+    /// invalid (no keyframes, missing pose rows or nonfinite transforms).
+    pub fn model_animations(
+        &mut self,
+        path: impl AsRef<Path>,
+        rate: crate::core::skeletal::KeyframeRate,
+    ) -> Result<crate::assets::ModelAnimationsId, Error> {
+        self.assets
+            .load_model_animations(self.raylib, self.thread, path.as_ref(), rate)
+    }
     /// Loads/caches a streamed music track. Requires `Config::audio = true`.
     pub fn music(&mut self, path: impl AsRef<Path>) -> Result<crate::audio::MusicId, Error> {
         self.assets.load_music(path.as_ref())
@@ -765,6 +779,10 @@ impl App {
                 if cursor.take_motion() {
                     let delta = raylib.get_mouse_delta();
                     input.add_pointer_delta(Vec2::new(delta.x, delta.y));
+                }
+                if window_focused {
+                    let wheel = raylib.get_mouse_wheel_move_v();
+                    input.add_scroll_delta(Vec2::new(wheel.x, wheel.y));
                 }
                 let mouse = raylib.get_mouse_position();
                 let plan = clock.advance(elapsed);
@@ -1362,6 +1380,8 @@ mod ui_tests;
 #[cfg(test)]
 mod diagnostics_tests;
 
+#[cfg(test)]
+mod animation_tests;
 #[cfg(test)]
 mod sprite_tests;
 

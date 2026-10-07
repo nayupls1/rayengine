@@ -6,6 +6,12 @@
 
 mod geometry;
 mod grid;
+mod query;
+
+pub use query::{
+    CastHit2D, CastHit3D, OverlapHit2D, OverlapHit3D, QueryError, QueryFilter, WorldCastHit2D,
+    WorldCastHit3D,
+};
 mod solver;
 
 use crate::collision::{Aabb2, Aabb3};
@@ -302,7 +308,7 @@ macro_rules! dimension {
             pub fn body(&self, id: BodyId) -> Option<&$body> {
                 self.bodies.get(&id)
             }
-            /// Edits a collider. Inputs are validated at the next step.
+            /// Edits a collider. Inputs are validated at the next step or query.
             pub fn body_mut(&mut self, id: BodyId) -> Option<&mut $body> {
                 self.bodies.get_mut(&id)
             }
