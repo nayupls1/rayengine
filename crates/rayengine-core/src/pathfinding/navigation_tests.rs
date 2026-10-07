@@ -697,6 +697,48 @@ fn traffic_detours_around_a_parked_agent() {
 }
 
 #[test]
+fn new_routes_go_around_parked_agents_when_they_can() {
+    // A one-way drop leads into a pocket whose only exit is an idle agent's
+    // cell: the walker must take the long way round from the start.
+    let layers = [parse(&[
+        "...", //
+        "##.", ".#.", "...",
+    ])];
+    let mut topology = NavTopology::new();
+    topology.add(NavLink::new(at(0, 0, 0), at(0, 0, 2), 1.0, ()).one_way());
+    let mut traffic = Traffic::new(TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    });
+    let idle = traffic.add(at(0, 0, 3), Vec2::ZERO, 0);
+    let walker = traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
+    traffic.set_goal(walker, Some(at(0, 1, 3)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 20, &mut log);
+    assert_eq!(traffic.state(walker), Some(AgentState::Arrived));
+    assert_eq!(traffic.position(idle), Some(at(0, 0, 3)));
+    assert!(
+        !log.iter()
+            .any(|event| matches!(event, TrafficEvent::Moved { link: Some(_), .. }))
+    );
+
+    // With no way round, the route still runs through the parked agent.
+    let layers = [parse(&["....."])];
+    let topology = NavTopology::new();
+    let mut traffic = Traffic::new(TrafficOptions::default());
+    traffic.add(at(0, 2, 0), Vec2::ZERO, 0);
+    let walker = traffic.add(at(0, 0, 0), Vec2::ZERO, 0);
+    traffic.set_goal(walker, Some(at(0, 4, 0)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 5, &mut log);
+    assert_eq!(traffic.position(walker), Some(at(0, 1, 0)));
+    assert!(
+        !log.iter()
+            .any(|event| matches!(event, TrafficEvent::Unreachable(_)))
+    );
+}
+
+#[test]
 fn traffic_reroutes_after_edits_and_retries_unreachable_goals() {
     let mut layers = vec![
         parse(&[
@@ -773,10 +815,15 @@ fn yielding_drops_a_queued_detour() {
             plan_budget,
             ..TrafficOptions::default()
         });
-        let blocker = traffic.add(at(0, 6, 0), Vec2::ZERO, 5);
-        let walker = traffic.add(at(0, 5, 0), Vec2::ZERO, 0);
+        // The blocker steps in once the walker is on its way, so the walker's
+        // route runs through it rather than around it.
+        let walker = traffic.add(at(0, 4, 0), Vec2::ZERO, 0);
         traffic.set_goal(walker, Some(goal));
         let mut events = Vec::new();
+        while traffic.position(walker) != Some(at(0, 5, 0)) {
+            traffic.tick(&layers, &topology, &mut events).unwrap();
+        }
+        let blocker = traffic.add(at(0, 6, 0), Vec2::ZERO, 5);
         let mut sent = false;
         for _ in 0..80 {
             traffic.tick(&layers, &topology, &mut events).unwrap();

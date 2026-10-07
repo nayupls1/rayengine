@@ -215,6 +215,7 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 
 | Situation | What happens |
 | --- | --- |
+| Planning a route | Plan around cells held by idle, arrived and `Unreachable` agents, which will not make way; if that finds no route, plan through them. Agents on the move are ignored. |
 | Next cell held by an agent moving away | Wait (`Waiting`); move once it is free. |
 | Head-on: the blocker's next cell is this agent's cell | The lower-priority agent searches through free cells, on its layer and across enabled links, visiting at most `(2 × yield_radius + 1)²` cells (every cell within `yield_radius` steps in the open, and further back along a hallway), for the nearest cell off the other's remaining route, walks there (`Yielding`), waits until the other's route no longer crosses the cells it backed through, then plans again. Both drop queued detours, and the other does not plan new ones while it is being made room for. The yielding agent also stops waiting and plans again once the other stops going anywhere or waits on it, directly or through a queue of agents. |
 | Head-on, and the lower-priority agent has nowhere to go | The higher-priority agent tries to step aside instead. |
@@ -228,7 +229,10 @@ assert_eq!(traffic.state(east), Some(AgentState::Arrived));
 Only agents following a route make way. Agents standing on their goal, idle
 or `Unreachable` hold their cell: a resident parked in a one-cell hallway
 blocks it until given another goal, so move unreachable and stuck agents on
-as well. Two agents facing
+as well. The yield search only stops on a cell off the other agent's
+remaining route, so two agents meeting on a loop whose cheap way round is
+that route itself, for example a one-cell ring closed by a costly link,
+both report `Stuck`. Two agents facing
 each other in a sealed dead end both report `Stuck` and wait face to face,
 which is the expected outcome rather than an endless shuffle. Elsewhere,
 two agents meeting in a one-cell hallway get past each other as long as a

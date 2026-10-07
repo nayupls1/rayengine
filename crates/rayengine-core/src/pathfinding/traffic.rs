@@ -120,7 +120,11 @@ pub enum TrafficEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Plan {
     None,
+    // Around agents parked on their cell, falling back to `Through`.
     Fresh,
+    // Through every agent.
+    Through,
+    // Around every other agent.
     Detour,
 }
 
@@ -189,6 +193,12 @@ impl Agent {
         self.route.steps().get(self.at..).unwrap_or(&[])
     }
 
+    /// Whether the agent holds its cell with no move ahead: idle, arrived or
+    /// unreachable.
+    fn parked(&self) -> bool {
+        self.goal.is_none() || matches!(self.state, AgentState::Arrived | AgentState::Unreachable)
+    }
+
     fn reset(&mut self) {
         self.route.clear();
         self.at = 0;
@@ -222,8 +232,9 @@ impl Agent {
 /// Moves a small group of agents cell by cell over layered navigation,
 /// keeping one agent per cell.
 ///
-/// Each [`tick`](Self::tick) plans routes within a shared search budget, then
-/// lets every agent advance at most one step, in priority order. An agent only
+/// Each [`tick`](Self::tick) plans routes within a shared search budget,
+/// around agents parked on their cell where possible, then lets every agent
+/// advance at most one step, in priority order. An agent only
 /// enters a cell no other agent holds, and never crosses a diagonal another
 /// agent crossed the same tick, so agents never share a cell or push.
 /// Cells are held one per agent whatever its clearance, which keeps agents
@@ -585,15 +596,23 @@ impl Traffic {
                         budget: Some(budget),
                         ..self.nav_options(agent)
                     };
-                    let (start, detour) = (agent.position, agent.plan == Plan::Detour);
+                    let (start, plan) = (agent.position, agent.plan);
                     self.avoid.clear();
-                    if detour {
-                        self.avoid.extend(
-                            self.occupied
-                                .keys()
-                                .filter(|&&point| point != start && point != goal),
-                        );
-                    }
+                    let agents = &self.agents;
+                    self.avoid.extend(
+                        self.occupied
+                            .iter()
+                            .filter(|&(&point, &other)| {
+                                point != start
+                                    && point != goal
+                                    && match plan {
+                                        Plan::Detour => true,
+                                        Plan::Fresh => agents[other as usize].parked(),
+                                        _ => false,
+                                    }
+                            })
+                            .map(|(&point, _)| point),
+                    );
                     self.planning = Some(index);
                     let avoid = &self.avoid;
                     let result = self.finder.find_route_avoiding(
@@ -616,7 +635,7 @@ impl Traffic {
             self.planning = None;
             let id = self.id(index);
             let agent = &mut self.agents[index as usize];
-            let detour = agent.plan == Plan::Detour;
+            let (detour, fresh) = (agent.plan == Plan::Detour, agent.plan == Plan::Fresh);
             agent.plan = Plan::None;
             match result {
                 Ok(PathStatus::Found { .. }) => {
@@ -645,6 +664,8 @@ impl Traffic {
                 }
                 // A failed detour keeps the agent waiting on its route.
                 Ok(_) if detour => {}
+                // Parked agents may wall the goal off: plan through them.
+                Ok(_) if fresh && !self.avoid.is_empty() => agent.plan = Plan::Through,
                 Ok(_) => {
                     agent.route.clear();
                     agent.state = AgentState::Unreachable;
