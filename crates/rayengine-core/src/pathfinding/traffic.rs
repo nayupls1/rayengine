@@ -1012,7 +1012,7 @@ impl Traffic {
     }
 
     /// Routes the agent at `index` to the nearest free cell, on any layer
-    /// its enabled links reach, that is off `other`'s remaining route,
+    /// its enabled two-way links reach, that is off `other`'s remaining route,
     /// visiting at most `(2 × yield_radius + 1)²` cells: every cell within
     /// `yield_radius` steps in the open, and further back along a hallway.
     fn find_escape<G: NavGrid, T>(
@@ -1083,7 +1083,9 @@ impl Traffic {
                 }
                 let (id, link) = topology.slot(slot);
                 let next = if backwards { link.from } else { link.to };
+                // A one-way link could leave the agent with no way back.
                 if !link.enabled
+                    || !link.two_way
                     || self.visited.contains_key(&next)
                     || self.occupied.contains_key(&next)
                 {
