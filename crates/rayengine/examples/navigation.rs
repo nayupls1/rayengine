@@ -170,8 +170,8 @@ impl House {
 
     /// Places or removes furniture. Agents' cells and walls stay as they are.
     fn toggle_furniture(&mut self, point: NavPoint) {
-        let edge = self.floors[0].size() - 1;
-        let border = point.cell.x == 0 || point.cell.y == 0 || point.cell.cmpeq(edge).any();
+        let (x, y) = (point.cell.x as usize, point.cell.y as usize);
+        let wall = [GROUND, UPSTAIRS][point.layer as usize][y].as_bytes()[x] == b'#';
         let occupied = self
             .traffic
             .agents()
@@ -180,7 +180,7 @@ impl House {
             .topology
             .iter()
             .any(|(_, link)| link.from == point || link.to == point);
-        if border || occupied || linked {
+        if wall || occupied || linked {
             return;
         }
         let grid = &mut self.floors[point.layer as usize];

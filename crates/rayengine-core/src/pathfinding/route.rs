@@ -82,7 +82,8 @@ struct Slot<T> {
 /// Caller-owned links between layers and a revision counting every
 /// navigation edit.
 ///
-/// Every change made through this type advances [`revision`](Self::revision).
+/// Every navigation change made through this type (not tag edits) advances
+/// [`revision`](Self::revision).
 /// The grids themselves belong to the game, so call
 /// [`mark_changed`](Self::mark_changed) after editing their cells (a door
 /// cell closing, furniture placed). [`NavFinder`] rejects resuming a search
