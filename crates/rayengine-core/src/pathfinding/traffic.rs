@@ -856,7 +856,7 @@ impl Traffic {
         if let Some(to) = self.index(yielding.to)
             && self.agents[to as usize].cannot_yield
         {
-            self.find_escape(index, to, layers, topology);
+            self.escape(index, to, true, layers, topology);
         }
     }
 
@@ -889,7 +889,9 @@ impl Traffic {
             None
         };
         if let Some(far) = far {
-            if far != index && self.find_escape(index, far, layers, topology) {
+            // Back past the other's goal only once it has no room either.
+            let past_goal = self.agents[other as usize].cannot_yield;
+            if far != index && self.escape(index, far, past_goal, layers, topology) {
                 // Queued detours would replace the escape route, or send the
                 // other agent around instead of through the room just made.
                 self.drop_detour(index);
@@ -908,7 +910,7 @@ impl Traffic {
             let agent = &mut self.agents[index as usize];
             agent.blocked += 1;
             if let Some(to) = self.index(stale.to)
-                && self.find_escape(index, to, layers, topology)
+                && self.escape(index, to, true, layers, topology)
             {
                 let agent = &mut self.agents[index as usize];
                 agent.yielding = Some(stale);
@@ -1028,14 +1030,31 @@ impl Traffic {
         false
     }
 
+    /// Finds a way aside for the agent at `index` off `other`'s route,
+    /// preferring one that does not pass `other`'s goal; with `past_goal`,
+    /// falls back to one that does.
+    fn escape<G: NavGrid, T>(
+        &mut self,
+        index: u32,
+        other: u32,
+        past_goal: bool,
+        layers: &[G],
+        topology: &NavTopology<T>,
+    ) -> bool {
+        self.find_escape(index, other, false, layers, topology)
+            || past_goal && self.find_escape(index, other, true, layers, topology)
+    }
+
     /// Routes the agent at `index` to the nearest free cell, on any layer
-    /// its enabled two-way links reach, that is off `other`'s remaining route,
+    /// its enabled two-way links reach, unless `past_goal` without passing
+    /// `other`'s goal, that is off `other`'s remaining route,
     /// visiting at most `(2 × yield_radius + 1)²` cells: every cell within
     /// `yield_radius` steps in the open, and further back along a hallway.
     fn find_escape<G: NavGrid, T>(
         &mut self,
         index: u32,
         other: u32,
+        past_goal: bool,
         layers: &[G],
         topology: &NavTopology<T>,
     ) -> bool {
@@ -1046,6 +1065,8 @@ impl Traffic {
         }
         let neighborhood = self.options.neighborhood;
         let rule = neighborhood.corner_rule();
+        // Past the other agent's goal may lie a pocket it closes on arriving.
+        let sealed = self.agents[other as usize].goal.filter(|_| !past_goal);
         self.passing.clear();
         self.passing.extend(
             self.agents[other as usize]
@@ -1079,6 +1100,7 @@ impl Traffic {
                 };
                 let next = NavPoint::new(here.layer, cell);
                 if self.visited.contains_key(&next)
+                    || sealed == Some(next)
                     || self.occupied.contains_key(&next)
                     || !grid.walkable(cell)
                     || !corner_open(&grid, here.cell, step, rule)
@@ -1104,6 +1126,7 @@ impl Traffic {
                 if !link.enabled
                     || !link.two_way
                     || self.visited.contains_key(&next)
+                    || sealed == Some(next)
                     || self.occupied.contains_key(&next)
                 {
                     continue;

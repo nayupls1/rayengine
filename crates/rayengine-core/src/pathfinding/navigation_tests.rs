@@ -1290,6 +1290,29 @@ fn agents_do_not_turn_into_a_cell_left_the_same_tick() {
 }
 
 #[test]
+fn agents_do_not_yield_past_the_others_goal() {
+    // Backing past the other's goal would leave the agent shut in once the
+    // other arrives: the other steps into the side cell instead.
+    let layers = [parse(&[
+        "####.#", //
+        "......",
+    ])];
+    let topology = NavTopology::new();
+    let mut traffic = Traffic::new(TrafficOptions {
+        neighborhood: Neighborhood::Four,
+        ..TrafficOptions::default()
+    });
+    let a = traffic.add(at(0, 5, 1), Vec2::ZERO, 1);
+    let b = traffic.add(at(0, 3, 1), Vec2::ZERO, 0);
+    traffic.set_goal(a, Some(at(0, 2, 1)));
+    traffic.set_goal(b, Some(at(0, 5, 1)));
+    let mut log = Vec::new();
+    run_traffic(&mut traffic, &layers, &topology, 40, &mut log);
+    assert_eq!(traffic.state(a), Some(AgentState::Arrived));
+    assert_eq!(traffic.state(b), Some(AgentState::Arrived));
+}
+
+#[test]
 fn agents_do_not_cross_diagonally_in_one_tick() {
     let layers = [CostGrid::new(cell(4, 4), 1.0)];
     let topology = NavTopology::<()>::new();
