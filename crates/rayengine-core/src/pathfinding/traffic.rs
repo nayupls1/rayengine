@@ -2,7 +2,7 @@ use super::route::{
     ClearanceGrid, LinkId, NavFinder, NavOptions, NavPoint, NavStep, NavTopology, Route,
 };
 use super::{NavGrid, Neighborhood, PathError, PathStatus, corner_open, offset};
-use glam::{UVec2, Vec2};
+use glam::{IVec2, UVec2, Vec2};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Handle to an agent in [`Traffic`]. Removing the agent invalidates it.
@@ -235,8 +235,12 @@ impl Agent {
 /// Each [`tick`](Self::tick) plans routes within a shared search budget,
 /// around agents parked on their cell where possible, then lets every agent
 /// advance at most one step, in priority order. An agent only
-/// enters a cell no other agent holds, and never crosses a diagonal another
-/// agent crossed the same tick, so agents never share a cell or push.
+/// enters a cell no other agent holds, enters a cell left the same tick only
+/// straight behind the agent that left it, and never crosses a diagonal
+/// another agent crossed the same tick, so agents never share a cell, cut
+/// into each other or push. Bodies moving straight between cells over a
+/// tick stay a cell apart, or √½ of a cell when one steps diagonally past
+/// another.
 /// Cells are held one per agent whatever its clearance, which keeps agents
 /// off walls but not off each other. When
 /// its next cell is taken it waits; two agents meeting head-on in a corridor
@@ -291,6 +295,8 @@ pub struct Traffic {
     chain: Vec<u32>,
     // Diagonal moves made this tick, as `(from, to)`.
     diagonals: HashSet<(NavPoint, NavPoint)>,
+    // Cells left this tick, with the heading of the agent that left.
+    vacated: HashMap<NavPoint, Option<IVec2>>,
 }
 
 impl Traffic {
@@ -319,6 +325,7 @@ impl Traffic {
             queue: VecDeque::new(),
             chain: Vec::new(),
             diagonals: HashSet::new(),
+            vacated: HashMap::new(),
         }
     }
 
@@ -710,6 +717,7 @@ impl Traffic {
         self.order
             .sort_by_key(|&index| agents[index as usize].rank());
         self.diagonals.clear();
+        self.vacated.clear();
         for position in 0..self.order.len() {
             let index = self.order[position];
             let agent = &mut self.agents[index as usize];
@@ -729,6 +737,14 @@ impl Traffic {
             // other: wait a tick for the other to move on.
             if let Some((from, to)) = diagonal(agent.position, next)
                 && (self.diagonals.contains(&(from, to)) || self.diagonals.contains(&(to, from)))
+            {
+                agent.state = AgentState::Waiting;
+                continue;
+            }
+            // A body still leaving its cell only clears the way for one
+            // following straight behind it; turning in would cut into it.
+            if let Some(&left) = self.vacated.get(&next.point)
+                && (left.is_none() || left != heading(agent.position, next))
             {
                 agent.state = AgentState::Waiting;
                 continue;
@@ -759,6 +775,7 @@ impl Traffic {
         if diagonal(from, next).is_some() {
             self.diagonals.insert((from, next.point));
         }
+        self.vacated.insert(from, heading(from, next));
         agent.position = next.point;
         agent.at += 1;
         agent.blocked = 0;
@@ -1132,6 +1149,12 @@ impl Traffic {
         agent.at = 0;
         true
     }
+}
+
+/// The cell offset of a grid move on one layer; `None` for a link.
+fn heading(from: NavPoint, next: NavStep) -> Option<IVec2> {
+    (next.link.is_none() && from.layer == next.point.layer)
+        .then(|| next.point.cell.as_ivec2() - from.cell.as_ivec2())
 }
 
 /// For a diagonal grid move, the other diagonal of the cells it passes

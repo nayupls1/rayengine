@@ -575,8 +575,42 @@ fn run_traffic(
 ) {
     let mut events = Vec::new();
     for _ in 0..ticks {
+        let before: Vec<_> = traffic
+            .agents()
+            .map(|id| traffic.position(id).unwrap())
+            .collect();
         traffic.tick(layers, topology, &mut events).unwrap();
         log.extend_from_slice(&events);
+        // Bodies lerped between cells over the tick keep a cell apart, or
+        // half a diagonal when one cuts past another diagonally.
+        let apart = if traffic.options().neighborhood == Neighborhood::Four {
+            0.99
+        } else {
+            0.7
+        };
+        let after: Vec<_> = traffic
+            .agents()
+            .map(|id| traffic.position(id).unwrap())
+            .collect();
+        if before.len() == after.len() {
+            for i in 0..after.len() {
+                for j in i + 1..after.len() {
+                    let points = [before[i], after[i], before[j], after[j]];
+                    if points.iter().any(|point| point.layer != points[0].layer) {
+                        continue;
+                    }
+                    let [a0, a1, b0, b1] = points.map(|point| point.cell.as_vec2());
+                    let (start, change) = (b0 - a0, (b1 - a1) - (b0 - a0));
+                    let t = if change == Vec2::ZERO {
+                        0.0
+                    } else {
+                        (-start.dot(change) / change.length_squared()).clamp(0.0, 1.0)
+                    };
+                    let closest = (start + change * t).length();
+                    assert!(closest > apart, "bodies {closest} apart: {points:?}");
+                }
+            }
+        }
         // One agent per cell, always.
         let mut held: Vec<_> = traffic
             .agents()
@@ -1229,6 +1263,30 @@ fn agents_do_not_yield_down_one_way_links() {
         !log.iter()
             .any(|event| matches!(event, TrafficEvent::Moved { link: Some(_), .. }))
     );
+}
+
+#[test]
+fn agents_do_not_turn_into_a_cell_left_the_same_tick() {
+    // The second agent would cut into the first, still leaving its cell.
+    let layers = [CostGrid::new(cell(3, 3), 1.0)];
+    let topology = NavTopology::new();
+    for (neighborhood, goal) in [
+        (TrafficOptions::default().neighborhood, at(0, 2, 2)),
+        (Neighborhood::Four, at(0, 0, 2)),
+    ] {
+        let mut traffic = Traffic::new(TrafficOptions {
+            neighborhood,
+            ..TrafficOptions::default()
+        });
+        let a = traffic.add(at(0, 0, 0), Vec2::ZERO, 1);
+        let b = traffic.add(at(0, 1, 0), Vec2::ZERO, 0);
+        traffic.set_goal(a, Some(goal));
+        traffic.set_goal(b, Some(at(0, 0, 0)));
+        let mut log = Vec::new();
+        run_traffic(&mut traffic, &layers, &topology, 10, &mut log);
+        assert_eq!(traffic.state(a), Some(AgentState::Arrived));
+        assert_eq!(traffic.state(b), Some(AgentState::Arrived));
+    }
 }
 
 #[test]

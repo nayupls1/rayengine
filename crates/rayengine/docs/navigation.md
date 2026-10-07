@@ -168,8 +168,13 @@ so wide agents cost more per expanded cell.
 3. Moves agents in priority order (higher `priority` first, then the agent
    added first), each at most one step. An agent only enters a cell no other
    agent holds, and waits a tick rather than cross a diagonal another agent
-   crossed this tick, so agents never overlap or push into each other; a cell
-   freed earlier in the tick may be entered by the agent behind.
+   crossed this tick or turn into a cell another agent left this tick, so
+   agents never overlap or push into each other; a cell freed earlier in the
+   tick may be entered by the agent straight behind, moving the same way.
+   Bodies drawn moving in a straight line between their cells over a tick stay
+   a full cell apart with four-way moves; with eight-way moves an agent may
+   step diagonally past another's cell, so they come within √½ ≈ 0.71 of a
+   cell, and bodies wider than that overlap briefly.
 
 Add agents with `add(position, clearance, priority)` and send them with
 `set_goal`. The game animates bodies between the cells in
